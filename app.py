@@ -7,14 +7,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
-# ── Gravador de microfone (protegido: se o pacote não estiver instalado, o app não quebra) ──
-try:
-    from streamlit_audiorecorder import audiorecorder
-    TEM_GRAVADOR = True
-except Exception:
-    TEM_GRAVADOR = False
-    def audiorecorder(*args, **kwargs):
-        return None
 # ── Configuração da página (deve ser o primeiro comando do Streamlit) ──
 st.set_page_config(page_title="Orange Harmony", page_icon="🍊", layout="wide")
 # ── Gemini ──
@@ -434,7 +426,7 @@ def afinar_stream(audio, afincao, calibracao):
     return nota_alvo, f"{cents:+.1f}", f"{nota_alvo} — {cents:+.1f} cents — {direcao} — {status}", barra_cents_html(cents)
 # ══════════════════ FUNÇÕES DE ÁUDIO ══════════════════
 def carregar_audio(uploaded):
-    """Lê um arquivo enviado e devolve (audio, sr)."""
+    """Lê um arquivo enviado (upload ou gravação) e devolve (audio, sr)."""
     if uploaded is None:
         return None, None
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
@@ -442,16 +434,6 @@ def carregar_audio(uploaded):
         tmp_path = tmp.name
     audio, sr = librosa.load(tmp_path, sr=22050, mono=True)
     return audio.astype(np.float32), sr
-def obter_audio_gravado(gravado):
-    """Converte a gravação do audiorecorder para (audio, sr) em 22050 Hz."""
-    if gravado is None or len(gravado) == 0:
-        return None, None
-    raw = gravado.to_numpy().astype(np.float32)
-    sr_raw = gravado.frame_rate
-    if sr_raw != 22050:
-        audio = librosa.resample(raw, orig_sr=sr_raw, target_sr=22050).astype(np.float32)
-        return audio, 22050
-    return raw, sr_raw
 def gerar_tom_referencia(nota, calibracao):
     nome, oitava = nota[:-1], int(nota[-1])
     midi = 12 * (oitava + 1) + NOMES_NOTAS.index(nome)
@@ -531,22 +513,14 @@ with tab_analise:
     st.markdown("**2. Análise da voz** — envie sua gravação e veja o diagnóstico completo.")
     audio_in = st.file_uploader("📂 Subir arquivo de áudio", type=["wav", "mp3", "m4a", "ogg", "flac"])
     st.markdown("**— ou —**")
-    if TEM_GRAVADOR:
-        audio_gravado = audiorecorder("🎤 Gravar voz agora", "⏹️ Parar gravação")
-    else:
-        audio_gravado = None
-        st.info("🎤 Gravação indisponível no momento — use o upload.")
+    audio_gravado = st.audio_input("🎤 Gravar voz agora")
     modo = st.radio("Modo", ["Análise completa", "Afinador"], horizontal=True)
     if st.button("Analisar", type="primary"):
-        audio = None
-        sr_audio = None
-        if audio_in is not None:
-            audio, sr_audio = carregar_audio(audio_in)
-        elif audio_gravado is not None and len(audio_gravado) > 0:
-            audio, sr_audio = obter_audio_gravado(audio_gravado)
-        else:
+        fonte = audio_in if audio_in is not None else audio_gravado
+        if fonte is None:
             st.warning("Envie um áudio ou grave sua voz.")
             st.stop()
+        audio, sr_audio = carregar_audio(fonte)
         tempos, f0 = extrair_pitch(audio, sr_audio)
         f0_limpo = np.where((f0 >= 80) & (f0 <= 1000), f0, 0.0)
         if modo == "Afinador":
@@ -721,25 +695,17 @@ with tab_producao:
     st.markdown("**1. Captura** — suba o arquivo ou grave direto.")
     prod_in = st.file_uploader("📂 Subir gravação (voz + violão)", type=["wav", "mp3", "m4a", "ogg", "flac"], key="producao")
     st.markdown("**— ou —**")
-    if TEM_GRAVADOR:
-        prod_grav = audiorecorder("🎤 Gravar música agora", "⏹️ Parar gravação", key="producao_rec")
-    else:
-        prod_grav = None
-        st.info("🎤 Gravação indisponível no momento — use o upload.")
+    prod_grav = st.audio_input("🎤 Gravar música agora")
     st.markdown("**2. Geração**")
     c1, c2 = st.columns(2)
     gerar_baixo = c1.checkbox("Gerar linha de baixo", value=True)
     gerar_bateria = c2.checkbox("Gerar bateria", value=True)
     if st.button("🎛️ Gerar produção", type="primary"):
-        audio = None
-        sr_audio = None
-        if prod_in is not None:
-            audio, sr_audio = carregar_audio(prod_in)
-        elif prod_grav is not None and len(prod_grav) > 0:
-            audio, sr_audio = obter_audio_gravado(prod_grav)
-        else:
+        fonte_prod = prod_in if prod_in is not None else prod_grav
+        if fonte_prod is None:
             st.warning("Suba um áudio ou grave sua música primeiro.")
             st.stop()
+        audio, sr_audio = carregar_audio(fonte_prod)
         with st.spinner("Analisando BPM e tom..."):
             bpm = detectar_bpm(audio, sr_audio)
             tom = detectar_tom(audio, sr_audio)
