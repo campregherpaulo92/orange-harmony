@@ -428,7 +428,7 @@ with tab_analise:
                 devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
                 if cliente is not None:
                     ultimo_erro = ""
-                    for modelo in ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-001"]:
+                    for modelo in ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite"]:
                         try:
                             resposta = cliente.models.generate_content(model=modelo, contents=montar_prompt_professor(resultado))
                             devolutiva = resposta.text
