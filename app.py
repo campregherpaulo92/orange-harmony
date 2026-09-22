@@ -154,15 +154,17 @@ def classificar_vibrato_v4(taxa, extensao, deslize, periodicidade):
         return "vibrato largo (expressivo)"
     return "vibrato muito largo"
 # ══════════════════ PRODUÇÃO (BPM, TOM, BAIXO E BATERIA) ══════════════════
-def detectar_bpm(audio, sr):
+def detectar_bpm_e_beats(audio, sr):
+    """Detecta BPM e os tempos reais das batidas (beats) da gravação."""
     try:
-        tempo, _ = librosa.beat.beat_track(y=audio, sr=sr)
+        tempo, beat_frames = librosa.beat.beat_track(y=audio, sr=sr)
         bpm = float(np.atleast_1d(tempo)[0])
         if bpm < 50 or bpm > 200 or np.isnan(bpm):
-            return 90.0
-        return round(bpm, 1)
+            bpm = 90.0
+        beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+        return round(bpm, 1), np.asarray(beat_times, dtype=np.float64)
     except Exception:
-        return 90.0
+        return 90.0, np.array([])
 def detectar_tom(audio, sr):
     try:
         chroma = librosa.feature.chroma_cqt(y=audio, sr=sr, hop_length=1024)
@@ -234,37 +236,89 @@ def gerar_baixo(audio, sr, tom, bpm):
             if fim > idx:
                 trilha[idx:fim] += nota[:fim - idx]
     return trilha[:n_total]
-def gerar_bateria(audio, sr, bpm):
+def gerar_bateria_ritmica(audio, sr, bpm, beat_times):
+    """Gera bateria que segue os beats reais e a energia da gravação."""
     sr = int(sr)
     bpm = float(bpm)
     duracao_total = float(len(audio)) / sr
     if duracao_total <= 0:
         return np.zeros(1, dtype=np.float32)
-    seg_por_compasso = 60.0 / bpm * 4
-    n_compassos = max(1, int(np.ceil(duracao_total / seg_por_compasso)))
-    colcheia = seg_por_compasso / 8
     n_total = int(sr * duracao_total)
     trilha = np.zeros(n_total + sr, dtype=np.float32)
     kick = gerar_kick(sr)
     snare = gerar_snare(sr)
     hat = gerar_hat(sr)
-    for c in range(n_compassos):
-        for i in range(8):
-            inicio = c * seg_por_compasso + i * colcheia
-            if inicio >= duracao_total:
-                break
-            idx = int(inicio * sr)
-            if idx >= n_total:
-                break
-            eventos = [hat]
-            if i in (0, 4):
-                eventos.append(kick)
-            if i in (2, 6):
-                eventos.append(snare)
-            for amostra in eventos:
-                fim = min(idx + len(amostra), n_total + sr)
-                if fim > idx:
-                    trilha[idx:fim] += amostra[:fim - idx]
+
+    # Energia (RMS) ao longo do tempo — modula a densidade da bateria
+    hop = 512
+    rms = librosa.feature.rms(y=audio, frame_length=2048, hop_length=hop)[0]
+    rms_times = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=hop)
+    rms_norm = rms / (np.max(rms) + 1e-9)
+
+    # Onsets (ataques reais) — reforça os golpes do violão
+    onsets = librosa.onset.onset_detect(y=audio, sr=sr, hop_length=hop)
+    onset_times = librosa.frames_to_time(onsets, sr=sr, hop_length=hop)
+
+    # Se não detectou beats, cria grade uniforme como fallback
+    if beat_times is None or len(beat_times) == 0:
+        seg_compasso = 60.0 / bpm * 4
+        n_compassos = max(1, int(np.ceil(duracao_total / seg_compasso)))
+        colcheia = seg_compasso / 8
+        beat_times = np.array([c * seg_compasso + i * colcheia
+                               for c in range(n_compassos) for i in range(8)])
+
+    seg_compasso = 60.0 / bpm * 4
+    colcheia = seg_compasso / 8
+
+    def energia_no_tempo(t):
+        pos = int(np.searchsorted(rms_times, t))
+        pos = min(max(pos, 0), len(rms_norm) - 1)
+        return float(rms_norm[pos])
+
+    def tocar(idx, amostra):
+        fim = min(idx + len(amostra), n_total + sr)
+        if fim > idx:
+            trilha[idx:fim] += amostra[:fim - idx]
+
+    # Passada principal: decide o que tocar em cada beat real
+    for t in beat_times:
+        if t >= duracao_total:
+            break
+        idx = int(t * sr)
+        if idx >= n_total:
+            break
+        energia = energia_no_tempo(t)
+        posicao = int(round((t % seg_compasso) / colcheia)) % 8
+
+        # Chimbal em todos os beats
+        tocar(idx, hat)
+
+        # Bumbo nos tempos 1 e 3 (posições 0 e 4) — sempre
+        if posicao in (0, 4):
+            tocar(idx, kick)
+
+        # Caixa nos tempos 2 e 4 (posições 2 e 6) — só quando há energia
+        # (verso mais limpo, refrão com backbeat)
+        if posicao in (2, 6) and energia > 0.18:
+            tocar(idx, snare)
+
+        # Em trechos de alta energia, adiciona 16ºs extras (variação)
+        if energia > 0.55:
+            t_extra = t + colcheia / 2
+            if t_extra < duracao_total:
+                tocar(int(t_extra * sr), hat)
+
+    # Passada de onsets: reforça ataques reais com chimbal
+    for t_onset in onset_times:
+        if t_onset >= duracao_total:
+            break
+        idx = int(t_onset * sr)
+        if idx >= n_total:
+            break
+        proximo = beat_times[beat_times >= t_onset - 0.05] if len(beat_times) else np.array([])
+        if len(proximo) == 0 or (proximo[0] - t_onset) > 0.12:
+            tocar(idx, hat)
+
     return trilha[:n_total]
 def mixar(audio, baixo, bateria):
     total = audio.astype(np.float32)
@@ -622,12 +676,18 @@ with tab_afinador:
     afincao = c1.selectbox("Afinação", list(AFINACOES.keys()))
     calib_afinador = c2.radio("Calibração A4", [440, 442], horizontal=True)
     st.markdown(DESCRICOES_AFINACOES.get(afincao, ""))
-    audio_afinador = st.file_uploader("Grave ou envie uma nota sustentada", type=["wav", "mp3", "m4a", "ogg", "flac"], key="afinador")
-    if audio_afinador is not None:
-        audio, sr = carregar_audio(audio_afinador)
-        nota, cents, status = analisar_afinador(audio, sr, calib_afinador)
-        st.success(f"Nota alvo: **{nota}** — {cents:+.1f} cents — {status}")
-        st.markdown(barra_cents_html(cents), unsafe_allow_html=True)
+    audio_afinador = st.file_uploader("📂 Subir nota sustentada", type=["wav", "mp3", "m4a", "ogg", "flac"], key="afinador")
+    st.markdown("**— ou —**")
+    audio_afinador_grav = st.audio_input("🎤 Gravar nota agora", key="afinador_rec")
+    fonte_afinador = audio_afinador if audio_afinador is not None else audio_afinador_grav
+    if fonte_afinador is not None:
+        audio, sr = carregar_audio(fonte_afinador)
+        if audio is None:
+            st.error("Não foi possível ler o áudio. Tente outro formato (WAV ou MP3).")
+        else:
+            nota, cents, status = analisar_afinador(audio, sr, calib_afinador)
+            st.success(f"Nota alvo: **{nota}** — {cents:+.1f} cents — {status}")
+            st.markdown(barra_cents_html(cents), unsafe_allow_html=True)
 # ── ABA HISTÓRICO ──
 with tab_historico:
     st.markdown("**Evolução da sua performance — salva no Firebase, nunca se perde.**")
@@ -747,8 +807,8 @@ with tab_producao:
         if audio is None:
             st.error("Não foi possível ler o áudio. Tente outro formato (WAV ou MP3).")
             st.stop()
-        with st.spinner("Analisando BPM e tom..."):
-            bpm = detectar_bpm(audio, sr_audio)
+        with st.spinner("Analisando BPM, tom e ritmo..."):
+            bpm, beat_times = detectar_bpm_e_beats(audio, sr_audio)
             tom = detectar_tom(audio, sr_audio)
         st.success(f"Detectado: **{bpm:.1f} BPM** · Tom aproximado: **{tom}**")
         baixo = None
@@ -759,7 +819,7 @@ with tab_producao:
                     baixo = gerar_baixo(audio, sr_audio, tom, bpm)
             if com_bateria:
                 with st.spinner("Gerando bateria..."):
-                    bateria = gerar_bateria(audio, sr_audio, bpm)
+                    bateria = gerar_bateria_ritmica(audio, sr_audio, bpm, beat_times)
         except Exception as e:
             st.error(f"Erro ao gerar produção: {e}")
             st.stop()
