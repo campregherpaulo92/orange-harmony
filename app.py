@@ -1,5 +1,5 @@
 # Orange Harmony — VocalAI Coach (Streamlit)
-import os, json, re, base64, tempfile
+import os, json, re, base64, tempfile, io
 from datetime import datetime
 import numpy as np
 import librosa
@@ -7,7 +7,14 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
-from streamlit_audiorecorder import audiorecorder
+# ── Gravador de microfone (protegido: se o pacote não estiver instalado, o app não quebra) ──
+try:
+    from streamlit_audiorecorder import audiorecorder
+    TEM_GRAVADOR = True
+except Exception:
+    TEM_GRAVADOR = False
+    def audiorecorder(*args, **kwargs):
+        return None
 # ── Configuração da página (deve ser o primeiro comando do Streamlit) ──
 st.set_page_config(page_title="Orange Harmony", page_icon="🍊", layout="wide")
 # ── Gemini ──
@@ -39,19 +46,10 @@ def f0_para_midi_calibrado(f0, calibracao=440.0):
     return 69 + 12 * np.log2(f0 / calibracao)
 # ══════════════════ PITCH ══════════════════
 def extrair_pitch(audio, sr):
-    try:
-        import crepe
-        tempos = np.arange(len(audio)) / sr
-        _, f0, _, _ = crepe.predict(audio, sr, viterbi=True, step_size=10)
-        f0 = np.asarray(f0, dtype=np.float64)
-        if len(f0) != len(tempos):
-            tempos = np.linspace(0, len(audio) / sr, len(f0))
-        return tempos, f0
-    except Exception:
-        f0, voiced, _ = librosa.pyin(audio, fmin=80, fmax=1000, sr=sr, frame_length=2048, hop_length=512)
-        tempos = librosa.times_like(f0, sr=sr, hop_length=512)
-        f0 = np.where(voiced & ~np.isnan(f0), f0, 0.0)
-        return tempos, f0
+    f0, voiced, _ = librosa.pyin(audio, fmin=80, fmax=1000, sr=sr, frame_length=2048, hop_length=512)
+    tempos = librosa.times_like(f0, sr=sr, hop_length=512)
+    f0 = np.where(voiced & ~np.isnan(f0), f0, 0.0)
+    return tempos, f0
 def segmentar_notas(f0, tempos, duracao_min=0.4):
     mascara = f0 > 0
     if mascara.sum() == 0:
@@ -163,6 +161,116 @@ def classificar_vibrato_v4(taxa, extensao, deslize, periodicidade):
     if extensao <= 120:
         return "vibrato largo (expressivo)"
     return "vibrato muito largo"
+# ══════════════════ PRODUÇÃO (BPM, TOM, BAIXO E BATERIA) ══════════════════
+def detectar_bpm(audio, sr):
+    try:
+        tempo, _ = librosa.beat.beat_track(y=audio, sr=sr)
+        bpm = float(np.atleast_1d(tempo)[0])
+        if bpm < 50 or bpm > 200 or np.isnan(bpm):
+            return 90.0
+        return round(bpm, 1)
+    except Exception:
+        return 90.0
+def detectar_tom(audio, sr):
+    try:
+        chroma = librosa.feature.chroma_cqt(y=audio, sr=sr, hop_length=1024)
+        chroma_mean = chroma.mean(axis=1)
+        idx = int(np.argmax(chroma_mean))
+        return NOMES_NOTAS[idx]
+    except Exception:
+        return "C"
+def nota_para_midi(nome, oitava):
+    return 12 * (oitava + 1) + NOMES_NOTAS.index(nome)
+def midi_para_freq(midi, calibracao=440.0):
+    return calibracao * 2 ** ((midi - 69) / 12)
+def gerar_nota_baixo(freq, duracao, sr, volume=0.5):
+    n = int(sr * duracao)
+    t = np.linspace(0, duracao, n, endpoint=False)
+    sinal = (np.sin(2 * np.pi * freq * t)
+             + 0.4 * np.sin(2 * np.pi * 2 * freq * t)
+             + 0.2 * np.sin(2 * np.pi * 3 * freq * t))
+    env = np.exp(-3.0 * t / duracao)
+    return (sinal * env * volume).astype(np.float32)
+def gerar_kick(sr, volume=0.9):
+    n = int(sr * 0.25)
+    t = np.linspace(0, 0.25, n, endpoint=False)
+    freq = 55 * np.exp(-18 * t) + 45
+    fase = 2 * np.pi * np.cumsum(freq) / sr
+    sinal = np.sin(fase)
+    env = np.exp(-12 * t)
+    return (sinal * env * volume).astype(np.float32)
+def gerar_snare(sr, volume=0.6):
+    n = int(sr * 0.2)
+    t = np.linspace(0, 0.2, n, endpoint=False)
+    ruido = np.random.default_rng(42).standard_normal(n)
+    tom = np.sin(2 * np.pi * 180 * t)
+    sinal = 0.7 * ruido + 0.3 * tom
+    env = np.exp(-18 * t)
+    return (sinal * env * volume).astype(np.float32)
+def gerar_hat(sr, volume=0.35):
+    n = int(sr * 0.08)
+    t = np.linspace(0, 0.08, n, endpoint=False)
+    ruido = np.random.default_rng(7).standard_normal(n)
+    sinal = np.diff(ruido, prepend=0)
+    env = np.exp(-40 * t)
+    return (sinal * env * volume).astype(np.float32)
+def gerar_baixo(audio, sr, tom, bpm):
+    duracao_total = len(audio) / sr
+    seg_por_compasso = 60.0 / bpm * 4
+    n_compassos = max(1, int(np.ceil(duracao_total / seg_por_compasso)))
+    raiz_midi = nota_para_midi(tom, 1)
+    notas_escala = [raiz_midi + i for i in [0, 2, 4, 5, 7, 9, 11]]
+    padrao = [0, 4, 0, 7, 0, 4, 7, 4]  # graus da escala por colcheia
+    colcheia = seg_por_compasso / 8
+    trilha = np.zeros(int(sr * duracao_total) + sr, dtype=np.float32)
+    for c in range(n_compassos):
+        for i, grau in enumerate(padrao):
+            inicio = c * seg_por_compasso + i * colcheia
+            if inicio >= duracao_total:
+                break
+            freq = midi_para_freq(notas_escala[grau % len(notas_escala)])
+            nota = gerar_nota_baixo(freq, colcheia * 0.9, sr)
+            idx = int(inicio * sr)
+            fim = min(idx + len(nota), len(trilha))
+            trilha[idx:fim] += nota[:fim - idx]
+    return trilha[:int(sr * duracao_total)]
+def gerar_bateria(audio, sr, bpm):
+    duracao_total = len(audio) / sr
+    seg_por_compasso = 60.0 / bpm * 4
+    n_compassos = max(1, int(np.ceil(duracao_total / seg_por_compasso)))
+    colcheia = seg_por_compasso / 8
+    trilha = np.zeros(int(sr * duracao_total) + sr, dtype=np.float32)
+    kick = gerar_kick(sr)
+    snare = gerar_snare(sr)
+    hat = gerar_hat(sr)
+    for c in range(n_compassos):
+        for i in range(8):
+            inicio = c * seg_por_compasso + i * colcheia
+            if inicio >= duracao_total:
+                break
+            idx = int(inicio * sr)
+            fim = min(idx + len(hat), len(trilha))
+            trilha[idx:fim] += hat[:fim - idx]
+            if i in (0, 4):
+                fim = min(idx + len(kick), len(trilha))
+                trilha[idx:fim] += kick[:fim - idx]
+            if i in (2, 6):
+                fim = min(idx + len(snare), len(trilha))
+                trilha[idx:fim] += snare[:fim - idx]
+    return trilha[:int(sr * duracao_total)]
+def mixar(audio, baixo, bateria):
+    total = audio.astype(np.float32)
+    if baixo is not None:
+        total = total + 0.45 * baixo
+    if bateria is not None:
+        total = total + 0.5 * bateria
+    pico = np.max(np.abs(total)) + 1e-9
+    return (total / pico).astype(np.float32)
+def audio_para_bytes(audio, sr):
+    import soundfile as sf
+    buf = io.BytesIO()
+    sf.write(buf, audio, sr, format="WAV")
+    return buf.getvalue()
 # ══════════════════ PROFESSOR (Gemini) ══════════════════
 def montar_prompt_professor(resultado):
     return (
@@ -334,6 +442,16 @@ def carregar_audio(uploaded):
         tmp_path = tmp.name
     audio, sr = librosa.load(tmp_path, sr=22050, mono=True)
     return audio.astype(np.float32), sr
+def obter_audio_gravado(gravado):
+    """Converte a gravação do audiorecorder para (audio, sr) em 22050 Hz."""
+    if gravado is None or len(gravado) == 0:
+        return None, None
+    raw = gravado.to_numpy().astype(np.float32)
+    sr_raw = gravado.frame_rate
+    if sr_raw != 22050:
+        audio = librosa.resample(raw, orig_sr=sr_raw, target_sr=22050).astype(np.float32)
+        return audio, 22050
+    return raw, sr_raw
 def gerar_tom_referencia(nota, calibracao):
     nome, oitava = nota[:-1], int(nota[-1])
     midi = 12 * (oitava + 1) + NOMES_NOTAS.index(nome)
@@ -393,8 +511,8 @@ else:
     col_logo.markdown("# 🍊 Orange Harmony")
 st.markdown("### Seu professor de canto com IA — analise sua voz, afine e evolua.")
 # ══════════════════ INTERFACE ══════════════════
-tab_analise, tab_afinador, tab_historico, tab_composicoes, tab_edicao = st.tabs(
-    ["🎵 Análise e Estudo", "🎸 Afinador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)"]
+tab_analise, tab_afinador, tab_historico, tab_composicoes, tab_edicao, tab_producao = st.tabs(
+    ["🎵 Análise e Estudo", "🎸 Afinador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🎛️ Produção"]
 )
 # ── ABA ANÁLISE E ESTUDO ──
 with tab_analise:
@@ -413,22 +531,19 @@ with tab_analise:
     st.markdown("**2. Análise da voz** — envie sua gravação e veja o diagnóstico completo.")
     audio_in = st.file_uploader("📂 Subir arquivo de áudio", type=["wav", "mp3", "m4a", "ogg", "flac"])
     st.markdown("**— ou —**")
-    audio_gravado = audiorecorder("🎤 Gravar voz agora", "⏹️ Parar gravação")
+    if TEM_GRAVADOR:
+        audio_gravado = audiorecorder("🎤 Gravar voz agora", "⏹️ Parar gravação")
+    else:
+        audio_gravado = None
+        st.info("🎤 Gravação indisponível no momento — use o upload.")
     modo = st.radio("Modo", ["Análise completa", "Afinador"], horizontal=True)
     if st.button("Analisar", type="primary"):
         audio = None
         sr_audio = None
         if audio_in is not None:
             audio, sr_audio = carregar_audio(audio_in)
-        elif len(audio_gravado) > 0:
-            raw = audio_gravado.to_numpy().astype(np.float32)
-            sr_raw = audio_gravado.frame_rate
-            if sr_raw != 22050:
-                audio = librosa.resample(raw, orig_sr=sr_raw, target_sr=22050).astype(np.float32)
-                sr_audio = 22050
-            else:
-                audio = raw
-                sr_audio = sr_raw
+        elif audio_gravado is not None and len(audio_gravado) > 0:
+            audio, sr_audio = obter_audio_gravado(audio_gravado)
         else:
             st.warning("Envie um áudio ou grave sua voz.")
             st.stop()
@@ -474,7 +589,6 @@ with tab_analise:
             st.pyplot(fig)
             st.markdown("**Devolutiva do Professor:**")
             st.markdown(devolutiva)
-            # --- Vibrato ---
             st.markdown("---")
             st.markdown("**3. Vibrato** — detecte a oscilação da sua nota sustentada.")
             vibratos = detectar_vibrato_v4(f0_limpo, tempos, calibracao_a4=calibracao)
@@ -601,3 +715,51 @@ with tab_edicao:
             sf.write(out, audio, sr)
             st.audio(out, sample_rate=sr)
             st.success("Edição aplicada: " + ", ".join(acoes) + ".")
+# ── ABA PRODUÇÃO ──
+with tab_producao:
+    st.markdown("**Estúdio de Produção** — grave sua música (voz + violão) e gere baixo e bateria no tom e no BPM detectados da sua gravação.")
+    st.markdown("**1. Captura** — suba o arquivo ou grave direto.")
+    prod_in = st.file_uploader("📂 Subir gravação (voz + violão)", type=["wav", "mp3", "m4a", "ogg", "flac"], key="producao")
+    st.markdown("**— ou —**")
+    if TEM_GRAVADOR:
+        prod_grav = audiorecorder("🎤 Gravar música agora", "⏹️ Parar gravação", key="producao_rec")
+    else:
+        prod_grav = None
+        st.info("🎤 Gravação indisponível no momento — use o upload.")
+    st.markdown("**2. Geração**")
+    c1, c2 = st.columns(2)
+    gerar_baixo = c1.checkbox("Gerar linha de baixo", value=True)
+    gerar_bateria = c2.checkbox("Gerar bateria", value=True)
+    if st.button("🎛️ Gerar produção", type="primary"):
+        audio = None
+        sr_audio = None
+        if prod_in is not None:
+            audio, sr_audio = carregar_audio(prod_in)
+        elif prod_grav is not None and len(prod_grav) > 0:
+            audio, sr_audio = obter_audio_gravado(prod_grav)
+        else:
+            st.warning("Suba um áudio ou grave sua música primeiro.")
+            st.stop()
+        with st.spinner("Analisando BPM e tom..."):
+            bpm = detectar_bpm(audio, sr_audio)
+            tom = detectar_tom(audio, sr_audio)
+        st.success(f"Detectado: **{bpm:.1f} BPM** · Tom aproximado: **{tom}**")
+        baixo = None
+        bateria = None
+        if gerar_baixo:
+            with st.spinner("Gerando linha de baixo..."):
+                baixo = gerar_baixo(audio, sr_audio, tom, bpm)
+        if gerar_bateria:
+            with st.spinner("Gerando bateria..."):
+                bateria = gerar_bateria(audio, sr_audio, bpm)
+        with st.spinner("Mixando..."):
+            mix = mixar(audio, baixo, bateria)
+        st.markdown("**Resultado mixado (original + baixo + bateria):**")
+        st.audio(mix, sample_rate=sr_audio)
+        st.download_button(
+            "⬇️ Baixar produção (WAV)",
+            data=audio_para_bytes(mix, sr_audio),
+            file_name="producao_orange_harmony.wav",
+            mime="audio/wav",
+        )
+        st.info("💡 A separação de stems (voz/violão separados) exige GPU e roda no Colab — o link do notebook fica no README.")
