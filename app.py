@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 # ── WebRTC (tempo real) — protegido: se o pacote faltar, o app não quebra ──
 try:
-    from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
+    from streamlit_webrtc import webrtc_streamer, WebRtcMode
     import av
     TEM_WEBRTC = True
     ERRO_WEBRTC = ""
@@ -791,10 +791,8 @@ with tab_afinador:
             key="afinador_tempo_real",
             mode=WebRtcMode.SENDONLY,
             audio_frame_callback=_processar_frame_audio,
-            client_settings=ClientSettings(
-                rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-                media_stream_constraints={"video": False, "audio": True},
-            ),
+            frontend_rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+            media_stream_constraints={"video": False, "audio": True},
         )
         if webrtc_ctx.state.playing:
             placeholder = st.empty()
