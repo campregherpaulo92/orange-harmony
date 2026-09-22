@@ -404,10 +404,10 @@ with tab_analise:
     c3, c4 = st.columns(2)
     if c3.button("▶ Tocar nota"):
         sr, sinal = gerar_tom_referencia(nota_ref, calibracao)
-        st.audio((sr, sinal), sample_rate=sr)
+        st.audio(sinal, sample_rate=sr)
     if c4.button("🎵 Tocar escala maior"):
         sr, sinal = gerar_escala(nota_ref, calibracao)
-        st.audio((sr, sinal), sample_rate=sr)
+        st.audio(sinal, sample_rate=sr)
     st.markdown("---")
     st.markdown("**2. Análise da voz** — envie sua gravação e veja o diagnóstico completo.")
     audio_in = st.file_uploader("Sua gravação (voz)", type=["wav", "mp3", "m4a", "ogg", "flac"])
@@ -427,11 +427,17 @@ with tab_analise:
                 resultado = analisar_afinacao(f0_limpo, tempos, calibracao)
                 devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
                 if cliente is not None:
-                    try:
-                        resposta = cliente.models.generate_content(model="gemini-2.0-flash", contents=montar_prompt_professor(resultado))
-                        devolutiva = resposta.text
-                    except Exception:
-                        devolutiva = "[!] Professor indisponível no momento."
+                    ultimo_erro = ""
+                    for modelo in ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-001"]:
+                        try:
+                            resposta = cliente.models.generate_content(model=modelo, contents=montar_prompt_professor(resultado))
+                            devolutiva = resposta.text
+                            break
+                        except Exception as e:
+                            ultimo_erro = str(e)
+                            continue
+                    if devolutiva.startswith("[!]"):
+                        devolutiva = f"[!] Professor indisponível. Detalhe do erro: {ultimo_erro}"
                 try:
                     registrar_analise_firestore(resultado, modo)
                 except Exception as e:
