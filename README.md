@@ -27,7 +27,7 @@ Aplicação web que analisa sua voz em tempo real, detecta afinação, vibrato, 
 - **Librosa** — processamento de áudio e extração de pitch
 - **NumPy** — computação numérica
 - **Matplotlib** — gráficos de curva de pitch
-- **Google Gemini API** — professor de IA (modelo `gemini-3.6-flash`)
+- **Google Gemini API (Interactions API)** — professor de IA (modelo `gemini-3.5-flash-lite`)
 - **Firebase Firestore** — histórico e composições
 - **Noisereduce** — redução de ruído na edição vocal
 
