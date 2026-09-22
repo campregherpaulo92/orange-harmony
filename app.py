@@ -207,14 +207,19 @@ def gerar_hat(sr, volume=0.35):
     env = np.exp(-40 * t)
     return (sinal * env * volume).astype(np.float32)
 def gerar_baixo(audio, sr, tom, bpm):
-    duracao_total = len(audio) / sr
+    sr = int(sr)
+    bpm = float(bpm)
+    duracao_total = float(len(audio)) / sr
+    if duracao_total <= 0:
+        return np.zeros(1, dtype=np.float32)
     seg_por_compasso = 60.0 / bpm * 4
     n_compassos = max(1, int(np.ceil(duracao_total / seg_por_compasso)))
     raiz_midi = nota_para_midi(tom, 1)
     notas_escala = [raiz_midi + i for i in [0, 2, 4, 5, 7, 9, 11]]
     padrao = [0, 4, 0, 7, 0, 4, 7, 4]  # graus da escala por colcheia
     colcheia = seg_por_compasso / 8
-    trilha = np.zeros(int(sr * duracao_total) + sr, dtype=np.float32)
+    n_total = int(sr * duracao_total)
+    trilha = np.zeros(n_total + sr, dtype=np.float32)
     for c in range(n_compassos):
         for i, grau in enumerate(padrao):
             inicio = c * seg_por_compasso + i * colcheia
@@ -223,15 +228,23 @@ def gerar_baixo(audio, sr, tom, bpm):
             freq = midi_para_freq(notas_escala[grau % len(notas_escala)])
             nota = gerar_nota_baixo(freq, colcheia * 0.9, sr)
             idx = int(inicio * sr)
-            fim = min(idx + len(nota), len(trilha))
-            trilha[idx:fim] += nota[:fim - idx]
-    return trilha[:int(sr * duracao_total)]
+            if idx >= n_total:
+                break
+            fim = min(idx + len(nota), n_total + sr)
+            if fim > idx:
+                trilha[idx:fim] += nota[:fim - idx]
+    return trilha[:n_total]
 def gerar_bateria(audio, sr, bpm):
-    duracao_total = len(audio) / sr
+    sr = int(sr)
+    bpm = float(bpm)
+    duracao_total = float(len(audio)) / sr
+    if duracao_total <= 0:
+        return np.zeros(1, dtype=np.float32)
     seg_por_compasso = 60.0 / bpm * 4
     n_compassos = max(1, int(np.ceil(duracao_total / seg_por_compasso)))
     colcheia = seg_por_compasso / 8
-    trilha = np.zeros(int(sr * duracao_total) + sr, dtype=np.float32)
+    n_total = int(sr * duracao_total)
+    trilha = np.zeros(n_total + sr, dtype=np.float32)
     kick = gerar_kick(sr)
     snare = gerar_snare(sr)
     hat = gerar_hat(sr)
@@ -241,15 +254,18 @@ def gerar_bateria(audio, sr, bpm):
             if inicio >= duracao_total:
                 break
             idx = int(inicio * sr)
-            fim = min(idx + len(hat), len(trilha))
-            trilha[idx:fim] += hat[:fim - idx]
+            if idx >= n_total:
+                break
+            eventos = [hat]
             if i in (0, 4):
-                fim = min(idx + len(kick), len(trilha))
-                trilha[idx:fim] += kick[:fim - idx]
+                eventos.append(kick)
             if i in (2, 6):
-                fim = min(idx + len(snare), len(trilha))
-                trilha[idx:fim] += snare[:fim - idx]
-    return trilha[:int(sr * duracao_total)]
+                eventos.append(snare)
+            for amostra in eventos:
+                fim = min(idx + len(amostra), n_total + sr)
+                if fim > idx:
+                    trilha[idx:fim] += amostra[:fim - idx]
+    return trilha[:n_total]
 def mixar(audio, baixo, bateria):
     total = audio.astype(np.float32)
     if baixo is not None:
@@ -426,14 +442,30 @@ def afinar_stream(audio, afincao, calibracao):
     return nota_alvo, f"{cents:+.1f}", f"{nota_alvo} — {cents:+.1f} cents — {direcao} — {status}", barra_cents_html(cents)
 # ══════════════════ FUNÇÕES DE ÁUDIO ══════════════════
 def carregar_audio(uploaded):
-    """Lê um arquivo enviado (upload ou gravação) e devolve (audio, sr)."""
+    """Lê um arquivo enviado (upload ou gravação) e devolve (audio, sr) em 22050 Hz mono."""
     if uploaded is None:
         return None, None
+    dados = uploaded.getvalue()
+    if not dados:
+        return None, None
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        tmp.write(uploaded.getvalue())
+        tmp.write(dados)
         tmp_path = tmp.name
-    audio, sr = librosa.load(tmp_path, sr=22050, mono=True)
-    return audio.astype(np.float32), sr
+    try:
+        audio, sr = librosa.load(tmp_path, sr=22050, mono=True)
+    except Exception:
+        # A gravação do navegador pode vir em webm/ogg — tenta decodificar direto
+        try:
+            import soundfile as sf
+            audio, sr = sf.read(tmp_path, dtype="float32")
+            if audio.ndim > 1:
+                audio = audio.mean(axis=1)
+            if sr != 22050:
+                audio = librosa.resample(audio, orig_sr=sr, target_sr=22050)
+                sr = 22050
+        except Exception:
+            return None, None
+    return audio.astype(np.float32), int(sr)
 def gerar_tom_referencia(nota, calibracao):
     nome, oitava = nota[:-1], int(nota[-1])
     midi = 12 * (oitava + 1) + NOMES_NOTAS.index(nome)
@@ -521,6 +553,9 @@ with tab_analise:
             st.warning("Envie um áudio ou grave sua voz.")
             st.stop()
         audio, sr_audio = carregar_audio(fonte)
+        if audio is None:
+            st.error("Não foi possível ler o áudio. Tente outro formato (WAV ou MP3).")
+            st.stop()
         tempos, f0 = extrair_pitch(audio, sr_audio)
         f0_limpo = np.where((f0 >= 80) & (f0 <= 1000), f0, 0.0)
         if modo == "Afinador":
@@ -663,6 +698,9 @@ with tab_edicao:
             st.warning("Envie um áudio para editar.")
         else:
             audio, sr = carregar_audio(edicao_in)
+            if audio is None:
+                st.error("Não foi possível ler o áudio. Tente outro formato (WAV ou MP3).")
+                st.stop()
             cmd = (comando or "").lower()
             acoes = []
             try:
@@ -698,26 +736,33 @@ with tab_producao:
     prod_grav = st.audio_input("🎤 Gravar música agora")
     st.markdown("**2. Geração**")
     c1, c2 = st.columns(2)
-    gerar_baixo = c1.checkbox("Gerar linha de baixo", value=True)
-    gerar_bateria = c2.checkbox("Gerar bateria", value=True)
+    com_baixo = c1.checkbox("Gerar linha de baixo", value=True)
+    com_bateria = c2.checkbox("Gerar bateria", value=True)
     if st.button("🎛️ Gerar produção", type="primary"):
         fonte_prod = prod_in if prod_in is not None else prod_grav
         if fonte_prod is None:
             st.warning("Suba um áudio ou grave sua música primeiro.")
             st.stop()
         audio, sr_audio = carregar_audio(fonte_prod)
+        if audio is None:
+            st.error("Não foi possível ler o áudio. Tente outro formato (WAV ou MP3).")
+            st.stop()
         with st.spinner("Analisando BPM e tom..."):
             bpm = detectar_bpm(audio, sr_audio)
             tom = detectar_tom(audio, sr_audio)
         st.success(f"Detectado: **{bpm:.1f} BPM** · Tom aproximado: **{tom}**")
         baixo = None
         bateria = None
-        if gerar_baixo:
-            with st.spinner("Gerando linha de baixo..."):
-                baixo = gerar_baixo(audio, sr_audio, tom, bpm)
-        if gerar_bateria:
-            with st.spinner("Gerando bateria..."):
-                bateria = gerar_bateria(audio, sr_audio, bpm)
+        try:
+            if com_baixo:
+                with st.spinner("Gerando linha de baixo..."):
+                    baixo = gerar_baixo(audio, sr_audio, tom, bpm)
+            if com_bateria:
+                with st.spinner("Gerando bateria..."):
+                    bateria = gerar_bateria(audio, sr_audio, bpm)
+        except Exception as e:
+            st.error(f"Erro ao gerar produção: {e}")
+            st.stop()
         with st.spinner("Mixando..."):
             mix = mixar(audio, baixo, bateria)
         st.markdown("**Resultado mixado (original + baixo + bateria):**")
