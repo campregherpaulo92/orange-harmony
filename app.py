@@ -162,7 +162,6 @@ def classificar_vibrato_v4(taxa, extensao, deslize, periodicidade):
     return "vibrato muito largo"
 # ══════════════════ PRODUÇÃO (BPM, TOM, BAIXO E BATERIA) ══════════════════
 def detectar_bpm_e_beats(audio, sr):
-    """Detecta BPM e os tempos reais das batidas (beats) da gravação."""
     try:
         tempo, beat_frames = librosa.beat.beat_track(y=audio, sr=sr)
         bpm = float(np.atleast_1d(tempo)[0])
@@ -184,7 +183,6 @@ def nota_para_midi(nome, oitava):
     return 12 * (oitava + 1) + NOMES_NOTAS.index(nome)
 def midi_para_freq(midi, calibracao=440.0):
     return calibracao * 2 ** ((midi - 69) / 12)
-# ── Síntese de bateria (sons mais encorpados) ──
 def gerar_kick(sr, volume=0.95):
     n = int(sr * 0.3)
     t = np.linspace(0, 0.3, n, endpoint=False)
@@ -217,7 +215,6 @@ def gerar_crash(sr, volume=0.5):
     sinal = np.diff(ruido, prepend=0)
     env = np.exp(-2.5 * t)
     return (sinal * env * volume).astype(np.float32)
-# ── Baixo encorpado que segue a melodia ──
 def gerar_nota_baixo_encorpada(freq, duracao, sr, volume=0.55):
     n = int(sr * duracao)
     t = np.linspace(0, duracao, n, endpoint=False)
@@ -229,7 +226,6 @@ def gerar_nota_baixo_encorpada(freq, duracao, sr, volume=0.55):
     sinal = np.tanh(1.5 * sinal * env)
     return (sinal * volume).astype(np.float32)
 def gerar_baixo_melodico(audio, sr, tom, bpm, beat_times):
-    """Baixo que escuta a melodia e escolhe notas da escala do tom."""
     sr = int(sr)
     bpm = float(bpm)
     duracao_total = float(len(audio)) / sr
@@ -239,10 +235,8 @@ def gerar_baixo_melodico(audio, sr, tom, bpm, beat_times):
     trilha = np.zeros(n_total + sr, dtype=np.float32)
     raiz_midi = nota_para_midi(tom, 1)
     escala = [raiz_midi + i for i in [0, 2, 4, 5, 7, 9, 11]]
-    # melodia (F0) ao longo do tempo
     f0, voiced, _ = librosa.pyin(audio, fmin=80, fmax=1000, sr=sr, frame_length=2048, hop_length=512)
     tempos_f0 = librosa.times_like(f0, sr=sr, hop_length=512)
-    # beats (fallback grade uniforme)
     if beat_times is None or len(beat_times) == 0:
         seg_compasso = 60.0 / bpm * 4
         n_compassos = max(1, int(np.ceil(duracao_total / seg_compasso)))
@@ -286,7 +280,6 @@ def gerar_baixo_melodico(audio, sr, tom, bpm, beat_times):
             trilha[idx:fim] += nota[:fim - idx]
     return trilha[:n_total]
 def gerar_bateria_ritmica(audio, sr, bpm, beat_times):
-    """Bateria que segue os beats reais, com prato, caixa, bumbo e chimbal."""
     sr = int(sr)
     bpm = float(bpm)
     duracao_total = float(len(audio)) / sr
@@ -333,7 +326,6 @@ def gerar_bateria_ritmica(audio, sr, bpm, beat_times):
             tocar(idx, kick)
         if posicao in (2, 6) and energia > 0.18:
             tocar(idx, snare)
-        # prato no início de compassos alternados
         if posicao == 0 and int(t // seg_compasso) % 2 == 0:
             tocar(idx, crash)
         if energia > 0.55:
