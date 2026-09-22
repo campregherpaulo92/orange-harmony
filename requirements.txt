@@ -1,0 +1,9 @@
+streamlit
+numpy
+librosa
+matplotlib
+firebase-admin
+google-genai
+noisereduce
+crepe
+soundfile
