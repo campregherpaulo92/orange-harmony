@@ -7,6 +7,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
+from streamlit_audiorecorder import audiorecorder
 # ── Configuração da página (deve ser o primeiro comando do Streamlit) ──
 st.set_page_config(page_title="Orange Harmony", page_icon="🍊", layout="wide")
 # ── Gemini ──
@@ -410,73 +411,87 @@ with tab_analise:
         st.audio(sinal, sample_rate=sr)
     st.markdown("---")
     st.markdown("**2. Análise da voz** — envie sua gravação e veja o diagnóstico completo.")
-    audio_in = st.file_uploader("Sua gravação (voz)", type=["wav", "mp3", "m4a", "ogg", "flac"])
+    audio_in = st.file_uploader("📂 Subir arquivo de áudio", type=["wav", "mp3", "m4a", "ogg", "flac"])
+    st.markdown("**— ou —**")
+    audio_gravado = audiorecorder("🎤 Gravar voz agora", "⏹️ Parar gravação")
     modo = st.radio("Modo", ["Análise completa", "Afinador"], horizontal=True)
     if st.button("Analisar", type="primary"):
-        if audio_in is None:
-            st.warning("Envie um áudio primeiro.")
-        else:
-            audio, sr = carregar_audio(audio_in)
-            tempos, f0 = extrair_pitch(audio, sr)
-            f0_limpo = np.where((f0 >= 80) & (f0 <= 1000), f0, 0.0)
-            if modo == "Afinador":
-                nota, cents, status = analisar_afinador(audio, sr, calibracao)
-                st.success(f"Nota detectada: **{nota}** — {cents:+.1f} cents — {status}")
-                st.markdown(barra_cents_html(cents), unsafe_allow_html=True)
+        audio = None
+        sr_audio = None
+        if audio_in is not None:
+            audio, sr_audio = carregar_audio(audio_in)
+        elif len(audio_gravado) > 0:
+            raw = audio_gravado.to_numpy().astype(np.float32)
+            sr_raw = audio_gravado.frame_rate
+            if sr_raw != 22050:
+                audio = librosa.resample(raw, orig_sr=sr_raw, target_sr=22050).astype(np.float32)
+                sr_audio = 22050
             else:
-                resultado = analisar_afinacao(f0_limpo, tempos, calibracao)
-                devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
-                if cliente is not None:
-                    ultimo_erro = ""
-                    for modelo in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-2.5-flash"]:
-                        try:
-                            interaction = cliente.interactions.create(model=modelo, input=montar_prompt_professor(resultado))
-                            devolutiva = interaction.output_text
-                            break
-                        except Exception as e:
-                            ultimo_erro = str(e)
-                            continue
-                    if devolutiva.startswith("[!]"):
-                        devolutiva = f"[!] Professor indisponível. Detalhe do erro: {ultimo_erro}"
-                try:
-                    registrar_analise_firestore(resultado, modo)
-                except Exception as e:
-                    st.warning(f"Não foi possível salvar no Firestore: {e}")
-                st.markdown(f"**Nota predominante:** {resultado['nota_predominante']}")
-                st.markdown(f"**Desvio médio absoluto:** {resultado['desvio_medio_cents']:.1f} cents")
-                st.markdown(f"**Tendência:** {resultado['tendencia']} ({resultado['desvio_sinal_cents']:+.1f} cents)")
-                st.markdown(f"**Notas afinadas (±50 cents):** {resultado['pct_afinado']:.1f}%")
-                st.markdown(f"**Frases sustentadas:** {resultado['num_frases']} (média {resultado['sustentacao_media']:.2f} s)")
-                st.markdown(f"**Pausas respiratórias:** {resultado['num_pausas']} (média {resultado['pausa_media']:.2f} s)")
-                mascara_voz = f0_limpo > 0
-                fig, ax = plt.subplots(figsize=(10, 4))
-                ax.plot(tempos[mascara_voz], f0_limpo[mascara_voz], linewidth=1.5, color="#f97316")
-                ax.set_xlabel("Tempo (s)")
-                ax.set_ylabel("Frequência fundamental (Hz)")
-                ax.set_title("Curva de Pitch")
-                ax.grid(True, alpha=0.3)
-                fig.tight_layout()
-                st.pyplot(fig)
-                st.markdown("**Devolutiva do Professor:**")
-                st.markdown(devolutiva)
-                # --- Vibrato ---
-                st.markdown("---")
-                st.markdown("**3. Vibrato** — detecte a oscilação da sua nota sustentada.")
-                vibratos = detectar_vibrato_v4(f0_limpo, tempos, calibracao_a4=calibracao)
-                if vibratos:
-                    linhas = []
-                    for v in vibratos:
-                        linhas.append({
-                            "Nota": v["nota"], "Taxa (Hz)": round(v["taxa_hz"], 2),
-                            "Extensão (cents)": round(v["extensao_cents"], 1),
-                            "Deslize (cents)": round(v["deslize_cents"], 1),
-                            "Periodicidade": round(v["periodicidade"], 3),
-                            "Classificação": classificar_vibrato_v4(v["taxa_hz"], v["extensao_cents"], v["deslize_cents"], v["periodicidade"]),
-                            "Dur. (s)": v["duracao_s"],
-                        })
-                    st.dataframe(linhas, use_container_width=True)
-                else:
-                    st.info("Nenhuma nota sustentada (>= 0.8s). Sustente uma nota firme por 3-4s.")
+                audio = raw
+                sr_audio = sr_raw
+        else:
+            st.warning("Envie um áudio ou grave sua voz.")
+            st.stop()
+        tempos, f0 = extrair_pitch(audio, sr_audio)
+        f0_limpo = np.where((f0 >= 80) & (f0 <= 1000), f0, 0.0)
+        if modo == "Afinador":
+            nota, cents, status = analisar_afinador(audio, sr_audio, calibracao)
+            st.success(f"Nota detectada: **{nota}** — {cents:+.1f} cents — {status}")
+            st.markdown(barra_cents_html(cents), unsafe_allow_html=True)
+        else:
+            resultado = analisar_afinacao(f0_limpo, tempos, calibracao)
+            devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
+            if cliente is not None:
+                ultimo_erro = ""
+                for modelo in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-2.5-flash"]:
+                    try:
+                        interaction = cliente.interactions.create(model=modelo, input=montar_prompt_professor(resultado))
+                        devolutiva = interaction.output_text
+                        break
+                    except Exception as e:
+                        ultimo_erro = str(e)
+                        continue
+                if devolutiva.startswith("[!]"):
+                    devolutiva = f"[!] Professor indisponível. Detalhe do erro: {ultimo_erro}"
+            try:
+                registrar_analise_firestore(resultado, modo)
+            except Exception as e:
+                st.warning(f"Não foi possível salvar no Firestore: {e}")
+            st.markdown(f"**Nota predominante:** {resultado['nota_predominante']}")
+            st.markdown(f"**Desvio médio absoluto:** {resultado['desvio_medio_cents']:.1f} cents")
+            st.markdown(f"**Tendência:** {resultado['tendencia']} ({resultado['desvio_sinal_cents']:+.1f} cents)")
+            st.markdown(f"**Notas afinadas (±50 cents):** {resultado['pct_afinado']:.1f}%")
+            st.markdown(f"**Frases sustentadas:** {resultado['num_frases']} (média {resultado['sustentacao_media']:.2f} s)")
+            st.markdown(f"**Pausas respiratórias:** {resultado['num_pausas']} (média {resultado['pausa_media']:.2f} s)")
+            mascara_voz = f0_limpo > 0
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.plot(tempos[mascara_voz], f0_limpo[mascara_voz], linewidth=1.5, color="#f97316")
+            ax.set_xlabel("Tempo (s)")
+            ax.set_ylabel("Frequência fundamental (Hz)")
+            ax.set_title("Curva de Pitch")
+            ax.grid(True, alpha=0.3)
+            fig.tight_layout()
+            st.pyplot(fig)
+            st.markdown("**Devolutiva do Professor:**")
+            st.markdown(devolutiva)
+            # --- Vibrato ---
+            st.markdown("---")
+            st.markdown("**3. Vibrato** — detecte a oscilação da sua nota sustentada.")
+            vibratos = detectar_vibrato_v4(f0_limpo, tempos, calibracao_a4=calibracao)
+            if vibratos:
+                linhas = []
+                for v in vibratos:
+                    linhas.append({
+                        "Nota": v["nota"], "Taxa (Hz)": round(v["taxa_hz"], 2),
+                        "Extensão (cents)": round(v["extensao_cents"], 1),
+                        "Deslize (cents)": round(v["deslize_cents"], 1),
+                        "Periodicidade": round(v["periodicidade"], 3),
+                        "Classificação": classificar_vibrato_v4(v["taxa_hz"], v["extensao_cents"], v["deslize_cents"], v["periodicidade"]),
+                        "Dur. (s)": v["duracao_s"],
+                    })
+                st.dataframe(linhas, use_container_width=True)
+            else:
+                st.info("Nenhuma nota sustentada (>= 0.8s). Sustente uma nota firme por 3-4s.")
 # ── ABA AFINADOR ──
 with tab_afinador:
     st.markdown("**Afinador — violão ou voz.** Escolha a afinação, toque/cante uma nota sustentada e veja o resultado.")
