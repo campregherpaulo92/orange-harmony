@@ -1,5 +1,5 @@
 # Orange Harmony — VocalAI Coach (Streamlit)
-import os, json, re, base64, tempfile, io
+import os, json, re, base64, tempfile, io, time
 from datetime import datetime
 import numpy as np
 import librosa
@@ -7,6 +7,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
+# ── WebRTC (tempo real) — protegido: se o pacote faltar, o app não quebra ──
+try:
+    from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase, ClientSettings
+    import av
+    TEM_WEBRTC = True
+except Exception:
+    TEM_WEBRTC = False
 # ── Configuração da página (deve ser o primeiro comando do Streamlit) ──
 st.set_page_config(page_title="Orange Harmony", page_icon="🍊", layout="wide")
 # ── Gemini ──
@@ -177,67 +184,109 @@ def nota_para_midi(nome, oitava):
     return 12 * (oitava + 1) + NOMES_NOTAS.index(nome)
 def midi_para_freq(midi, calibracao=440.0):
     return calibracao * 2 ** ((midi - 69) / 12)
-def gerar_nota_baixo(freq, duracao, sr, volume=0.5):
+# ── Síntese de bateria (sons mais encorpados) ──
+def gerar_kick(sr, volume=0.95):
+    n = int(sr * 0.3)
+    t = np.linspace(0, 0.3, n, endpoint=False)
+    freq = 50 * np.exp(-20 * t) + 40
+    fase = 2 * np.pi * np.cumsum(freq) / sr
+    sinal = np.sin(fase)
+    click = np.exp(-60 * t) * np.sin(2 * np.pi * 800 * t) * 0.3
+    env = np.exp(-10 * t)
+    return ((sinal + click) * env * volume).astype(np.float32)
+def gerar_snare(sr, volume=0.7):
+    n = int(sr * 0.25)
+    t = np.linspace(0, 0.25, n, endpoint=False)
+    ruido = np.random.default_rng(42).standard_normal(n)
+    ruido_f = np.diff(ruido, prepend=0)
+    tom = np.sin(2 * np.pi * 180 * t) * 0.4
+    corpo = np.sin(2 * np.pi * 320 * t) * np.exp(-30 * t) * 0.3
+    env = np.exp(-16 * t)
+    return ((0.6 * ruido_f + tom + corpo) * env * volume).astype(np.float32)
+def gerar_hat(sr, volume=0.4):
+    n = int(sr * 0.1)
+    t = np.linspace(0, 0.1, n, endpoint=False)
+    ruido = np.random.default_rng(7).standard_normal(n)
+    sinal = np.diff(ruido, prepend=0)
+    env = np.exp(-35 * t)
+    return (sinal * env * volume).astype(np.float32)
+def gerar_crash(sr, volume=0.5):
+    n = int(sr * 1.2)
+    t = np.linspace(0, 1.2, n, endpoint=False)
+    ruido = np.random.default_rng(99).standard_normal(n)
+    sinal = np.diff(ruido, prepend=0)
+    env = np.exp(-2.5 * t)
+    return (sinal * env * volume).astype(np.float32)
+# ── Baixo encorpado que segue a melodia ──
+def gerar_nota_baixo_encorpada(freq, duracao, sr, volume=0.55):
     n = int(sr * duracao)
     t = np.linspace(0, duracao, n, endpoint=False)
     sinal = (np.sin(2 * np.pi * freq * t)
-             + 0.4 * np.sin(2 * np.pi * 2 * freq * t)
-             + 0.2 * np.sin(2 * np.pi * 3 * freq * t))
-    env = np.exp(-3.0 * t / duracao)
-    return (sinal * env * volume).astype(np.float32)
-def gerar_kick(sr, volume=0.9):
-    n = int(sr * 0.25)
-    t = np.linspace(0, 0.25, n, endpoint=False)
-    freq = 55 * np.exp(-18 * t) + 45
-    fase = 2 * np.pi * np.cumsum(freq) / sr
-    sinal = np.sin(fase)
-    env = np.exp(-12 * t)
-    return (sinal * env * volume).astype(np.float32)
-def gerar_snare(sr, volume=0.6):
-    n = int(sr * 0.2)
-    t = np.linspace(0, 0.2, n, endpoint=False)
-    ruido = np.random.default_rng(42).standard_normal(n)
-    tom = np.sin(2 * np.pi * 180 * t)
-    sinal = 0.7 * ruido + 0.3 * tom
-    env = np.exp(-18 * t)
-    return (sinal * env * volume).astype(np.float32)
-def gerar_hat(sr, volume=0.35):
-    n = int(sr * 0.08)
-    t = np.linspace(0, 0.08, n, endpoint=False)
-    ruido = np.random.default_rng(7).standard_normal(n)
-    sinal = np.diff(ruido, prepend=0)
-    env = np.exp(-40 * t)
-    return (sinal * env * volume).astype(np.float32)
-def gerar_baixo(audio, sr, tom, bpm):
+             + 0.5 * np.sin(2 * np.pi * 2 * freq * t)
+             + 0.3 * np.sin(2 * np.pi * 3 * freq * t)
+             + 0.15 * np.sin(2 * np.pi * 4 * freq * t))
+    env = np.exp(-2.0 * t / duracao)
+    sinal = np.tanh(1.5 * sinal * env)
+    return (sinal * volume).astype(np.float32)
+def gerar_baixo_melodico(audio, sr, tom, bpm, beat_times):
+    """Baixo que escuta a melodia e escolhe notas da escala do tom."""
     sr = int(sr)
     bpm = float(bpm)
     duracao_total = float(len(audio)) / sr
     if duracao_total <= 0:
         return np.zeros(1, dtype=np.float32)
-    seg_por_compasso = 60.0 / bpm * 4
-    n_compassos = max(1, int(np.ceil(duracao_total / seg_por_compasso)))
-    raiz_midi = nota_para_midi(tom, 1)
-    notas_escala = [raiz_midi + i for i in [0, 2, 4, 5, 7, 9, 11]]
-    padrao = [0, 4, 0, 7, 0, 4, 7, 4]  # graus da escala por colcheia
-    colcheia = seg_por_compasso / 8
     n_total = int(sr * duracao_total)
     trilha = np.zeros(n_total + sr, dtype=np.float32)
-    for c in range(n_compassos):
-        for i, grau in enumerate(padrao):
-            inicio = c * seg_por_compasso + i * colcheia
-            if inicio >= duracao_total:
-                break
-            freq = midi_para_freq(notas_escala[grau % len(notas_escala)])
-            nota = gerar_nota_baixo(freq, colcheia * 0.9, sr)
-            idx = int(inicio * sr)
-            if idx >= n_total:
-                break
-            fim = min(idx + len(nota), n_total + sr)
-            if fim > idx:
-                trilha[idx:fim] += nota[:fim - idx]
+    raiz_midi = nota_para_midi(tom, 1)
+    escala = [raiz_midi + i for i in [0, 2, 4, 5, 7, 9, 11]]
+    # melodia (F0) ao longo do tempo
+    f0, voiced, _ = librosa.pyin(audio, fmin=80, fmax=1000, sr=sr, frame_length=2048, hop_length=512)
+    tempos_f0 = librosa.times_like(f0, sr=sr, hop_length=512)
+    # beats (fallback grade uniforme)
+    if beat_times is None or len(beat_times) == 0:
+        seg_compasso = 60.0 / bpm * 4
+        n_compassos = max(1, int(np.ceil(duracao_total / seg_compasso)))
+        colcheia = seg_compasso / 8
+        beat_times = np.array([c * seg_compasso + i * colcheia
+                               for c in range(n_compassos) for i in range(8)])
+    seg_compasso = 60.0 / bpm * 4
+    colcheia = seg_compasso / 8
+    def melodia_em(t):
+        masc = (tempos_f0 >= t - 0.25) & (tempos_f0 <= t + 0.25) & (f0 > 0)
+        if masc.sum() == 0:
+            return None
+        return float(np.median(f0[masc]))
+    def nota_baixo_para(freq_mel):
+        if freq_mel is None:
+            return escala[0]
+        midi_mel = 69 + 12 * np.log2(freq_mel / 440.0)
+        melhor = escala[0]
+        melhor_dist = 1e9
+        for nota in escala:
+            for oit in range(-2, 1):
+                midi_cand = nota + 12 * oit
+                if midi_cand <= midi_mel:
+                    dist = midi_mel - midi_cand
+                    if dist < melhor_dist:
+                        melhor_dist = dist
+                        melhor = midi_cand
+        return melhor
+    for t in beat_times:
+        if t >= duracao_total:
+            break
+        idx = int(t * sr)
+        if idx >= n_total:
+            break
+        freq_mel = melodia_em(t)
+        midi_nota = nota_baixo_para(freq_mel)
+        freq = midi_para_freq(midi_nota)
+        nota = gerar_nota_baixo_encorpada(freq, colcheia * 0.9, sr)
+        fim = min(idx + len(nota), n_total + sr)
+        if fim > idx:
+            trilha[idx:fim] += nota[:fim - idx]
     return trilha[:n_total]
 def gerar_bateria_ritmica(audio, sr, bpm, beat_times):
-    """Gera bateria que segue os beats reais e a energia da gravação."""
+    """Bateria que segue os beats reais, com prato, caixa, bumbo e chimbal."""
     sr = int(sr)
     bpm = float(bpm)
     duracao_total = float(len(audio)) / sr
@@ -248,39 +297,29 @@ def gerar_bateria_ritmica(audio, sr, bpm, beat_times):
     kick = gerar_kick(sr)
     snare = gerar_snare(sr)
     hat = gerar_hat(sr)
-
-    # Energia (RMS) ao longo do tempo — modula a densidade da bateria
+    crash = gerar_crash(sr)
     hop = 512
     rms = librosa.feature.rms(y=audio, frame_length=2048, hop_length=hop)[0]
     rms_times = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=hop)
     rms_norm = rms / (np.max(rms) + 1e-9)
-
-    # Onsets (ataques reais) — reforça os golpes do violão
     onsets = librosa.onset.onset_detect(y=audio, sr=sr, hop_length=hop)
     onset_times = librosa.frames_to_time(onsets, sr=sr, hop_length=hop)
-
-    # Se não detectou beats, cria grade uniforme como fallback
     if beat_times is None or len(beat_times) == 0:
         seg_compasso = 60.0 / bpm * 4
         n_compassos = max(1, int(np.ceil(duracao_total / seg_compasso)))
         colcheia = seg_compasso / 8
         beat_times = np.array([c * seg_compasso + i * colcheia
                                for c in range(n_compassos) for i in range(8)])
-
     seg_compasso = 60.0 / bpm * 4
     colcheia = seg_compasso / 8
-
     def energia_no_tempo(t):
         pos = int(np.searchsorted(rms_times, t))
         pos = min(max(pos, 0), len(rms_norm) - 1)
         return float(rms_norm[pos])
-
     def tocar(idx, amostra):
         fim = min(idx + len(amostra), n_total + sr)
         if fim > idx:
             trilha[idx:fim] += amostra[:fim - idx]
-
-    # Passada principal: decide o que tocar em cada beat real
     for t in beat_times:
         if t >= duracao_total:
             break
@@ -289,26 +328,18 @@ def gerar_bateria_ritmica(audio, sr, bpm, beat_times):
             break
         energia = energia_no_tempo(t)
         posicao = int(round((t % seg_compasso) / colcheia)) % 8
-
-        # Chimbal em todos os beats
         tocar(idx, hat)
-
-        # Bumbo nos tempos 1 e 3 (posições 0 e 4) — sempre
         if posicao in (0, 4):
             tocar(idx, kick)
-
-        # Caixa nos tempos 2 e 4 (posições 2 e 6) — só quando há energia
-        # (verso mais limpo, refrão com backbeat)
         if posicao in (2, 6) and energia > 0.18:
             tocar(idx, snare)
-
-        # Em trechos de alta energia, adiciona 16ºs extras (variação)
+        # prato no início de compassos alternados
+        if posicao == 0 and int(t // seg_compasso) % 2 == 0:
+            tocar(idx, crash)
         if energia > 0.55:
             t_extra = t + colcheia / 2
             if t_extra < duracao_total:
                 tocar(int(t_extra * sr), hat)
-
-    # Passada de onsets: reforça ataques reais com chimbal
     for t_onset in onset_times:
         if t_onset >= duracao_total:
             break
@@ -318,21 +349,105 @@ def gerar_bateria_ritmica(audio, sr, bpm, beat_times):
         proximo = beat_times[beat_times >= t_onset - 0.05] if len(beat_times) else np.array([])
         if len(proximo) == 0 or (proximo[0] - t_onset) > 0.12:
             tocar(idx, hat)
-
     return trilha[:n_total]
 def mixar(audio, baixo, bateria):
     total = audio.astype(np.float32)
     if baixo is not None:
-        total = total + 0.45 * baixo
+        total = total + 0.6 * baixo
     if bateria is not None:
-        total = total + 0.5 * bateria
+        total = total + 0.65 * bateria
+    total = np.tanh(1.2 * total)
     pico = np.max(np.abs(total)) + 1e-9
-    return (total / pico).astype(np.float32)
+    return (total / pico * 0.95).astype(np.float32)
 def audio_para_bytes(audio, sr):
     import soundfile as sf
     buf = io.BytesIO()
     sf.write(buf, audio, sr, format="WAV")
     return buf.getvalue()
+# ══════════════════ VELOCÍMETRO (agulha estilo velocímetro de carro) ══════════════════
+def velocimetro_html(cents, nota):
+    cents_c = max(-50.0, min(50.0, float(cents)))
+    angulo = (cents_c / 50.0) * 90.0
+    cor = "#22c55e" if abs(cents_c) <= 10 else ("#eab308" if abs(cents_c) <= 25 else "#ef4444")
+    marcas = ""
+    for v in [-50, -25, 0, 25, 50]:
+        a = (v / 50.0) * 90.0
+        rad = np.deg2rad(a)
+        x1 = 110 + 78 * np.sin(rad)
+        y1 = 110 - 78 * np.cos(rad)
+        x2 = 110 + 88 * np.sin(rad)
+        y2 = 110 - 88 * np.cos(rad)
+        marcas += f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="#666" stroke-width="2"/>'
+    return f'''<div style="display:flex;justify-content:center;">
+<svg viewBox="0 0 220 130" width="340" style="background:#161616;border-radius:16px;border:1px solid #333;">
+  <defs>
+    <linearGradient id="gg" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ef4444"/>
+      <stop offset="30%" stop-color="#eab308"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="70%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#ef4444"/>
+    </linearGradient>
+  </defs>
+  <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="url(#gg)" stroke-width="16" stroke-linecap="round"/>
+  {marcas}
+  <g transform="rotate({angulo:.1f} 110 110)">
+    <line x1="110" y1="110" x2="110" y2="34" stroke="{cor}" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <circle cx="110" cy="110" r="9" fill="{cor}"/>
+  <text x="110" y="92" text-anchor="middle" fill="#ffffff" font-size="26" font-weight="bold">{nota}</text>
+  <text x="110" y="122" text-anchor="middle" fill="#bbbbbb" font-size="13">{cents_c:+.0f} cents</text>
+</svg></div>'''
+# ══════════════════ AFINADOR TEMPO REAL (WebRTC) ══════════════════
+def _detectar_pitch_autocorr(amostras, sr):
+    n = len(amostras)
+    if n < 256:
+        return None
+    x = amostras - np.mean(amostras)
+    corr = np.correlate(x, x, mode="full")[n - 1:]
+    lag_min = max(1, int(sr / 1000))
+    lag_max = int(sr / 55)
+    if lag_max >= len(corr):
+        lag_max = len(corr) - 1
+    if lag_max <= lag_min:
+        return None
+    faixa = corr[lag_min:lag_max + 1]
+    pico = int(np.argmax(faixa)) + lag_min
+    if corr[pico] <= 0 or pico <= 0:
+        return None
+    return sr / pico
+def _freq_para_nota_cents(freq, calibracao=440.0):
+    midi = 69 + 12 * np.log2(freq / calibracao)
+    midi_arred = int(round(midi))
+    nota = f"{NOMES_NOTAS[midi_arred % 12]}{midi_arred // 12 - 1}"
+    cents = 1200 * np.log2(freq / (calibracao * 2 ** ((midi_arred - 69) / 12)))
+    return nota, cents
+if TEM_WEBRTC:
+    class ProcessadorAfinador(AudioProcessorBase):
+        def __init__(self):
+            self.nota = "—"
+            self.cents = 0.0
+            self.ativo = False
+            self.calibracao = 440.0
+            self._buffer = np.zeros(0, dtype=np.float32)
+        def recv(self, frame):
+            arr = frame.to_ndarray()
+            if arr.ndim == 2:
+                arr = arr.mean(axis=0)
+            arr = arr.astype(np.float32)
+            fmt = getattr(frame.format, "name", "fltp")
+            if fmt.startswith("s"):
+                arr = arr / 32768.0
+            self._buffer = np.concatenate([self._buffer, arr])
+            max_len = int(frame.rate * 0.6)
+            if len(self._buffer) > max_len:
+                self._buffer = self._buffer[-max_len:]
+            if len(self._buffer) >= 2048:
+                freq = _detectar_pitch_autocorr(self._buffer[-2048:], frame.rate)
+                if freq is not None:
+                    self.nota, self.cents = _freq_para_nota_cents(freq, self.calibracao)
+                    self.ativo = True
+            return frame
 # ══════════════════ PROFESSOR (Gemini) ══════════════════
 def montar_prompt_professor(resultado):
     return (
@@ -508,7 +623,6 @@ def carregar_audio(uploaded):
     try:
         audio, sr = librosa.load(tmp_path, sr=22050, mono=True)
     except Exception:
-        # A gravação do navegador pode vir em webm/ogg — tenta decodificar direto
         try:
             import soundfile as sf
             audio, sr = sf.read(tmp_path, dtype="float32")
@@ -615,7 +729,7 @@ with tab_analise:
         if modo == "Afinador":
             nota, cents, status = analisar_afinador(audio, sr_audio, calibracao)
             st.success(f"Nota detectada: **{nota}** — {cents:+.1f} cents — {status}")
-            st.markdown(barra_cents_html(cents), unsafe_allow_html=True)
+            st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
         else:
             resultado = analisar_afinacao(f0_limpo, tempos, calibracao)
             devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
@@ -676,6 +790,36 @@ with tab_afinador:
     afincao = c1.selectbox("Afinação", list(AFINACOES.keys()))
     calib_afinador = c2.radio("Calibração A4", [440, 442], horizontal=True)
     st.markdown(DESCRICOES_AFINACOES.get(afincao, ""))
+
+    if TEM_WEBRTC:
+        st.markdown("**Modo tempo real — agulha contínua:**")
+        def criar_processador(calibracao):
+            class _P(ProcessadorAfinador):
+                def __init__(self):
+                    super().__init__()
+                    self.calibracao = calibracao
+            return _P
+        webrtc_ctx = webrtc_streamer(
+            key="afinador_tempo_real",
+            mode=WebRtcMode.SENDONLY,
+            audio_receiver_size=1024,
+            client_settings=ClientSettings(
+                rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+                media_stream_constraints={"video": False, "audio": True},
+            ),
+            audio_processor_factory=criar_processador(calib_afinador),
+        )
+        if webrtc_ctx.state.playing:
+            placeholder = st.empty()
+            while webrtc_ctx.state.playing:
+                proc = webrtc_ctx.audio_processor
+                if proc is not None and proc.ativo:
+                    placeholder.markdown(velocimetro_html(proc.cents, proc.nota), unsafe_allow_html=True)
+                time.sleep(0.1)
+    else:
+        st.info("Modo tempo real indisponível (instale streamlit-webrtc no requirements).")
+
+    st.markdown("**— ou — grave/subir uma nota:**")
     audio_afinador = st.file_uploader("📂 Subir nota sustentada", type=["wav", "mp3", "m4a", "ogg", "flac"], key="afinador")
     st.markdown("**— ou —**")
     audio_afinador_grav = st.audio_input("🎤 Gravar nota agora", key="afinador_rec")
@@ -687,7 +831,7 @@ with tab_afinador:
         else:
             nota, cents, status = analisar_afinador(audio, sr, calib_afinador)
             st.success(f"Nota alvo: **{nota}** — {cents:+.1f} cents — {status}")
-            st.markdown(barra_cents_html(cents), unsafe_allow_html=True)
+            st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
 # ── ABA HISTÓRICO ──
 with tab_historico:
     st.markdown("**Evolução da sua performance — salva no Firebase, nunca se perde.**")
@@ -816,7 +960,7 @@ with tab_producao:
         try:
             if com_baixo:
                 with st.spinner("Gerando linha de baixo..."):
-                    baixo = gerar_baixo(audio, sr_audio, tom, bpm)
+                    baixo = gerar_baixo_melodico(audio, sr_audio, tom, bpm, beat_times)
             if com_bateria:
                 with st.spinner("Gerando bateria..."):
                     bateria = gerar_bateria_ritmica(audio, sr_audio, bpm, beat_times)
