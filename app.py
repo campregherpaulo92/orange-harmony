@@ -9,11 +9,13 @@ import matplotlib.pyplot as plt
 import streamlit as st
 # ── WebRTC (tempo real) — protegido: se o pacote faltar, o app não quebra ──
 try:
-    from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase, ClientSettings
+    from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
     import av
     TEM_WEBRTC = True
-except Exception:
+    ERRO_WEBRTC = ""
+except Exception as e:
     TEM_WEBRTC = False
+    ERRO_WEBRTC = str(e)
 # ── Configuração da página (deve ser o primeiro comando do Streamlit) ──
 st.set_page_config(page_title="Orange Harmony", page_icon="🍊", layout="wide")
 # ── Gemini ──
@@ -414,32 +416,31 @@ def _freq_para_nota_cents(freq, calibracao=440.0):
     nota = f"{NOMES_NOTAS[midi_arred % 12]}{midi_arred // 12 - 1}"
     cents = 1200 * np.log2(freq / (calibracao * 2 ** ((midi_arred - 69) / 12)))
     return nota, cents
-if TEM_WEBRTC:
-    class ProcessadorAfinador(AudioProcessorBase):
-        def __init__(self):
-            self.nota = "—"
-            self.cents = 0.0
-            self.ativo = False
-            self.calibracao = 440.0
-            self._buffer = np.zeros(0, dtype=np.float32)
-        def recv(self, frame):
-            arr = frame.to_ndarray()
-            if arr.ndim == 2:
-                arr = arr.mean(axis=0)
-            arr = arr.astype(np.float32)
-            fmt = getattr(frame.format, "name", "fltp")
-            if fmt.startswith("s"):
-                arr = arr / 32768.0
-            self._buffer = np.concatenate([self._buffer, arr])
-            max_len = int(frame.rate * 0.6)
-            if len(self._buffer) > max_len:
-                self._buffer = self._buffer[-max_len:]
-            if len(self._buffer) >= 2048:
-                freq = _detectar_pitch_autocorr(self._buffer[-2048:], frame.rate)
-                if freq is not None:
-                    self.nota, self.cents = _freq_para_nota_cents(freq, self.calibracao)
-                    self.ativo = True
-            return frame
+# Estado compartilhado entre o callback (thread do WebRTC) e a interface
+estado_afinador = {"nota": "—", "cents": 0.0, "ativo": False,
+                   "calibracao": 440.0, "buffer": np.zeros(0, dtype=np.float32)}
+def _processar_frame_audio(frame):
+    """Callback chamado a cada frame de áudio recebido do microfone."""
+    arr = frame.to_ndarray()
+    if arr.ndim == 2:
+        arr = arr.mean(axis=0)
+    arr = arr.astype(np.float32)
+    fmt = getattr(frame.format, "name", "fltp")
+    if fmt.startswith("s"):
+        arr = arr / 32768.0
+    buf = np.concatenate([estado_afinador["buffer"], arr])
+    max_len = int(frame.rate * 0.6)
+    if len(buf) > max_len:
+        buf = buf[-max_len:]
+    estado_afinador["buffer"] = buf
+    if len(buf) >= 2048:
+        freq = _detectar_pitch_autocorr(buf[-2048:], frame.rate)
+        if freq is not None:
+            nota, cents = _freq_para_nota_cents(freq, estado_afinador["calibracao"])
+            estado_afinador["nota"] = nota
+            estado_afinador["cents"] = cents
+            estado_afinador["ativo"] = True
+    return frame
 # ══════════════════ PROFESSOR (Gemini) ══════════════════
 def montar_prompt_professor(resultado):
     return (
@@ -785,31 +786,24 @@ with tab_afinador:
 
     if TEM_WEBRTC:
         st.markdown("**Modo tempo real — agulha contínua:**")
-        def criar_processador(calibracao):
-            class _P(ProcessadorAfinador):
-                def __init__(self):
-                    super().__init__()
-                    self.calibracao = calibracao
-            return _P
+        estado_afinador["calibracao"] = calib_afinador
         webrtc_ctx = webrtc_streamer(
             key="afinador_tempo_real",
             mode=WebRtcMode.SENDONLY,
-            audio_receiver_size=1024,
+            audio_frame_callback=_processar_frame_audio,
             client_settings=ClientSettings(
                 rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
                 media_stream_constraints={"video": False, "audio": True},
             ),
-            audio_processor_factory=criar_processador(calib_afinador),
         )
         if webrtc_ctx.state.playing:
             placeholder = st.empty()
             while webrtc_ctx.state.playing:
-                proc = webrtc_ctx.audio_processor
-                if proc is not None and proc.ativo:
-                    placeholder.markdown(velocimetro_html(proc.cents, proc.nota), unsafe_allow_html=True)
+                if estado_afinador["ativo"]:
+                    placeholder.markdown(velocimetro_html(estado_afinador["cents"], estado_afinador["nota"]), unsafe_allow_html=True)
                 time.sleep(0.1)
     else:
-        st.info("Modo tempo real indisponível (instale streamlit-webrtc no requirements).")
+        st.warning(f"Modo tempo real indisponível. Detalhe: {ERRO_WEBRTC}")
 
     st.markdown("**— ou — grave/subir uma nota:**")
     audio_afinador = st.file_uploader("📂 Subir nota sustentada", type=["wav", "mp3", "m4a", "ogg", "flac"], key="afinador")
