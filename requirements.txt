@@ -6,4 +6,4 @@ firebase-admin
 google-genai
 noisereduce
 soundfile
-streamlit-audiorecorder
+streamlit-webrtc
