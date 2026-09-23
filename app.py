@@ -18,7 +18,7 @@ except Exception as e:
     ERRO_WEBRTC = str(e)
 # ── Configuração da página (deve ser o primeiro comando do Streamlit) ──
 st.set_page_config(page_title="Orange Harmony", page_icon="🍊", layout="wide")
-# ── Fontes: Poppins (títulos/abas) + Inter (corpo) — via <link>, carrega sempre no Streamlit ──
+# ── Fontes: Poppins (títulos/abas) + Inter (corpo) ──
 st.markdown('<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">', unsafe_allow_html=True)
 # ── Gemini ──
 from google import genai
@@ -103,7 +103,7 @@ def analisar_afinacao(f0_limpo, tempos, calibracao=440.0, nota_ref=None):
     pct_afinado = float(np.mean(np.abs(cents) <= 50) * 100)
     tendencia = ("neutra (bem centrada)" if abs(desvio_sinal) < 10
                  else ("aguda (sharp)" if desvio_sinal > 0 else "grave (flat)"))
-    # ── Frases e pausas (sem alteração) ──
+    # ── Frases e pausas ──
     dt = tempos[1] - tempos[0] if len(tempos) > 1 else 0.01
     mudancas = np.diff(mascara.astype(int))
     inicios = np.where(mudancas == 1)[0] + 1
@@ -378,7 +378,7 @@ def audio_para_bytes(audio, sr):
     buf = io.BytesIO()
     sf.write(buf, audio, sr, format="WAV")
     return buf.getvalue()
-# ══════════════════ COMPONENTES VISUAIS (glassmorphism) ══════════════════
+    # ══════════════════ COMPONENTES VISUAIS (glassmorphism) ══════════════════
 def card_html(conteudo, classe="oh-card"):
     return f'<div class="{classe}">{conteudo}</div>'
 def metricas_html(lista):
@@ -730,7 +730,7 @@ def gerar_escala(nota, calibracao):
         trechos.append(sinal * env)
         trechos.append(silencio)
     return (sr, np.concatenate(trechos).astype(np.float32))
-# ══════════════════ CSS / TEMA (glassmorphism premium + Poppins/Inter) ══════════════════
+    # ══════════════════ CSS / TEMA (glassmorphism premium + Poppins/Inter) ══════════════════
 st.markdown("""
 <style>
     .stApp {
@@ -763,6 +763,12 @@ st.markdown("""
         box-shadow: 0 8px 28px rgba(249,115,22,0.5);
     }
     .stButton > button:active { transform: translateY(0); }
+    .stButton > button[kind="secondary"] {
+        background: rgba(255,255,255,0.06);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.12);
+        box-shadow: none;
+    }
 
     .stTextInput input, .stTextArea textarea,
     .stSelectbox div[data-baseweb="select"] > div,
@@ -775,6 +781,7 @@ st.markdown("""
     }
     label { color: #d9d9d9 !important; font-weight: 600; }
 
+    /* ── Abas premium estilo pill (Poppins) ── */
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     .stTabs [data-baseweb="tab"] {
         font-family: 'Poppins', sans-serif;
@@ -797,6 +804,7 @@ st.markdown("""
         box-shadow: 0 4px 20px rgba(249,115,22,0.4);
     }
 
+    /* ── Títulos de seção premium (Poppins) ── */
     .oh-section-title {
         display: flex;
         align-items: center;
@@ -833,6 +841,7 @@ st.markdown("""
         background: linear-gradient(90deg, rgba(249,115,22,0.6), transparent);
     }
 
+    /* ── Cards de métrica ── */
     .oh-metric-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -865,6 +874,20 @@ st.markdown("""
         animation: ohFadeIn 0.5s ease;
     }
 
+    /* ── Linha de histórico com botão excluir ── */
+    .oh-hist-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 12px;
+        padding: 10px 14px;
+        margin: 6px 0;
+        backdrop-filter: blur(8px);
+    }
+
+    /* ── Animações ── */
     @keyframes ohFadeIn {
         from { opacity: 0; transform: translateY(14px); }
         to { opacity: 1; transform: none; }
@@ -1022,7 +1045,6 @@ with tab_afinador:
     afincao = c1.selectbox("Afinação", list(AFINACOES.keys()))
     calib_afinador = c2.radio("Calibração A4", [440, 442], horizontal=True)
     st.markdown(DESCRICOES_AFINACOES.get(afincao, ""))
-
     if TEM_WEBRTC:
         st.markdown(titulo_secao("⚡", "Modo tempo real — agulha contínua:"), unsafe_allow_html=True)
         estado_afinador["calibracao"] = calib_afinador
@@ -1041,7 +1063,6 @@ with tab_afinador:
                 time.sleep(0.15)
     else:
         st.warning(f"Modo tempo real indisponível. Detalhe: {ERRO_WEBRTC}")
-
     st.markdown(titulo_secao("🎤", "— ou — grave/subir uma nota:"), unsafe_allow_html=True)
     audio_afinador = st.file_uploader("📂 Subir nota sustentada", type=["wav", "mp3", "m4a", "ogg", "flac"], key="afinador")
     st.markdown("**— ou —**")
@@ -1055,52 +1076,56 @@ with tab_afinador:
             nota, cents, status = analisar_afinador(audio, sr, calib_afinador)
             st.success(f"Nota alvo: **{nota}** — {cents:+.1f} cents — {status}")
             st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
-# ── ABA HISTÓRICO ──
+# ── ABA HISTÓRICO (carrega sozinho + excluir ao lado de cada análise) ──
 with tab_historico:
-    st.markdown(titulo_secao("📊", "Evolução da sua performance — salva no Firebase, nunca se perde."), unsafe_allow_html=True)
-    if st.button("Atualizar Histórico"):
-        analises = carregar_historico_firestore()
-        if not analises:
-            st.info("Nenhuma análise salva ainda.")
-        else:
-            linhas = [{"id": doc_id, "Data": a.get("data", "")[5:16], "Nota": a.get("nota_predominante", ""),
-                "Desvio (cents)": a.get("desvio_medio_cents", 0), "Tendência": a.get("tendencia", ""),
-                "% Afinado": a.get("pct_afinado", 0), "Frases": a.get("num_frases", 0),
-                "Sustentação (s)": a.get("sustentacao_media", 0), "Tom ref.": a.get("tom_ref", "—") or "—",
-            } for doc_id, a in analises]
-            st.dataframe(linhas, use_container_width=True)
-            if len(analises) >= 2:
-                rev = list(reversed(analises))
-                datas = [a.get("data", "")[5:16] for _, a in rev]
-                desvios = [a.get("desvio_medio_cents", 0) for _, a in rev]
-                pcts = [a.get("pct_afinado", 0) for _, a in rev]
-                fig, ax1 = plt.subplots(figsize=(10, 4))
-                ax1.set_facecolor("#0d0d0d")
-                fig.patch.set_facecolor("#0d0d0d")
-                ax1.plot(datas, desvios, marker="o", color="#f97316", label="Desvio médio (cents)")
-                ax1.set_ylabel("Desvio médio (cents)")
-                ax1.tick_params(axis="x", rotation=45, colors="#ccc")
-                ax1.xaxis.label.set_color("#ccc")
-                ax1.yaxis.label.set_color("#ccc")
-                ax1.title.set_color("#f97316")
-                ax2 = ax1.twinx()
-                ax2.plot(datas, pcts, marker="s", color="#22c55e", label="% afinado")
-                ax2.set_ylabel("% afinado")
-                ax2.tick_params(colors="#ccc")
-                ax2.yaxis.label.set_color("#ccc")
-                ax1.set_title("Evolução da performance")
-                fig.tight_layout()
-                st.pyplot(fig)
-            # ── Exclusão de análise ──
-            st.markdown(titulo_secao("🗑️", "Excluir uma análise"), unsafe_allow_html=True)
-            opcoes_excl = {f"{a.get('data','')[:16]} — {a.get('nota_predominante','')} ({a.get('pct_afinado',0):.0f}%)": doc_id for doc_id, a in analises}
-            escolha_excl = st.selectbox("Selecione a análise para excluir", list(opcoes_excl.keys()))
-            if st.button("🗑️ Excluir análise", type="primary"):
-                if excluir_analise_firestore(opcoes_excl[escolha_excl]):
+    st.markdown(titulo_secao("📊", "Evolução da sua performance — salva no Firebase."), unsafe_allow_html=True)
+    analises = carregar_historico_firestore()
+    if not analises:
+        st.info("Nenhuma análise salva ainda.")
+    else:
+        linhas = [{
+            "Data": a.get("data", "")[5:16], "Nota": a.get("nota_predominante", ""),
+            "Desvio (cents)": a.get("desvio_medio_cents", 0), "Tendência": a.get("tendencia", ""),
+            "% Afinado": a.get("pct_afinado", 0), "Frases": a.get("num_frases", 0),
+            "Sustentação (s)": a.get("sustentacao_media", 0), "Tom ref.": a.get("tom_ref", "—") or "—",
+        } for _, a in analises]
+        st.dataframe(linhas, use_container_width=True)
+        if len(analises) >= 2:
+            rev = list(reversed(analises))
+            datas = [a.get("data", "")[5:16] for _, a in rev]
+            desvios = [a.get("desvio_medio_cents", 0) for _, a in rev]
+            pcts = [a.get("pct_afinado", 0) for _, a in rev]
+            fig, ax1 = plt.subplots(figsize=(10, 4))
+            ax1.set_facecolor("#0d0d0d")
+            fig.patch.set_facecolor("#0d0d0d")
+            ax1.plot(datas, desvios, marker="o", color="#f97316", label="Desvio médio (cents)")
+            ax1.set_ylabel("Desvio médio (cents)")
+            ax1.tick_params(axis="x", rotation=45, colors="#ccc")
+            ax1.xaxis.label.set_color("#ccc")
+            ax1.yaxis.label.set_color("#ccc")
+            ax1.title.set_color("#f97316")
+            ax2 = ax1.twinx()
+            ax2.plot(datas, pcts, marker="s", color="#22c55e", label="% afinado")
+            ax2.set_ylabel("% afinado")
+            ax2.tick_params(colors="#ccc")
+            ax2.yaxis.label.set_color("#ccc")
+            ax1.set_title("Evolução da performance")
+            fig.tight_layout()
+            st.pyplot(fig)
+        # ── Exclusão: um botão ao lado de cada análise ──
+        st.markdown(titulo_secao("🗑️", "Excluir análises"), unsafe_allow_html=True)
+        for doc_id, a in analises:
+            data_curta = a.get("data", "")[5:16]
+            nota_a = a.get("nota_predominante", "—")
+            pct_a = a.get("pct_afinado", 0)
+            c1, c2 = st.columns([5, 1])
+            c1.markdown(f"**{data_curta}** — {nota_a} — **{pct_a:.0f}%** afinado", unsafe_allow_html=True)
+            if c2.button("🗑️ Excluir", key=f"del_{doc_id}"):
+                if excluir_analise_firestore(doc_id):
                     st.success("✅ Análise excluída do histórico e da curva.")
                     st.rerun()
                 else:
-                    st.error("Não foi possível excluir. Verifique se o Firebase está conectado.")
+                    st.error("Não foi possível excluir. Verifique o Firebase.")
 # ── ABA COMPOSIÇÕES ──
 with tab_composicoes:
     st.markdown(titulo_secao("🎼", "Crie e salve suas composições — com cifras, seções e versionamento."), unsafe_allow_html=True)
@@ -1134,7 +1159,7 @@ with tab_composicoes:
             st.rerun()
     else:
         st.info("Nenhuma composição salva ainda.")
-    # ── Caixa de visualização da letra salva/carregada ──
+    # ── Visualização permanente da letra salva/carregada ──
     letra_atual = st.session_state.get("comp_letra", "")
     if letra_atual.strip():
         st.markdown(titulo_secao("👁️", "Visualização da letra"), unsafe_allow_html=True)
