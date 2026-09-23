@@ -47,6 +47,12 @@ NOTAS_REFERENCIA = [f"{n}{o}" for o in range(2, 6) for n in NOMES_NOTAS]
 ESCALA_MAIOR = [0, 2, 4, 5, 7, 9, 11, 12]
 def f0_para_midi_calibrado(f0, calibracao=440.0):
     return 69 + 12 * np.log2(f0 / calibracao)
+def f0_para_freq(nota, calibracao=440.0):
+    """Converte um nome de nota (ex: 'C4') para frequência em Hz."""
+    nome = nota[:-1]
+    oitava = int(nota[-1])
+    midi = 12 * (oitava + 1) + NOMES_NOTAS.index(nome)
+    return calibracao * 2 ** ((midi - 69) / 12)
 # ══════════════════ PITCH ══════════════════
 def extrair_pitch(audio, sr):
     f0, voiced, _ = librosa.pyin(audio, fmin=80, fmax=1000, sr=sr, frame_length=2048, hop_length=512)
@@ -66,7 +72,7 @@ def segmentar_notas(f0, tempos, duracao_min=0.4):
         fins = np.concatenate((fins, [len(mascara)]))
     dt = tempos[1] - tempos[0] if len(tempos) > 1 else 0.01
     return [f0[i:f] for i, f in zip(inicios, fins) if (f - i) * dt >= duracao_min]
-def analisar_afinacao(f0_limpo, tempos, calibracao=440.0):
+def analisar_afinacao(f0_limpo, tempos, calibracao=440.0, nota_ref=None):
     mascara = f0_limpo > 0
     vazio = {"nota_predominante": "—", "desvio_medio_cents": 0.0, "tendencia": "—",
              "desvio_sinal_cents": 0.0, "pct_afinado": 0.0, "num_frases": 0,
@@ -74,18 +80,30 @@ def analisar_afinacao(f0_limpo, tempos, calibracao=440.0):
     if mascara.sum() == 0:
         return vazio
     f0_voz = f0_limpo[mascara]
-    midi = f0_para_midi_calibrado(f0_voz, calibracao)
-    midi_arred = np.round(midi)
-    cents = 1200 * np.log2(f0_voz / (calibracao * 2 ** ((midi_arred - 69) / 12)))
-    desvio_medio = float(np.mean(np.abs(cents)))
-    desvio_sinal = float(np.mean(cents))
-    pct_afinado = float(np.mean(np.abs(cents) <= 50) * 100)
-    segmentos = segmentar_notas(f0_limpo, tempos)
-    f0_pred = float(np.median([np.median(s[s > 0]) for s in segmentos])) if segmentos else float(np.median(f0_voz))
+    # ── Correção de oitava (pyin às vezes pega o 2º/4º harmônico) ──
+    mediana_orig = float(np.median(f0_voz))
+    f0_pred = mediana_orig
+    for divisor in (2, 4):
+        candidato = mediana_orig / divisor
+        frac = float(np.mean(np.abs(f0_voz - candidato) / candidato < 0.08))
+        if frac > 0.5:
+            f0_pred = candidato
+            break
     midi_pred = f0_para_midi_calibrado(f0_pred, calibracao)
     midi_arred_pred = int(round(midi_pred))
     nota_pred = f"{NOMES_NOTAS[midi_arred_pred % 12]}{midi_arred_pred // 12 - 1}"
-    tendencia = "neutra (bem centrada)" if abs(desvio_sinal) < 10 else ("agudo (sharp)" if desvio_sinal > 0 else "grave (flat)")
+    # ── Referência para medir a afinação (a nota que você quer cantar) ──
+    if nota_ref:
+        f_ref = f0_para_freq(nota_ref, calibracao)
+    else:
+        f_ref = calibracao * 2 ** ((midi_arred_pred - 69) / 12)
+    cents = 1200 * np.log2(f0_voz / f_ref)
+    desvio_medio = float(np.mean(np.abs(cents)))
+    desvio_sinal = float(np.mean(cents))
+    pct_afinado = float(np.mean(np.abs(cents) <= 50) * 100)
+    tendencia = ("neutra (bem centrada)" if abs(desvio_sinal) < 10
+                 else ("aguda (sharp)" if desvio_sinal > 0 else "grave (flat)"))
+    # ── Frases e pausas (sem alteração) ──
     dt = tempos[1] - tempos[0] if len(tempos) > 1 else 0.01
     mudancas = np.diff(mascara.astype(int))
     inicios = np.where(mudancas == 1)[0] + 1
@@ -95,7 +113,7 @@ def analisar_afinacao(f0_limpo, tempos, calibracao=440.0):
     if mascara[-1]:
         fins = np.concatenate((fins, [len(mascara)]))
     frases = [(f - i) * dt for i, f in zip(inicios, fins) if (f - i) * dt >= 0.3]
-    pausas = [ (inicios[k+1] - fins[k]) * dt for k in range(len(fins)-1) if (inicios[k+1] - fins[k]) * dt >= 0.3 ]
+    pausas = [(inicios[k+1] - fins[k]) * dt for k in range(len(fins)-1) if (inicios[k+1] - fins[k]) * dt >= 0.3]
     return {"nota_predominante": nota_pred, "desvio_medio_cents": desvio_medio,
             "tendencia": tendencia, "desvio_sinal_cents": desvio_sinal,
             "pct_afinado": pct_afinado, "num_frases": len(frases),
@@ -360,7 +378,7 @@ def audio_para_bytes(audio, sr):
     buf = io.BytesIO()
     sf.write(buf, audio, sr, format="WAV")
     return buf.getvalue()
-    # ══════════════════ COMPONENTES VISUAIS (glassmorphism) ══════════════════
+# ══════════════════ COMPONENTES VISUAIS (glassmorphism) ══════════════════
 def card_html(conteudo, classe="oh-card"):
     return f'<div class="{classe}">{conteudo}</div>'
 def metricas_html(lista):
@@ -383,17 +401,18 @@ def velocimetro_html(cents, nota):
     cents_c = max(-50.0, min(50.0, float(cents)))
     angulo = (cents_c / 50.0) * 90.0
     cor = "#22c55e" if abs(cents_c) <= 10 else ("#eab308" if abs(cents_c) <= 25 else "#ef4444")
+    status = "AFINADO" if abs(cents_c) <= 10 else ("PRÓXIMO" if abs(cents_c) <= 25 else "DESAFINADO")
     marcas = ""
-    for v in [-50, -25, 0, 25, 50]:
+    for v, rot in [(-50, "-50"), (-25, "-25"), (0, "0"), (25, "+25"), (50, "+50")]:
         a = (v / 50.0) * 90.0
         rad = np.deg2rad(a)
-        x1 = 110 + 78 * np.sin(rad)
-        y1 = 110 - 78 * np.cos(rad)
-        x2 = 110 + 88 * np.sin(rad)
-        y2 = 110 - 88 * np.cos(rad)
-        marcas += f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="#666" stroke-width="2"/>'
+        x1 = 110 + 74 * np.sin(rad); y1 = 110 - 74 * np.cos(rad)
+        x2 = 110 + 84 * np.sin(rad); y2 = 110 - 84 * np.cos(rad)
+        marcas += f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="#555" stroke-width="2"/>'
+        lx = 110 + 96 * np.sin(rad); ly = 110 - 96 * np.cos(rad)
+        marcas += f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="middle" fill="#888" font-size="10" font-family="Inter">{rot}</text>'
     return f'''<div style="display:flex;justify-content:center;">
-<svg viewBox="0 0 220 130" width="340" style="background:rgba(255,255,255,0.03);backdrop-filter:blur(10px);border-radius:16px;border:1px solid rgba(255,255,255,0.08);box-shadow:0 8px 32px rgba(0,0,0,0.35);">
+<svg viewBox="0 0 220 134" width="360" style="background:linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01));backdrop-filter:blur(12px);border-radius:20px;border:1px solid rgba(255,255,255,0.10);box-shadow:0 10px 40px rgba(0,0,0,0.45);">
   <defs>
     <linearGradient id="gg" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="#ef4444"/>
@@ -402,15 +421,21 @@ def velocimetro_html(cents, nota):
       <stop offset="70%" stop-color="#eab308"/>
       <stop offset="100%" stop-color="#ef4444"/>
     </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
-  <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="url(#gg)" stroke-width="16" stroke-linecap="round"/>
+  <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="url(#gg)" stroke-width="16" stroke-linecap="round" opacity="0.9"/>
+  <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2" stroke-linecap="round"/>
   {marcas}
-  <g transform="rotate({angulo:.1f} 110 110)">
-    <line x1="110" y1="110" x2="110" y2="34" stroke="{cor}" stroke-width="5" stroke-linecap="round"/>
+  <g transform="rotate({angulo:.1f} 110 110)" filter="url(#glow)">
+    <line x1="110" y1="110" x2="110" y2="36" stroke="{cor}" stroke-width="5" stroke-linecap="round"/>
   </g>
-  <circle cx="110" cy="110" r="9" fill="{cor}"/>
-  <text x="110" y="92" text-anchor="middle" fill="#ffffff" font-size="26" font-weight="bold">{nota}</text>
-  <text x="110" y="122" text-anchor="middle" fill="#bbbbbb" font-size="13">{cents_c:+.0f} cents</text>
+  <circle cx="110" cy="110" r="10" fill="{cor}" filter="url(#glow)"/>
+  <circle cx="110" cy="110" r="4" fill="#fff"/>
+  <text x="110" y="88" text-anchor="middle" fill="#ffffff" font-size="30" font-weight="800" font-family="Poppins,Inter">{nota}</text>
+  <text x="110" y="120" text-anchor="middle" fill="#bbbbbb" font-size="13" font-family="Inter">{cents_c:+.0f} cents · {status}</text>
 </svg></div>'''
 # ══════════════════ AFINADOR TEMPO REAL (WebRTC) ══════════════════
 def _detectar_pitch_autocorr(amostras, sr):
@@ -436,8 +461,11 @@ def _freq_para_nota_cents(freq, calibracao=440.0):
     nota = f"{NOMES_NOTAS[midi_arred % 12]}{midi_arred // 12 - 1}"
     cents = 1200 * np.log2(freq / (calibracao * 2 ** ((midi_arred - 69) / 12)))
     return nota, cents
+# Estado compartilhado entre o callback (thread do WebRTC) e a interface
 estado_afinador = {"nota": "—", "cents": 0.0, "ativo": False,
-                   "calibracao": 440.0, "buffer": np.zeros(0, dtype=np.float32)}
+                   "calibracao": 440.0, "buffer": np.zeros(0, dtype=np.float32),
+                   "hist_freq": [], "nota_estavel": "", "contador_estavel": 0,
+                   "cents_suavizado": 0.0}
 def _processar_frame_audio(frame):
     """Callback chamado a cada frame de áudio recebido do microfone."""
     arr = frame.to_ndarray()
@@ -455,10 +483,26 @@ def _processar_frame_audio(frame):
     if len(buf) >= 2048:
         freq = _detectar_pitch_autocorr(buf[-2048:], frame.rate)
         if freq is not None:
-            nota, cents = _freq_para_nota_cents(freq, estado_afinador["calibracao"])
-            estado_afinador["nota"] = nota
-            estado_afinador["cents"] = cents
-            estado_afinador["ativo"] = True
+            # ── Suavização: mediana do histórico de frequências ──
+            hist = estado_afinador["hist_freq"]
+            hist.append(freq)
+            if len(hist) > 8:
+                hist.pop(0)
+            freq_suave = float(np.median(hist))
+            nota, cents = _freq_para_nota_cents(freq_suave, estado_afinador["calibracao"])
+            # ── Estabilidade: só troca a nota se persistir por N frames ──
+            if nota == estado_afinador["nota_estavel"]:
+                estado_afinador["contador_estavel"] += 1
+            else:
+                estado_afinador["nota_estavel"] = nota
+                estado_afinador["contador_estavel"] = 0
+            if estado_afinador["contador_estavel"] >= 3:
+                # ── Suaviza cents com média exponencial (EMA) ──
+                prev = estado_afinador["cents_suavizado"]
+                estado_afinador["cents_suavizado"] = 0.4 * cents + 0.6 * prev
+                estado_afinador["nota"] = nota
+                estado_afinador["cents"] = estado_afinador["cents_suavizado"]
+                estado_afinador["ativo"] = True
     return frame
 # ══════════════════ PROFESSOR (Gemini) ══════════════════
 def montar_prompt_professor(resultado):
@@ -492,7 +536,15 @@ def carregar_historico_firestore():
     if db is None:
         return []
     docs = db.collection(COL_ANALISES).order_by("data", direction=firestore.Query.DESCENDING).limit(100).stream()
-    return [d.to_dict() for d in docs]
+    return [(d.id, d.to_dict()) for d in docs]
+def excluir_analise_firestore(doc_id):
+    if db is None:
+        return False
+    try:
+        db.collection(COL_ANALISES).document(doc_id).delete()
+        return True
+    except Exception:
+        return False
 # ══════════════════ COMPOSIÇÕES ══════════════════
 def classificar_secoes(letra):
     tipos = {"verso": 0, "pré-refrão": 0, "refrão": 0, "ponte": 0, "intro": 0, "solo": 0, "final": 0}
@@ -621,7 +673,7 @@ def afinar_stream(audio, afincao, calibracao):
         status = "🔴 DESAFINADO"
     direcao = "↑ agudo (afrouxe)" if cents > 0 else "↓ grave (aperte)"
     return nota_alvo, f"{cents:+.1f}", f"{nota_alvo} — {cents:+.1f} cents — {direcao} — {status}", barra_cents_html(cents)
-    # ══════════════════ FUNÇÕES DE ÁUDIO ══════════════════
+# ══════════════════ FUNÇÕES DE ÁUDIO ══════════════════
 def carregar_audio(uploaded):
     """Lê um arquivo enviado (upload ou gravação) e devolve (audio, sr) em 22050 Hz mono."""
     if uploaded is None:
@@ -723,7 +775,6 @@ st.markdown("""
     }
     label { color: #d9d9d9 !important; font-weight: 600; }
 
-    /* ── Abas premium estilo pill (Poppins) ── */
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     .stTabs [data-baseweb="tab"] {
         font-family: 'Poppins', sans-serif;
@@ -746,7 +797,6 @@ st.markdown("""
         box-shadow: 0 4px 20px rgba(249,115,22,0.4);
     }
 
-    /* ── Títulos de seção premium (Poppins) ── */
     .oh-section-title {
         display: flex;
         align-items: center;
@@ -783,7 +833,6 @@ st.markdown("""
         background: linear-gradient(90deg, rgba(249,115,22,0.6), transparent);
     }
 
-    /* ── Cards de métrica ── */
     .oh-metric-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -816,7 +865,6 @@ st.markdown("""
         animation: ohFadeIn 0.5s ease;
     }
 
-    /* ── Animações ── */
     @keyframes ohFadeIn {
         from { opacity: 0; transform: translateY(14px); }
         to { opacity: 1; transform: none; }
@@ -906,7 +954,7 @@ with tab_analise:
             st.success(f"Nota detectada: **{nota}** — {cents:+.1f} cents — {status}")
             st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
         else:
-            resultado = analisar_afinacao(f0_limpo, tempos, calibracao)
+            resultado = analisar_afinacao(f0_limpo, tempos, calibracao, nota_ref=nota_ref)
             devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
             if cliente is not None:
                 ultimo_erro = ""
@@ -990,7 +1038,7 @@ with tab_afinador:
             while webrtc_ctx.state.playing:
                 if estado_afinador["ativo"]:
                     placeholder.markdown(velocimetro_html(estado_afinador["cents"], estado_afinador["nota"]), unsafe_allow_html=True)
-                time.sleep(0.1)
+                time.sleep(0.15)
     else:
         st.warning(f"Modo tempo real indisponível. Detalhe: {ERRO_WEBRTC}")
 
@@ -1015,18 +1063,17 @@ with tab_historico:
         if not analises:
             st.info("Nenhuma análise salva ainda.")
         else:
-            linhas = [{
-                "Data": a.get("data", "")[5:16], "Nota": a.get("nota_predominante", ""),
+            linhas = [{"id": doc_id, "Data": a.get("data", "")[5:16], "Nota": a.get("nota_predominante", ""),
                 "Desvio (cents)": a.get("desvio_medio_cents", 0), "Tendência": a.get("tendencia", ""),
                 "% Afinado": a.get("pct_afinado", 0), "Frases": a.get("num_frases", 0),
                 "Sustentação (s)": a.get("sustentacao_media", 0), "Tom ref.": a.get("tom_ref", "—") or "—",
-            } for a in analises]
+            } for doc_id, a in analises]
             st.dataframe(linhas, use_container_width=True)
             if len(analises) >= 2:
                 rev = list(reversed(analises))
-                datas = [a.get("data", "")[5:16] for a in rev]
-                desvios = [a.get("desvio_medio_cents", 0) for a in rev]
-                pcts = [a.get("pct_afinado", 0) for a in rev]
+                datas = [a.get("data", "")[5:16] for _, a in rev]
+                desvios = [a.get("desvio_medio_cents", 0) for _, a in rev]
+                pcts = [a.get("pct_afinado", 0) for _, a in rev]
                 fig, ax1 = plt.subplots(figsize=(10, 4))
                 ax1.set_facecolor("#0d0d0d")
                 fig.patch.set_facecolor("#0d0d0d")
@@ -1044,13 +1091,26 @@ with tab_historico:
                 ax1.set_title("Evolução da performance")
                 fig.tight_layout()
                 st.pyplot(fig)
+            # ── Exclusão de análise ──
+            st.markdown(titulo_secao("🗑️", "Excluir uma análise"), unsafe_allow_html=True)
+            opcoes_excl = {f"{a.get('data','')[:16]} — {a.get('nota_predominante','')} ({a.get('pct_afinado',0):.0f}%)": doc_id for doc_id, a in analises}
+            escolha_excl = st.selectbox("Selecione a análise para excluir", list(opcoes_excl.keys()))
+            if st.button("🗑️ Excluir análise", type="primary"):
+                if excluir_analise_firestore(opcoes_excl[escolha_excl]):
+                    st.success("✅ Análise excluída do histórico e da curva.")
+                    st.rerun()
+                else:
+                    st.error("Não foi possível excluir. Verifique se o Firebase está conectado.")
 # ── ABA COMPOSIÇÕES ──
 with tab_composicoes:
     st.markdown(titulo_secao("🎼", "Crie e salve suas composições — com cifras, seções e versionamento."), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    comp_titulo = c1.text_input("Título da música", placeholder="Ex: Minha canção")
-    comp_tom = c2.text_input("Tom (opcional)", placeholder="Ex: Am, C, G")
+    comp_titulo = c1.text_input("Título da música", placeholder="Ex: Minha canção",
+                                value=st.session_state.get("comp_titulo", ""))
+    comp_tom = c2.text_input("Tom (opcional)", placeholder="Ex: Am, C, G",
+                             value=st.session_state.get("comp_tom", ""))
     comp_letra = st.text_area("Letra com cifras e seções", height=280,
+        value=st.session_state.get("comp_letra", ""),
         placeholder="# Verso 1\n[Am] [F] [C] [G]\nSua letra aqui...\n\n# Refrão\n[F] [G] [Am]\nRefrão aqui...")
     c3, c4 = st.columns(2)
     if c3.button("👁️ Ver prévia"):
@@ -1074,6 +1134,11 @@ with tab_composicoes:
             st.rerun()
     else:
         st.info("Nenhuma composição salva ainda.")
+    # ── Caixa de visualização da letra salva/carregada ──
+    letra_atual = st.session_state.get("comp_letra", "")
+    if letra_atual.strip():
+        st.markdown(titulo_secao("👁️", "Visualização da letra"), unsafe_allow_html=True)
+        st.markdown(renderizar_composicao_html(letra_atual), unsafe_allow_html=True)
 # ── ABA EDIÇÃO VOCAL (IA) ──
 with tab_edicao:
     st.markdown(titulo_secao("✨", "Peça para a IA ajustar sua voz. Ex: *'alinha minha voz no tom'*, *'limpa o ruído e deixa mais presente'*."), unsafe_allow_html=True)
