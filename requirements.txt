@@ -1,9 +1,12 @@
 streamlit
-numpy
 librosa
+numpy
 matplotlib
-firebase-admin
-google-genai
-noisereduce
 soundfile
+noisereduce
 streamlit-webrtc
+av
+google-genai
+firebase-admin
+requests
+beautifulsoup4
