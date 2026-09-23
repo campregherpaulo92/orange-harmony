@@ -1190,7 +1190,7 @@ with tab_gravador:
     st.markdown(titulo_secao("🎙️", "Gravador — grave, salve e gerencie suas gravações dentro do app."), unsafe_allow_html=True)
     if "gravacoes" not in st.session_state:
         st.session_state["gravacoes"] = []
-    grav_nome = st.text_input("Nome da gravação", placeholder="Ex: Cover Black do Perdão - 23/09")
+    grav_nome = st.text_input("Nome da gravação", placeholder="Ex: Cover Black - 23/09")
     grav_audio = st.audio_input("🎤 Gravar agora")
     if st.button("💾 Salvar gravação", type="primary"):
         if grav_audio is None:
