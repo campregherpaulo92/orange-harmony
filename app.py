@@ -1406,9 +1406,10 @@ with tab_producao:
         )
         st.info("💡 A separação de stems (voz/violão separados) exige GPU e roda no Colab — o link do notebook fica no README.")
 # ══════════════════ ASSISTENTE VIRTUAL (laranjinha flutuante) ══════════════════
-if os.path.exists(LOGO_PATH):
-    with open(LOGO_PATH, "rb") as f:
-        logo_b64 = base64.b64encode(f.read()).decode()
+LARANJINHA_PATH = "laranjinha.png"  # só a laranjinha, fundo transparente
+if os.path.exists(LARANJINHA_PATH):
+    with open(LARANJINHA_PATH, "rb") as f:
+        laranjinha_b64 = base64.b64encode(f.read()).decode()
     st.html(f"""
     <style>
     @keyframes ohBounce {{
@@ -1416,20 +1417,21 @@ if os.path.exists(LOGO_PATH):
         50% {{ transform: translateY(-12px); }}
     }}
     [data-testid="stPopover"] button {{
-        background-image: url("data:image/png;base64,{logo_b64}") !important;
-        background-size: cover !important;
+        background-image: url("data:image/png;base64,{laranjinha_b64}") !important;
+        background-size: contain !important;
         background-position: center !important;
+        background-repeat: no-repeat !important;
         background-color: transparent !important;
         border: none !important;
         outline: none !important;
         padding: 0 !important;
-        width: 110px !important;
-        height: 110px !important;
+        width: 120px !important;
+        height: 120px !important;
         border-radius: 50% !important;
         position: fixed !important;
-        bottom: 24px !important;
-        left: 24px !important;
-        right: auto !important;
+        bottom: 28px !important;
+        right: 24px !important;
+        left: auto !important;
         z-index: 9999 !important;
         font-size: 0 !important;
         color: transparent !important;
@@ -1449,25 +1451,26 @@ if os.path.exists(LOGO_PATH):
     </style>
     <script>
     (function() {{
-        var url = "data:image/png;base64,{logo_b64}";
+        var url = "data:image/png;base64,{laranjinha_b64}";
         var tentativas = 0;
         var timer = setInterval(function() {{
             var btn = document.querySelector('[data-testid="stPopover"] button');
             if (btn) {{
                 btn.style.backgroundImage = 'url("' + url + '")';
-                btn.style.backgroundSize = 'cover';
+                btn.style.backgroundSize = 'contain';
                 btn.style.backgroundPosition = 'center';
+                btn.style.backgroundRepeat = 'no-repeat';
                 btn.style.backgroundColor = 'transparent';
                 btn.style.border = 'none';
                 btn.style.outline = 'none';
                 btn.style.padding = '0';
-                btn.style.width = '110px';
-                btn.style.height = '110px';
+                btn.style.width = '120px';
+                btn.style.height = '120px';
                 btn.style.borderRadius = '50%';
                 btn.style.position = 'fixed';
-                btn.style.bottom = '24px';
-                btn.style.left = '24px';
-                btn.style.right = 'auto';
+                btn.style.bottom = '28px';
+                btn.style.right = '24px';
+                btn.style.left = 'auto';
                 btn.style.zIndex = '9999';
                 btn.style.fontSize = '0';
                 btn.style.color = 'transparent';
