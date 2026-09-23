@@ -7,13 +7,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
-# ── Cifra Hub (busca de cifras na web) ──
-try:
-    import requests
-    from bs4 import BeautifulSoup
-    TEM_CIFRA = True
-except Exception:
-    TEM_CIFRA = False
 # ── WebRTC (tempo real) — protegido: se o pacote faltar, o app não quebra ──
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode
@@ -807,115 +800,56 @@ def assistente_resposta(prompt_usuario):
         return "Não consegui responder agora. Tente novamente em instantes."
     except Exception as e:
         return f"Erro ao chamar o assistente: {e}"
-# ══════════════════ CIFRA HUB (busca e extração em múltiplas fontes) ══════════════════
-HEADERS_CIFRA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-
-def _texto_de(soup):
-    """Tenta vários seletores de conteúdo e devolve o texto do primeiro com conteúdo útil."""
-    seletores = [
-        "pre", ".cifra", ".cifra_cnt", "#js-cifra-content", ".js-cifra-content",
-        ".cnt-letra", ".lyric-original", "#js-lyric-content", ".lyrics",
-        "[class*='cifra']", "[class*='chord']", "[class*='lyric']",
-    ]
-    for sel in seletores:
-        el = soup.select_one(sel)
-        if el:
-            for tag in el.find_all(["script", "style"]):
-                tag.decompose()
-            txt = el.get_text("\n", strip=False)
-            linhas = [l.rstrip() for l in txt.splitlines() if l.strip()]
-            if len(linhas) >= 3:
-                return "\n".join(linhas)
-    return None
-
-def buscar_cifra_club(termo):
-    url = "https://www.cifraclub.com.br/busca/?q=" + requests.utils.quote(termo)
-    resp = requests.get(url, headers=HEADERS_CIFRA, timeout=15)
-    if resp.status_code != 200:
-        return []
-    soup = BeautifulSoup(resp.text, "html.parser")
-    res = []
-    for link in soup.select("a[href*='/cifra/']")[:15]:
-        titulo = link.get_text(strip=True)
-        href = link.get("href", "")
-        if titulo and href.startswith("/"):
-            res.append((titulo, "https://www.cifraclub.com.br" + href))
-    vistos, unicos = set(), []
-    for t, u in res:
-        if u not in vistos:
-            vistos.add(u)
-            unicos.append((t, u))
-    return unicos
-
-def buscar_letras_mus(termo):
-    url = "https://www.letras.mus.br/?q=" + requests.utils.quote(termo)
-    resp = requests.get(url, headers=HEADERS_CIFRA, timeout=15)
-    if resp.status_code != 200:
-        return []
-    soup = BeautifulSoup(resp.text, "html.parser")
-    res = []
-    for link in soup.select("a[href*='letras.mus.br/']"):
-        titulo = link.get_text(strip=True)
-        href = link.get("href", "")
-        if not titulo or not href:
-            continue
-        partes = [p for p in href.split("/") if p]
-        if len(partes) == 2 and not href.endswith((".html", ".php")):
-            url_final = href if href.startswith("http") else "https://www.letras.mus.br" + href
-            res.append((titulo, url_final))
-    vistos, unicos = set(), []
-    for t, u in res:
-        if u not in vistos:
-            vistos.add(u)
-            unicos.append((t, u))
-    return unicos[:15]
-
-def buscar_cifras_com(termo):
-    url = "https://www.cifras.com.br/busca?q=" + requests.utils.quote(termo)
-    resp = requests.get(url, headers=HEADERS_CIFRA, timeout=15)
-    if resp.status_code != 200:
-        return []
-    soup = BeautifulSoup(resp.text, "html.parser")
-    res = []
-    for link in soup.select("a[href*='/cifra/']"):
-        titulo = link.get_text(strip=True)
-        href = link.get("href", "")
-        if titulo and href.startswith("/"):
-            res.append((titulo, "https://www.cifras.com.br" + href))
-    vistos, unicos = set(), []
-    for t, u in res:
-        if u not in vistos:
-            vistos.add(u)
-            unicos.append((t, u))
-    return unicos[:15]
-
-def buscar_cifras(termo):
-    """Tenta várias fontes em ordem e devolve a primeira que retornar resultados."""
-    for fn in (buscar_cifra_club, buscar_letras_mus, buscar_cifras_com):
-        try:
-            res = fn(termo)
-            if res:
-                return res
-        except Exception:
-            continue
-    return []
-
-def extrair_cifra(url):
-    """Extrai título + conteúdo de uma página de cifra/letra."""
-    try:
-        resp = requests.get(url, headers=HEADERS_CIFRA, timeout=15)
-        if resp.status_code != 200:
-            return None
-        soup = BeautifulSoup(resp.text, "html.parser")
-        h1 = soup.find("h1")
-        titulo = h1.get_text(strip=True) if h1 else "Cifra"
-        conteudo = _texto_de(soup)
-        if conteudo:
-            return titulo, conteudo
-        return titulo, "Não foi possível extrair o conteúdo desta página."
-    except Exception:
-        return None
-        # ══════════════════ CSS / TEMA (glassmorphism premium + Poppins/Inter) ══════════════════
+# ══════════════════ ANÁLISE DE COVER (gravação completa) ══════════════════
+def analisar_cover(audio, sr, calibracao=440.0):
+    """Analisa a gravação inteira (voz + instrumental) e verifica se está casando com o tom."""
+    resultado = {"tom": "—", "bpm": 0.0, "pct_na_escala": 0.0, "notas_fora": [],
+                 "notas_principais": [], "veredito": "—", "duracao_s": 0.0}
+    if audio is None or len(audio) < int(sr * 0.5):
+        return resultado
+    resultado["duracao_s"] = round(len(audio) / sr, 1)
+    # Tom geral da gravação (chroma)
+    tom = detectar_tom(audio, sr)
+    resultado["tom"] = tom
+    # BPM
+    bpm, _ = detectar_bpm_e_beats(audio, sr)
+    resultado["bpm"] = bpm
+    # Escala maior do tom detectado
+    raiz = NOMES_NOTAS.index(tom)
+    escala_pc = set((raiz + i) % 12 for i in ESCALA_MAIOR)
+    # Extrai o pitch da gravação inteira
+    tempos, f0 = extrair_pitch(audio, sr)
+    f0_limpo = np.where((f0 >= 80) & (f0 <= 1000), f0, 0.0)
+    mascara = f0_limpo > 0
+    if mascara.sum() == 0:
+        resultado["veredito"] = "Sem sinal de pitch detectado na gravação."
+        return resultado
+    f0_voz = f0_limpo[mascara]
+    midi = f0_para_midi_calibrado(f0_voz, calibracao)
+    pc = np.round(midi).astype(int) % 12
+    dentro = np.isin(pc, list(escala_pc))
+    pct = float(np.mean(dentro) * 100)
+    resultado["pct_na_escala"] = round(pct, 1)
+    # Notas mais presentes
+    contagem = {}
+    for p in pc:
+        contagem[p] = contagem.get(p, 0) + 1
+    principais = sorted(contagem.items(), key=lambda x: -x[1])[:6]
+    resultado["notas_principais"] = [NOMES_NOTAS[p] for p, _ in principais]
+    # Notas fora da escala
+    fora = set(int(p) for p in pc[~dentro])
+    resultado["notas_fora"] = [NOMES_NOTAS[p] for p in sorted(fora)]
+    # Veredito
+    if pct >= 90:
+        resultado["veredito"] = "Excelente — a gravação está casando com o tom"
+    elif pct >= 75:
+        resultado["veredito"] = "Bom — a maior parte está no tom, com alguns escapes"
+    elif pct >= 60:
+        resultado["veredito"] = "Regular — várias notas fora do tom detectado"
+    else:
+        resultado["veredito"] = "Fora do eixo — a gravação não está casando com o tom"
+    return resultado
+    # ══════════════════ CSS / TEMA (glassmorphism premium + Poppins/Inter) ══════════════════
 st.markdown("""
 <style>
     .stApp {
@@ -1058,8 +992,8 @@ else:
     col_logo.markdown("# 🍊 Orange Harmony")
 st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Seu professor de canto com IA — analise sua voz, afine e evolua.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
 # ══════════════════ INTERFACE ══════════════════
-tab_analise, tab_afinador, tab_historico, tab_composicoes, tab_cifra, tab_edicao, tab_producao = st.tabs(
-    ["🎵 Análise e Estudo", "🎸 Afinador", "📊 Histórico", "🎼 Composições", "🎼 Cifra Hub", "✨ Edição Vocal (IA)", "🎛️ Produção"]
+tab_analise, tab_afinador, tab_historico, tab_composicoes, tab_edicao, tab_producao = st.tabs(
+    ["🎵 Análise e Estudo", "🎸 Afinador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🎛️ Produção"]
 )
 # ── ABA ANÁLISE E ESTUDO ──
 with tab_analise:
@@ -1079,7 +1013,7 @@ with tab_analise:
     audio_in = st.file_uploader("📂 Subir arquivo de áudio", type=["wav", "mp3", "m4a", "ogg", "flac"])
     st.markdown("**— ou —**")
     audio_gravado = st.audio_input("🎤 Gravar voz agora")
-    modo = st.radio("Modo", ["Análise completa", "Afinador"], horizontal=True)
+    modo = st.radio("Modo", ["Análise completa", "Afinador", "Análise de Cover"], horizontal=True)
     if st.button("Analisar", type="primary"):
         fonte = audio_in if audio_in is not None else audio_gravado
         if fonte is None:
@@ -1095,6 +1029,38 @@ with tab_analise:
             nota, cents, status = analisar_afinador(audio, sr_audio, calibracao)
             st.success(f"Nota detectada: **{nota}** — {cents:+.1f} cents — {status}")
             st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
+        elif modo == "Análise de Cover":
+            with st.spinner("Analisando a gravação completa (voz + instrumental)..."):
+                cover = analisar_cover(audio, sr_audio, calibracao)
+            st.markdown(titulo_secao("🎧", "Análise de Cover — a gravação inteira"), unsafe_allow_html=True)
+            st.markdown(metricas_html([
+                ("Tom detectado", cover["tom"], "tonalidade geral"),
+                ("BPM", f"{cover['bpm']:.1f}", "andamento"),
+                ("Notas na escala", f"{cover['pct_na_escala']:.1f}%", "casando com o tom"),
+                ("Duração", f"{cover['duracao_s']}s", "áudio analisado"),
+            ]), unsafe_allow_html=True)
+            st.markdown(card_html(f"**Veredito:** {cover['veredito']}"), unsafe_allow_html=True)
+            if cover["notas_principais"]:
+                st.markdown(f"**Notas mais presentes:** {', '.join(cover['notas_principais'])}")
+            if cover["notas_fora"]:
+                st.markdown(f"⚠️ **Notas fora da escala de {cover['tom']}:** {', '.join(cover['notas_fora'])}")
+            else:
+                st.markdown(f"✅ Todas as notas detectadas estão dentro da escala de {cover['tom']}.")
+            mascara_voz = f0_limpo > 0
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.plot(tempos[mascara_voz], f0_limpo[mascara_voz], linewidth=1.5, color="#f97316")
+            ax.set_facecolor("#0d0d0d")
+            fig.patch.set_facecolor("#0d0d0d")
+            ax.tick_params(colors="#ccc")
+            ax.xaxis.label.set_color("#ccc")
+            ax.yaxis.label.set_color("#ccc")
+            ax.title.set_color("#f97316")
+            ax.set_xlabel("Tempo (s)")
+            ax.set_ylabel("Frequência fundamental (Hz)")
+            ax.set_title("Curva de Pitch — gravação completa")
+            ax.grid(True, alpha=0.3)
+            fig.tight_layout()
+            st.pyplot(fig)
         else:
             resultado = analisar_afinacao(f0_limpo, tempos, calibracao, nota_ref=nota_ref)
             devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
@@ -1281,36 +1247,6 @@ with tab_composicoes:
     if letra_atual.strip():
         st.markdown(titulo_secao("👁️", "Visualização da letra"), unsafe_allow_html=True)
         st.markdown(renderizar_composicao_html(letra_atual), unsafe_allow_html=True)
-# ── ABA CIFRA HUB ──
-with tab_cifra:
-    st.markdown(titulo_secao("🎼", "Cifra Hub — pesquise uma música e veja a cifra com a letra original."), unsafe_allow_html=True)
-    if not TEM_CIFRA:
-        st.warning("O módulo de busca de cifras não está disponível (faltam 'requests' ou 'beautifulsoup4' no requirements.txt).")
-    else:
-        busca = st.text_input("🔍 Pesquisar música", placeholder="Ex: Evidências Chitãozinho e Xororó")
-        if st.button("🔎 Buscar", type="primary"):
-            if not busca.strip():
-                st.warning("Digite o nome de uma música.")
-            else:
-                with st.spinner("Buscando no Cifra Club..."):
-                    resultados = buscar_cifras(busca)
-                if not resultados:
-                    st.error("Nenhum resultado encontrado. Tente outro nome ou verifique a conexão.")
-                else:
-                    st.session_state["cifra_resultados"] = resultados
-                    st.session_state["cifra_opcoes"] = {t: u for t, u in resultados}
-        if st.session_state.get("cifra_resultados"):
-            opcoes = st.session_state["cifra_opcoes"]
-            escolha = st.selectbox("Resultados encontrados", list(opcoes.keys()))
-            if st.button("📄 Ver cifra"):
-                with st.spinner("Carregando cifra..."):
-                    dados = extrair_cifra(opcoes[escolha])
-                if dados:
-                    titulo, conteudo = dados
-                    st.markdown(titulo_secao("🎸", f"Cifra: {titulo}"), unsafe_allow_html=True)
-                    st.markdown(renderizar_composicao_html(conteudo), unsafe_allow_html=True)
-                else:
-                    st.error("Não foi possível carregar a cifra desta música.")
 # ── ABA EDIÇÃO VOCAL (IA) ──
 with tab_edicao:
     st.markdown(titulo_secao("✨", "Peça para a IA ajustar sua voz. Ex: *'alinha minha voz no tom'*, *'limpa o ruído e deixa mais presente'*."), unsafe_allow_html=True)
