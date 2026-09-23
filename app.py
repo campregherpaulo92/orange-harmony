@@ -358,11 +358,10 @@ def audio_para_bytes(audio, sr):
     buf = io.BytesIO()
     sf.write(buf, audio, sr, format="WAV")
     return buf.getvalue()
-# ══════════════════ COMPONENTES VISUAIS (glassmorphism) ══════════════════
+    # ══════════════════ COMPONENTES VISUAIS (glassmorphism) ══════════════════
 def card_html(conteudo, classe="oh-card"):
     return f'<div class="{classe}">{conteudo}</div>'
 def metricas_html(lista):
-    """lista = [(rotulo, valor, sub)] — renderiza cards de métrica em grade."""
     cards = ""
     for rotulo, valor, sub in lista:
         cards += f'''
@@ -432,7 +431,6 @@ def _freq_para_nota_cents(freq, calibracao=440.0):
     nota = f"{NOMES_NOTAS[midi_arred % 12]}{midi_arred // 12 - 1}"
     cents = 1200 * np.log2(freq / (calibracao * 2 ** ((midi_arred - 69) / 12)))
     return nota, cents
-# Estado compartilhado entre o callback (thread do WebRTC) e a interface
 estado_afinador = {"nota": "—", "cents": 0.0, "ativo": False,
                    "calibracao": 440.0, "buffer": np.zeros(0, dtype=np.float32)}
 def _processar_frame_audio(frame):
@@ -618,7 +616,7 @@ def afinar_stream(audio, afincao, calibracao):
         status = "🔴 DESAFINADO"
     direcao = "↑ agudo (afrouxe)" if cents > 0 else "↓ grave (aperte)"
     return nota_alvo, f"{cents:+.1f}", f"{nota_alvo} — {cents:+.1f} cents — {direcao} — {status}", barra_cents_html(cents)
-# ══════════════════ FUNÇÕES DE ÁUDIO ══════════════════
+    # ══════════════════ FUNÇÕES DE ÁUDIO ══════════════════
 def carregar_audio(uploaded):
     """Lê um arquivo enviado (upload ou gravação) e devolve (audio, sr) em 22050 Hz mono."""
     if uploaded is None:
@@ -690,7 +688,6 @@ st.markdown("""
     h1, h2, h3, h4 { color: #f97316 !important; font-weight: 800; letter-spacing: -0.02em; }
     .block-container { padding-top: 1.5rem; max-width: 1200px; }
 
-    /* ── Botões com gradiente e animação ── */
     .stButton > button {
         background: linear-gradient(135deg, #f97316, #ea580c);
         color: #fff;
@@ -706,7 +703,6 @@ st.markdown("""
     }
     .stButton > button:active { transform: translateY(0); }
 
-    /* ── Inputs com vidro ── */
     .stTextInput input, .stTextArea textarea,
     .stSelectbox div[data-baseweb="select"] > div,
     .stNumberInput input {
@@ -718,7 +714,6 @@ st.markdown("""
     }
     label { color: #d9d9d9 !important; font-weight: 600; }
 
-    /* ── Abas com vidro ── */
     .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] {
         background: rgba(255,255,255,0.04);
@@ -737,7 +732,6 @@ st.markdown("""
         box-shadow: 0 4px 18px rgba(249,115,22,0.35);
     }
 
-    /* ── Cards de métrica (grade) ── */
     .oh-metric-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -760,7 +754,6 @@ st.markdown("""
     .oh-metric-value { font-size: 1.6rem; font-weight: 800; color: #fff; margin: 6px 0 2px; }
     .oh-metric-sub { font-size: 0.78rem; color: #aaa; }
 
-    /* ── Card genérico ── */
     .oh-card {
         background: rgba(255,255,255,0.04);
         backdrop-filter: blur(14px);
@@ -778,7 +771,6 @@ st.markdown("""
         letter-spacing: -0.01em;
     }
 
-    /* ── Animações ── */
     @keyframes ohFadeIn {
         from { opacity: 0; transform: translateY(14px); }
         to { opacity: 1; transform: none; }
@@ -789,11 +781,9 @@ st.markdown("""
     }
     .oh-pulse { animation: ohPulse 2s infinite; }
 
-    /* ── DataFrames e áudio ── */
     .stDataFrame { background: rgba(255,255,255,0.03); border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); }
     .stAudio { border-radius: 14px; overflow: hidden; }
 
-    /* ── File uploader e audio input ── */
     [data-testid="stFileUploader"], [data-testid="stAudioInput"] {
         background: rgba(255,255,255,0.04);
         border: 1px dashed rgba(249,115,22,0.4);
@@ -805,7 +795,6 @@ st.markdown("""
         border-color: #f97316;
     }
 
-    /* ── Spinner e sucesso ── */
     .stSpinner > div { border-top-color: #f97316 !important; }
     [data-testid="stSuccess"] {
         background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(255,255,255,0.03));
@@ -906,4 +895,219 @@ with tab_analise:
             ax.title.set_color("#f97316")
             ax.set_xlabel("Tempo (s)")
             ax.set_ylabel("Frequência fundamental (Hz)")
-            ax.set_title("Curva de Pitch
+            ax.set_title("Curva de Pitch")
+            ax.grid(True, alpha=0.3)
+            fig.tight_layout()
+            st.pyplot(fig)
+            st.markdown(titulo_secao("💬", "Devolutiva do Professor"), unsafe_allow_html=True)
+            st.markdown(card_html(devolutiva), unsafe_allow_html=True)
+            st.markdown("---")
+            st.markdown(titulo_secao("🎚️", "3. Vibrato — detecte a oscilação da sua nota sustentada."), unsafe_allow_html=True)
+            vibratos = detectar_vibrato_v4(f0_limpo, tempos, calibracao_a4=calibracao)
+            if vibratos:
+                linhas = []
+                for v in vibratos:
+                    linhas.append({
+                        "Nota": v["nota"], "Taxa (Hz)": round(v["taxa_hz"], 2),
+                        "Extensão (cents)": round(v["extensao_cents"], 1),
+                        "Deslize (cents)": round(v["deslize_cents"], 1),
+                        "Periodicidade": round(v["periodicidade"], 3),
+                        "Classificação": classificar_vibrato_v4(v["taxa_hz"], v["extensao_cents"], v["deslize_cents"], v["periodicidade"]),
+                        "Dur. (s)": v["duracao_s"],
+                    })
+                st.dataframe(linhas, use_container_width=True)
+            else:
+                st.info("Nenhuma nota sustentada (>= 0.8s). Sustente uma nota firme por 3-4s.")
+# ── ABA AFINADOR ──
+with tab_afinador:
+    st.markdown(titulo_secao("🎸", "Afinador — violão ou voz. Escolha a afinação, toque/cante uma nota sustentada e veja o resultado."), unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    afincao = c1.selectbox("Afinação", list(AFINACOES.keys()))
+    calib_afinador = c2.radio("Calibração A4", [440, 442], horizontal=True)
+    st.markdown(DESCRICOES_AFINACOES.get(afincao, ""))
+
+    if TEM_WEBRTC:
+        st.markdown(titulo_secao("⚡", "Modo tempo real — agulha contínua:"), unsafe_allow_html=True)
+        estado_afinador["calibracao"] = calib_afinador
+        webrtc_ctx = webrtc_streamer(
+            key="afinador_tempo_real",
+            mode=WebRtcMode.SENDONLY,
+            audio_frame_callback=_processar_frame_audio,
+            frontend_rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+            media_stream_constraints={"video": False, "audio": True},
+        )
+        if webrtc_ctx.state.playing:
+            placeholder = st.empty()
+            while webrtc_ctx.state.playing:
+                if estado_afinador["ativo"]:
+                    placeholder.markdown(velocimetro_html(estado_afinador["cents"], estado_afinador["nota"]), unsafe_allow_html=True)
+                time.sleep(0.1)
+    else:
+        st.warning(f"Modo tempo real indisponível. Detalhe: {ERRO_WEBRTC}")
+
+    st.markdown(titulo_secao("🎤", "— ou — grave/subir uma nota:"), unsafe_allow_html=True)
+    audio_afinador = st.file_uploader("📂 Subir nota sustentada", type=["wav", "mp3", "m4a", "ogg", "flac"], key="afinador")
+    st.markdown("**— ou —**")
+    audio_afinador_grav = st.audio_input("🎤 Gravar nota agora", key="afinador_rec")
+    fonte_afinador = audio_afinador if audio_afinador is not None else audio_afinador_grav
+    if fonte_afinador is not None:
+        audio, sr = carregar_audio(fonte_afinador)
+        if audio is None:
+            st.error("Não foi possível ler o áudio. Tente outro formato (WAV ou MP3).")
+        else:
+            nota, cents, status = analisar_afinador(audio, sr, calib_afinador)
+            st.success(f"Nota alvo: **{nota}** — {cents:+.1f} cents — {status}")
+            st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
+# ── ABA HISTÓRICO ──
+with tab_historico:
+    st.markdown(titulo_secao("📊", "Evolução da sua performance — salva no Firebase, nunca se perde."), unsafe_allow_html=True)
+    if st.button("Atualizar Histórico"):
+        analises = carregar_historico_firestore()
+        if not analises:
+            st.info("Nenhuma análise salva ainda.")
+        else:
+            linhas = [{
+                "Data": a.get("data", "")[5:16], "Nota": a.get("nota_predominante", ""),
+                "Desvio (cents)": a.get("desvio_medio_cents", 0), "Tendência": a.get("tendencia", ""),
+                "% Afinado": a.get("pct_afinado", 0), "Frases": a.get("num_frases", 0),
+                "Sustentação (s)": a.get("sustentacao_media", 0), "Tom ref.": a.get("tom_ref", "—") or "—",
+            } for a in analises]
+            st.dataframe(linhas, use_container_width=True)
+            if len(analises) >= 2:
+                rev = list(reversed(analises))
+                datas = [a.get("data", "")[5:16] for a in rev]
+                desvios = [a.get("desvio_medio_cents", 0) for a in rev]
+                pcts = [a.get("pct_afinado", 0) for a in rev]
+                fig, ax1 = plt.subplots(figsize=(10, 4))
+                ax1.set_facecolor("#0d0d0d")
+                fig.patch.set_facecolor("#0d0d0d")
+                ax1.plot(datas, desvios, marker="o", color="#f97316", label="Desvio médio (cents)")
+                ax1.set_ylabel("Desvio médio (cents)")
+                ax1.tick_params(axis="x", rotation=45, colors="#ccc")
+                ax1.xaxis.label.set_color("#ccc")
+                ax1.yaxis.label.set_color("#ccc")
+                ax1.title.set_color("#f97316")
+                ax2 = ax1.twinx()
+                ax2.plot(datas, pcts, marker="s", color="#22c55e", label="% afinado")
+                ax2.set_ylabel("% afinado")
+                ax2.tick_params(colors="#ccc")
+                ax2.yaxis.label.set_color("#ccc")
+                ax1.set_title("Evolução da performance")
+                fig.tight_layout()
+                st.pyplot(fig)
+# ── ABA COMPOSIÇÕES ──
+with tab_composicoes:
+    st.markdown(titulo_secao("🎼", "Crie e salve suas composições — com cifras, seções e versionamento."), unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    comp_titulo = c1.text_input("Título da música", placeholder="Ex: Minha canção")
+    comp_tom = c2.text_input("Tom (opcional)", placeholder="Ex: Am, C, G")
+    comp_letra = st.text_area("Letra com cifras e seções", height=280,
+        placeholder="# Verso 1\n[Am] [F] [C] [G]\nSua letra aqui...\n\n# Refrão\n[F] [G] [Am]\nRefrão aqui...")
+    c3, c4 = st.columns(2)
+    if c3.button("👁️ Ver prévia"):
+        if comp_letra.strip():
+            st.markdown(renderizar_composicao_html(comp_letra), unsafe_allow_html=True)
+        else:
+            st.info("Digite a letra para ver a prévia.")
+    if c4.button("💾 Salvar composição", type="primary"):
+        st.success(salvar_composicao_firestore(comp_titulo, comp_tom, comp_letra))
+    st.markdown("---")
+    st.markdown(titulo_secao("📚", "Composições salvas"), unsafe_allow_html=True)
+    comps = listar_composicoes()
+    if comps:
+        opcoes = {f"{t} — v{v}": doc_id for t, v, doc_id in comps}
+        escolha = st.selectbox("Selecione para carregar", list(opcoes.keys()))
+        if st.button("📂 Carregar composição"):
+            titulo, tom, letra = carregar_composicao(opcoes[escolha])
+            st.session_state["comp_titulo"] = titulo
+            st.session_state["comp_tom"] = tom
+            st.session_state["comp_letra"] = letra
+            st.rerun()
+    else:
+        st.info("Nenhuma composição salva ainda.")
+# ── ABA EDIÇÃO VOCAL (IA) ──
+with tab_edicao:
+    st.markdown(titulo_secao("✨", "Peça para a IA ajustar sua voz. Ex: *'alinha minha voz no tom'*, *'limpa o ruído e deixa mais presente'*."), unsafe_allow_html=True)
+    edicao_in = st.file_uploader("Voz para editar (use o áudio isolado)", type=["wav", "mp3", "m4a", "ogg", "flac"], key="edicao")
+    comando = st.text_input("Comando para a IA", placeholder="Ex: alinha minha voz no tom e limpa o ruído")
+    if st.button("✨ Aplicar edição com IA", type="primary"):
+        if edicao_in is None:
+            st.warning("Envie um áudio para editar.")
+        else:
+            audio, sr = carregar_audio(edicao_in)
+            if audio is None:
+                st.error("Não foi possível ler o áudio. Tente outro formato (WAV ou MP3).")
+                st.stop()
+            cmd = (comando or "").lower()
+            acoes = []
+            try:
+                import noisereduce as nr
+                if any(p in cmd for p in ["ruído", "ruido", "limpa", "limpe", "barulho"]):
+                    audio = nr.reduce_noise(y=audio, sr=sr, stationary=True)
+                    acoes.append("redução de ruído")
+            except Exception:
+                pass
+            if any(p in cmd for p in ["normaliz", "volume", "alto", "baixo"]):
+                audio = audio / (np.max(np.abs(audio)) + 1e-9)
+                acoes.append("normalização de volume")
+            if any(p in cmd for p in ["tom", "afin", "pitch", "alinha"]):
+                audio = librosa.effects.pitch_shift(audio, sr=sr, n_steps=0.5)
+                acoes.append("ajuste sutil de tom")
+            if any(p in cmd for p in ["presente", "eq", "clareza", "brilho"]):
+                audio = librosa.effects.preemphasis(audio)
+                acoes.append("EQ de presença")
+            if not acoes:
+                audio = audio / (np.max(np.abs(audio)) + 1e-9)
+                acoes.append("normalização de volume")
+            import soundfile as sf
+            out = tempfile.mktemp(suffix=".wav")
+            sf.write(out, audio, sr)
+            st.audio(out, sample_rate=sr)
+            st.success("Edição aplicada: " + ", ".join(acoes) + ".")
+# ── ABA PRODUÇÃO ──
+with tab_producao:
+    st.markdown(titulo_secao("🎛️", "Estúdio de Produção — grave sua música (voz + violão) e gere baixo e bateria no tom e no BPM detectados da sua gravação."), unsafe_allow_html=True)
+    st.markdown(titulo_secao("1️⃣", "Captura — suba o arquivo ou grave direto."), unsafe_allow_html=True)
+    prod_in = st.file_uploader("📂 Subir gravação (voz + violão)", type=["wav", "mp3", "m4a", "ogg", "flac"], key="producao")
+    st.markdown("**— ou —**")
+    prod_grav = st.audio_input("🎤 Gravar música agora")
+    st.markdown(titulo_secao("2️⃣", "Geração"), unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    com_baixo = c1.checkbox("Gerar linha de baixo", value=True)
+    com_bateria = c2.checkbox("Gerar bateria", value=True)
+    if st.button("🎛️ Gerar produção", type="primary"):
+        fonte_prod = prod_in if prod_in is not None else prod_grav
+        if fonte_prod is None:
+            st.warning("Suba um áudio ou grave sua música primeiro.")
+            st.stop()
+        audio, sr_audio = carregar_audio(fonte_prod)
+        if audio is None:
+            st.error("Não foi possível ler o áudio. Tente outro formato (WAV ou MP3).")
+            st.stop()
+        with st.spinner("Analisando BPM, tom e ritmo..."):
+            bpm, beat_times = detectar_bpm_e_beats(audio, sr_audio)
+            tom = detectar_tom(audio, sr_audio)
+        st.success(f"Detectado: **{bpm:.1f} BPM** · Tom aproximado: **{tom}**")
+        baixo = None
+        bateria = None
+        try:
+            if com_baixo:
+                with st.spinner("Gerando linha de baixo..."):
+                    baixo = gerar_baixo_melodico(audio, sr_audio, tom, bpm, beat_times)
+            if com_bateria:
+                with st.spinner("Gerando bateria..."):
+                    bateria = gerar_bateria_ritmica(audio, sr_audio, bpm, beat_times)
+        except Exception as e:
+            st.error(f"Erro ao gerar produção: {e}")
+            st.stop()
+        with st.spinner("Mixando..."):
+            mix = mixar(audio, baixo, bateria)
+        st.markdown(titulo_secao("🎧", "Resultado mixado (original + baixo + bateria):"), unsafe_allow_html=True)
+        st.audio(mix, sample_rate=sr_audio)
+        st.download_button(
+            "⬇️ Baixar produção (WAV)",
+            data=audio_para_bytes(mix, sr_audio),
+            file_name="producao_orange_harmony.wav",
+            mime="audio/wav",
+        )
+        st.info("💡 A separação de stems (voz/violão separados) exige GPU e roda no Colab — o link do notebook fica no README.")
