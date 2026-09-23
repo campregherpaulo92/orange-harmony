@@ -182,7 +182,14 @@ def classificar_vibrato_v4(taxa, extensao, deslize, periodicidade):
     if extensao <= 120:
         return "vibrato largo (expressivo)"
     return "vibrato muito largo"
-# ══════════════════ PRODUÇÃO (BPM, TOM, BAIXO E BATERIA) ══════════════════
+# ══════════════════ PRODUÇÃO (BPM, TOM, BAIXO, BATERIA E ACORDES) ══════════════════
+ESTILOS_MUSICAIS = {
+    "Pop": "Leve e dançante — acordes a cada compasso, clima pop radiofônico.",
+    "Rock": "Energético — acordes firmes e bateria marcada nos tempos 2 e 4.",
+    "Balada": "Calmo e emotivo — acordes longos e suaves, clima intimista.",
+    "Sertanejo": "Violão marcado — acordes abertos e andamento médio.",
+    "Funk": "Ritmado — acordes curtos e groove constante.",
+}
 def detectar_bpm_e_beats(audio, sr):
     try:
         tempo, beat_frames = librosa.beat.beat_track(y=audio, sr=sr)
@@ -364,12 +371,60 @@ def gerar_bateria_ritmica(audio, sr, bpm, beat_times):
         if len(proximo) == 0 or (proximo[0] - t_onset) > 0.12:
             tocar(idx, hat)
     return trilha[:n_total]
-def mixar(audio, baixo, bateria):
+# ── Acordes (backing mais musical) ──
+def gerar_progressao(tom):
+    """Progressão I–V–vi–IV no tom detectado (muito comum em músicas populares)."""
+    raiz = NOMES_NOTAS.index(tom)
+    graus = [0, 7, 9, 5]  # I, V, vi, IV
+    return [(raiz + g) % 12 for g in graus]
+def gerar_acorde_encorpado(freqs, duracao, sr, volume=0.30):
+    n = int(sr * duracao)
+    t = np.linspace(0, duracao, n, endpoint=False)
+    sinal = np.zeros(n)
+    for f in freqs:
+        sinal += np.sin(2 * np.pi * f * t) + 0.3 * np.sin(2 * np.pi * 2 * f * t)
+    env = np.exp(-1.2 * t / duracao)
+    sinal = np.tanh(1.2 * sinal * env)
+    return (sinal * volume).astype(np.float32)
+def gerar_acordes_musicais(audio, sr, tom, bpm, beat_times, estilo="Pop"):
+    sr = int(sr)
+    bpm = float(bpm)
+    duracao_total = float(len(audio)) / sr
+    if duracao_total <= 0:
+        return np.zeros(1, dtype=np.float32)
+    n_total = int(sr * duracao_total)
+    trilha = np.zeros(n_total + sr, dtype=np.float32)
+    progressao = gerar_progressao(tom)
+    seg_compasso = 60.0 / bpm * 4
+    n_compassos = max(1, int(np.ceil(duracao_total / seg_compasso)))
+    # Balada: acorde dura 2 compassos (mais suave); demais: 1 compasso
+    duracao_acorde = seg_compasso * (2 if estilo == "Balada" else 1)
+    for c in range(n_compassos):
+        t0 = c * seg_compasso
+        if t0 >= duracao_total:
+            break
+        grau = progressao[c % len(progressao)]
+        menor = (grau == 9)  # vi é menor
+        intervalos = [0, 3, 7] if menor else [0, 4, 7]
+        freqs = []
+        for oit in (3, 4):
+            for intervalo in intervalos:
+                midi = 12 * (oit + 1) + grau + intervalo
+                freqs.append(midi_para_freq(midi))
+        idx = int(t0 * sr)
+        acorde = gerar_acorde_encorpado(freqs, duracao_acorde, sr, volume=0.30)
+        fim = min(idx + len(acorde), n_total + sr)
+        if fim > idx:
+            trilha[idx:fim] += acorde[:fim - idx]
+    return trilha[:n_total]
+def mixar(audio, baixo, bateria, acordes=None):
     total = audio.astype(np.float32)
     if baixo is not None:
         total = total + 0.6 * baixo
     if bateria is not None:
         total = total + 0.65 * bateria
+    if acordes is not None:
+        total = total + 0.30 * acordes
     total = np.tanh(1.2 * total)
     pico = np.max(np.abs(total)) + 1e-9
     return (total / pico * 0.95).astype(np.float32)
@@ -396,7 +451,7 @@ def titulo_secao(icone, texto):
             f'<span class="oh-title-icon">{icone}</span>'
             f'<span class="oh-title-text">{texto}</span>'
             f'<span class="oh-title-line"></span></div>')
-# ══════════════════ VELOCÍMETRO (agulha estilo velocímetro de carro) ══════════════════
+# ══════════════════ VELOCÍMETRO ══════════════════
 def velocimetro_html(cents, nota):
     cents_c = max(-50.0, min(50.0, float(cents)))
     angulo = (cents_c / 50.0) * 90.0
@@ -461,13 +516,11 @@ def _freq_para_nota_cents(freq, calibracao=440.0):
     nota = f"{NOMES_NOTAS[midi_arred % 12]}{midi_arred // 12 - 1}"
     cents = 1200 * np.log2(freq / (calibracao * 2 ** ((midi_arred - 69) / 12)))
     return nota, cents
-# Estado compartilhado entre o callback (thread do WebRTC) e a interface
 estado_afinador = {"nota": "—", "cents": 0.0, "ativo": False,
                    "calibracao": 440.0, "buffer": np.zeros(0, dtype=np.float32),
                    "hist_freq": [], "nota_estavel": "", "contador_estavel": 0,
                    "cents_suavizado": 0.0}
 def _processar_frame_audio(frame):
-    """Callback chamado a cada frame de áudio recebido do microfone."""
     arr = frame.to_ndarray()
     if arr.ndim == 2:
         arr = arr.mean(axis=0)
@@ -483,21 +536,18 @@ def _processar_frame_audio(frame):
     if len(buf) >= 2048:
         freq = _detectar_pitch_autocorr(buf[-2048:], frame.rate)
         if freq is not None:
-            # ── Suavização: mediana do histórico de frequências ──
             hist = estado_afinador["hist_freq"]
             hist.append(freq)
             if len(hist) > 8:
                 hist.pop(0)
             freq_suave = float(np.median(hist))
             nota, cents = _freq_para_nota_cents(freq_suave, estado_afinador["calibracao"])
-            # ── Estabilidade: só troca a nota se persistir por N frames ──
             if nota == estado_afinador["nota_estavel"]:
                 estado_afinador["contador_estavel"] += 1
             else:
                 estado_afinador["nota_estavel"] = nota
                 estado_afinador["contador_estavel"] = 0
             if estado_afinador["contador_estavel"] >= 3:
-                # ── Suaviza cents com média exponencial (EMA) ──
                 prev = estado_afinador["cents_suavizado"]
                 estado_afinador["cents_suavizado"] = 0.4 * cents + 0.6 * prev
                 estado_afinador["nota"] = nota
@@ -730,7 +780,28 @@ def gerar_escala(nota, calibracao):
         trechos.append(sinal * env)
         trechos.append(silencio)
     return (sr, np.concatenate(trechos).astype(np.float32))
-    # ══════════════════ CSS / TEMA (glassmorphism premium + Poppins/Inter) ══════════════════
+# ══════════════════ ASSISTENTE VIRTUAL (Gemini) ══════════════════
+def assistente_resposta(prompt_usuario):
+    if cliente is None:
+        return "A Laranjinha está indisponível (configure a chave Gemini)."
+    sistema = (
+        "Você é a Laranjinha, assistente virtual do Orange Harmony, um app de estudo de canto "
+        "e didática musical com IA. Responda em português, de forma acolhedora e prática. "
+        "Você pode: dar dicas de canto e explicação técnica (pitch, afinação, vibrato, respiração, "
+        "sustentação), gerar letras e composições a partir de uma descrição (com cifras e seções), "
+        "e orientar sobre afinação, tom e exercícios vocais. Seja específico e encorajador."
+    )
+    try:
+        for modelo in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-2.5-flash"]:
+            try:
+                interaction = cliente.interactions.create(model=modelo, input=sistema + "\n\nPergunta: " + prompt_usuario)
+                return interaction.output_text
+            except Exception:
+                continue
+        return "Não consegui responder agora. Tente novamente em instantes."
+    except Exception as e:
+        return f"Erro ao chamar o assistente: {e}"
+        # ══════════════════ CSS / TEMA (glassmorphism premium + Poppins/Inter) ══════════════════
 st.markdown("""
 <style>
     .stApp {
@@ -781,7 +852,6 @@ st.markdown("""
     }
     label { color: #d9d9d9 !important; font-weight: 600; }
 
-    /* ── Abas premium estilo pill (Poppins) ── */
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     .stTabs [data-baseweb="tab"] {
         font-family: 'Poppins', sans-serif;
@@ -804,59 +874,30 @@ st.markdown("""
         box-shadow: 0 4px 20px rgba(249,115,22,0.4);
     }
 
-    /* ── Títulos de seção premium (Poppins) ── */
-    .oh-section-title {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin: 18px 0 12px;
-    }
+    .oh-section-title { display: flex; align-items: center; gap: 10px; margin: 18px 0 12px; }
     .oh-title-icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 34px;
-        height: 34px;
-        border-radius: 10px;
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 34px; height: 34px; border-radius: 10px;
         background: linear-gradient(135deg, rgba(249,115,22,0.28), rgba(249,115,22,0.08));
         border: 1px solid rgba(249,115,22,0.35);
         box-shadow: 0 0 14px rgba(249,115,22,0.25);
         animation: ohPulse 2.5s infinite;
     }
     .oh-title-text {
-        font-family: 'Poppins', sans-serif;
-        font-size: 1.05rem;
-        font-weight: 700;
+        font-family: 'Poppins', sans-serif; font-size: 1.05rem; font-weight: 700;
         background: linear-gradient(90deg, #f97316, #ffb066, #f97316);
         background-size: 200% auto;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         background-clip: text;
         animation: ohGradient 4s linear infinite;
     }
-    .oh-title-line {
-        flex: 1;
-        height: 2px;
-        border-radius: 2px;
-        background: linear-gradient(90deg, rgba(249,115,22,0.6), transparent);
-    }
+    .oh-title-line { flex: 1; height: 2px; border-radius: 2px; background: linear-gradient(90deg, rgba(249,115,22,0.6), transparent); }
 
-    /* ── Cards de métrica ── */
-    .oh-metric-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 14px;
-        margin: 16px 0;
-        animation: ohFadeIn 0.5s ease;
-    }
+    .oh-metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 16px 0; animation: ohFadeIn 0.5s ease; }
     .oh-metric {
         background: linear-gradient(150deg, rgba(249,115,22,0.14), rgba(255,255,255,0.03));
-        border: 1px solid rgba(249,115,22,0.22);
-        border-radius: 16px;
-        padding: 18px 14px;
-        text-align: center;
-        backdrop-filter: blur(12px);
-        box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        border: 1px solid rgba(249,115,22,0.22); border-radius: 16px; padding: 18px 14px; text-align: center;
+        backdrop-filter: blur(12px); box-shadow: 0 8px 24px rgba(0,0,0,0.3);
         transition: transform 0.25s ease, box-shadow 0.25s ease;
     }
     .oh-metric:hover { transform: translateY(-4px); box-shadow: 0 14px 34px rgba(249,115,22,0.25); }
@@ -865,41 +906,14 @@ st.markdown("""
     .oh-metric-sub { font-size: 0.78rem; color: #aaa; }
 
     .oh-card {
-        background: rgba(255,255,255,0.04);
-        backdrop-filter: blur(14px);
-        border: 1px solid rgba(255,255,255,0.09);
-        border-radius: 18px;
-        padding: 20px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.35);
-        animation: ohFadeIn 0.5s ease;
+        background: rgba(255,255,255,0.04); backdrop-filter: blur(14px);
+        border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 20px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.35); animation: ohFadeIn 0.5s ease;
     }
 
-    /* ── Linha de histórico com botão excluir ── */
-    .oh-hist-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 12px;
-        padding: 10px 14px;
-        margin: 6px 0;
-        backdrop-filter: blur(8px);
-    }
-
-    /* ── Animações ── */
-    @keyframes ohFadeIn {
-        from { opacity: 0; transform: translateY(14px); }
-        to { opacity: 1; transform: none; }
-    }
-    @keyframes ohPulse {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0.45); }
-        50% { box-shadow: 0 0 0 10px rgba(249,115,22,0); }
-    }
-    @keyframes ohGradient {
-        0% { background-position: 0% center; }
-        100% { background-position: 200% center; }
-    }
+    @keyframes ohFadeIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    @keyframes ohPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0.45); } 50% { box-shadow: 0 0 0 10px rgba(249,115,22,0); } }
+    @keyframes ohGradient { 0% { background-position: 0% center; } 100% { background-position: 200% center; } }
 
     .stDataFrame { background: rgba(255,255,255,0.03); border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); }
     .stAudio { border-radius: 14px; overflow: hidden; }
@@ -907,24 +921,42 @@ st.markdown("""
     [data-testid="stFileUploader"], [data-testid="stAudioInput"] {
         background: rgba(255,255,255,0.04);
         border: 1px dashed rgba(249,115,22,0.4);
-        border-radius: 14px;
-        padding: 8px;
-        backdrop-filter: blur(8px);
+        border-radius: 14px; padding: 8px; backdrop-filter: blur(8px);
     }
-    [data-testid="stFileUploader"]:hover, [data-testid="stAudioInput"]:hover {
-        border-color: #f97316;
-    }
+    [data-testid="stFileUploader"]:hover, [data-testid="stAudioInput"]:hover { border-color: #f97316; }
 
     .stSpinner > div { border-top-color: #f97316 !important; }
     [data-testid="stSuccess"] {
         background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(255,255,255,0.03));
-        border: 1px solid rgba(34,197,94,0.3);
-        border-radius: 12px;
-        backdrop-filter: blur(8px);
+        border: 1px solid rgba(34,197,94,0.3); border-radius: 12px; backdrop-filter: blur(8px);
     }
-    [data-testid="stWarning"], [data-testid="stError"], [data-testid="stInfo"] {
-        border-radius: 12px;
-        backdrop-filter: blur(8px);
+    [data-testid="stWarning"], [data-testid="stError"], [data-testid="stInfo"] { border-radius: 12px; backdrop-filter: blur(8px); }
+
+    /* ── Laranjinha flutuante (assistente virtual) ── */
+    [data-testid="stPopover"] > button {
+        position: fixed !important;
+        bottom: 24px !important;
+        right: 24px !important;
+        z-index: 9999 !important;
+        width: 78px !important;
+        height: 78px !important;
+        border-radius: 50% !important;
+        background: linear-gradient(135deg, #f97316, #ea580c) !important;
+        border: 2px solid rgba(255,255,255,0.3) !important;
+        font-size: 2.4rem !important;
+        line-height: 1 !important;
+        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
+        animation: ohPulse 2.5s infinite;
+    }
+    [data-testid="stPopover"] > button:hover {
+        transform: scale(1.08);
+        box-shadow: 0 12px 42px rgba(249,115,22,0.75) !important;
+    }
+    [data-testid="stPopoverBody"] {
+        background: #161616;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        box-shadow: 0 16px 50px rgba(0,0,0,0.6);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1076,7 +1108,7 @@ with tab_afinador:
             nota, cents, status = analisar_afinador(audio, sr, calib_afinador)
             st.success(f"Nota alvo: **{nota}** — {cents:+.1f} cents — {status}")
             st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
-# ── ABA HISTÓRICO (carrega sozinho + excluir ao lado de cada análise) ──
+# ── ABA HISTÓRICO ──
 with tab_historico:
     st.markdown(titulo_secao("📊", "Evolução da sua performance — salva no Firebase."), unsafe_allow_html=True)
     analises = carregar_historico_firestore()
@@ -1112,7 +1144,6 @@ with tab_historico:
             ax1.set_title("Evolução da performance")
             fig.tight_layout()
             st.pyplot(fig)
-        # ── Exclusão: um botão ao lado de cada análise ──
         st.markdown(titulo_secao("🗑️", "Excluir análises"), unsafe_allow_html=True)
         for doc_id, a in analises:
             data_curta = a.get("data", "")[5:16]
@@ -1159,7 +1190,6 @@ with tab_composicoes:
             st.rerun()
     else:
         st.info("Nenhuma composição salva ainda.")
-    # ── Visualização permanente da letra salva/carregada ──
     letra_atual = st.session_state.get("comp_letra", "")
     if letra_atual.strip():
         st.markdown(titulo_secao("👁️", "Visualização da letra"), unsafe_allow_html=True)
@@ -1203,17 +1233,21 @@ with tab_edicao:
             sf.write(out, audio, sr)
             st.audio(out, sample_rate=sr)
             st.success("Edição aplicada: " + ", ".join(acoes) + ".")
-# ── ABA PRODUÇÃO ──
+# ── ABA PRODUÇÃO (backing track musical) ──
 with tab_producao:
-    st.markdown(titulo_secao("🎛️", "Estúdio de Produção — grave sua música (voz + violão) e gere baixo e bateria no tom e no BPM detectados da sua gravação."), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🎛️", "Estúdio de Produção — backing track musical no tom e BPM da sua gravação."), unsafe_allow_html=True)
     st.markdown(titulo_secao("1️⃣", "Captura — suba o arquivo ou grave direto."), unsafe_allow_html=True)
     prod_in = st.file_uploader("📂 Subir gravação (voz + violão)", type=["wav", "mp3", "m4a", "ogg", "flac"], key="producao")
     st.markdown("**— ou —**")
     prod_grav = st.audio_input("🎤 Gravar música agora")
-    st.markdown(titulo_secao("2️⃣", "Geração"), unsafe_allow_html=True)
+    st.markdown(titulo_secao("2️⃣", "Estilo e geração"), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    com_baixo = c1.checkbox("Gerar linha de baixo", value=True)
-    com_bateria = c2.checkbox("Gerar bateria", value=True)
+    estilo = c1.selectbox("🎵 Estilo musical", list(ESTILOS_MUSICAIS.keys()))
+    c2.caption(ESTILOS_MUSICAIS[estilo])
+    c3, c4 = st.columns(2)
+    com_baixo = c3.checkbox("Gerar baixo", value=True)
+    com_bateria = c4.checkbox("Gerar bateria", value=True)
+    com_acordes = st.checkbox("🎹 Gerar acordes (backing mais musical)", value=True)
     if st.button("🎛️ Gerar produção", type="primary"):
         fonte_prod = prod_in if prod_in is not None else prod_grav
         if fonte_prod is None:
@@ -1226,9 +1260,10 @@ with tab_producao:
         with st.spinner("Analisando BPM, tom e ritmo..."):
             bpm, beat_times = detectar_bpm_e_beats(audio, sr_audio)
             tom = detectar_tom(audio, sr_audio)
-        st.success(f"Detectado: **{bpm:.1f} BPM** · Tom aproximado: **{tom}**")
+        st.success(f"Detectado: **{bpm:.1f} BPM** · Tom: **{tom}** · Estilo: **{estilo}**")
         baixo = None
         bateria = None
+        acordes = None
         try:
             if com_baixo:
                 with st.spinner("Gerando linha de baixo..."):
@@ -1236,12 +1271,15 @@ with tab_producao:
             if com_bateria:
                 with st.spinner("Gerando bateria..."):
                     bateria = gerar_bateria_ritmica(audio, sr_audio, bpm, beat_times)
+            if com_acordes:
+                with st.spinner(f"Gerando acordes ({estilo})..."):
+                    acordes = gerar_acordes_musicais(audio, sr_audio, tom, bpm, beat_times, estilo)
         except Exception as e:
             st.error(f"Erro ao gerar produção: {e}")
             st.stop()
         with st.spinner("Mixando..."):
-            mix = mixar(audio, baixo, bateria)
-        st.markdown(titulo_secao("🎧", "Resultado mixado (original + baixo + bateria):"), unsafe_allow_html=True)
+            mix = mixar(audio, baixo, bateria, acordes)
+        st.markdown(titulo_secao("🎧", "Resultado mixado (original + baixo + bateria + acordes):"), unsafe_allow_html=True)
         st.audio(mix, sample_rate=sr_audio)
         st.download_button(
             "⬇️ Baixar produção (WAV)",
@@ -1250,3 +1288,26 @@ with tab_producao:
             mime="audio/wav",
         )
         st.info("💡 A separação de stems (voz/violão separados) exige GPU e roda no Colab — o link do notebook fica no README.")
+# ══════════════════ ASSISTENTE VIRTUAL (laranjinha flutuante) ══════════════════
+with st.popover("🍊", use_container_width=False):
+    if os.path.exists(LOGO_PATH):
+        with open(LOGO_PATH, "rb") as f:
+            logo_b64 = base64.b64encode(f.read()).decode()
+        st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="height:46px;border-radius:10px;margin-bottom:6px;">', unsafe_allow_html=True)
+    st.markdown("**Laranjinha — Assistente do Orange Harmony**")
+    st.caption("Dicas de canto, geração de letra, afinação, tom e exercícios.")
+    if "chat_hist" not in st.session_state:
+        st.session_state["chat_hist"] = []
+    for msg in st.session_state["chat_hist"][-12:]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+    pergunta = st.chat_input("Pergunte algo...")
+    if pergunta:
+        st.session_state["chat_hist"].append({"role": "user", "content": pergunta})
+        with st.chat_message("user"):
+            st.markdown(pergunta)
+        with st.chat_message("assistant"):
+            with st.spinner("Pensando..."):
+                resp = assistente_resposta(pergunta)
+            st.markdown(resp)
+        st.session_state["chat_hist"].append({"role": "assistant", "content": resp})
