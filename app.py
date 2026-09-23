@@ -726,15 +726,16 @@ st.markdown("""
     /* ── Abas premium estilo pill ── */
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     .stTabs [data-baseweb="tab"] {
-        background: rgba(255,255,255,0.04);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 999px;
-        color: #d9d9d9;
-        padding: 0.55rem 1.2rem;
-        font-weight: 600;
-        transition: all 0.25s ease;
-    }
+    font-family: 'Poppins', sans-serif;
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    color: #d9d9d9;
+    padding: 0.55rem 1.2rem;
+    font-weight: 600;
+    transition: all 0.25s ease;
+}
     .stTabs [data-baseweb="tab"]:hover {
         background: rgba(255,255,255,0.09);
         transform: translateY(-1px);
