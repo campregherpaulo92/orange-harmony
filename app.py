@@ -807,32 +807,101 @@ def assistente_resposta(prompt_usuario):
         return "Não consegui responder agora. Tente novamente em instantes."
     except Exception as e:
         return f"Erro ao chamar o assistente: {e}"
-# ══════════════════ CIFRA HUB (busca e extração) ══════════════════
+# ══════════════════ CIFRA HUB (busca e extração em múltiplas fontes) ══════════════════
 HEADERS_CIFRA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-def buscar_cifras(termo):
-    """Busca músicas no Cifra Club e retorna lista de (titulo, url)."""
-    try:
-        url = "https://www.cifraclub.com.br/busca/?q=" + requests.utils.quote(termo)
-        resp = requests.get(url, headers=HEADERS_CIFRA, timeout=15)
-        if resp.status_code != 200:
-            return []
-        soup = BeautifulSoup(resp.text, "html.parser")
-        resultados = []
-        for link in soup.select("a[href*='/cifra/']")[:15]:
-            titulo = link.get_text(strip=True)
-            href = link.get("href", "")
-            if titulo and href.startswith("/"):
-                resultados.append((titulo, "https://www.cifraclub.com.br" + href))
-        vistos, unicos = set(), []
-        for t, u in resultados:
-            if u not in vistos:
-                vistos.add(u)
-                unicos.append((t, u))
-        return unicos
-    except Exception:
+
+def _texto_de(soup):
+    """Tenta vários seletores de conteúdo e devolve o texto do primeiro com conteúdo útil."""
+    seletores = [
+        "pre", ".cifra", ".cifra_cnt", "#js-cifra-content", ".js-cifra-content",
+        ".cnt-letra", ".lyric-original", "#js-lyric-content", ".lyrics",
+        "[class*='cifra']", "[class*='chord']", "[class*='lyric']",
+    ]
+    for sel in seletores:
+        el = soup.select_one(sel)
+        if el:
+            for tag in el.find_all(["script", "style"]):
+                tag.decompose()
+            txt = el.get_text("\n", strip=False)
+            linhas = [l.rstrip() for l in txt.splitlines() if l.strip()]
+            if len(linhas) >= 3:
+                return "\n".join(linhas)
+    return None
+
+def buscar_cifra_club(termo):
+    url = "https://www.cifraclub.com.br/busca/?q=" + requests.utils.quote(termo)
+    resp = requests.get(url, headers=HEADERS_CIFRA, timeout=15)
+    if resp.status_code != 200:
         return []
+    soup = BeautifulSoup(resp.text, "html.parser")
+    res = []
+    for link in soup.select("a[href*='/cifra/']")[:15]:
+        titulo = link.get_text(strip=True)
+        href = link.get("href", "")
+        if titulo and href.startswith("/"):
+            res.append((titulo, "https://www.cifraclub.com.br" + href))
+    vistos, unicos = set(), []
+    for t, u in res:
+        if u not in vistos:
+            vistos.add(u)
+            unicos.append((t, u))
+    return unicos
+
+def buscar_letras_mus(termo):
+    url = "https://www.letras.mus.br/?q=" + requests.utils.quote(termo)
+    resp = requests.get(url, headers=HEADERS_CIFRA, timeout=15)
+    if resp.status_code != 200:
+        return []
+    soup = BeautifulSoup(resp.text, "html.parser")
+    res = []
+    for link in soup.select("a[href*='letras.mus.br/']"):
+        titulo = link.get_text(strip=True)
+        href = link.get("href", "")
+        if not titulo or not href:
+            continue
+        partes = [p for p in href.split("/") if p]
+        if len(partes) == 2 and not href.endswith((".html", ".php")):
+            url_final = href if href.startswith("http") else "https://www.letras.mus.br" + href
+            res.append((titulo, url_final))
+    vistos, unicos = set(), []
+    for t, u in res:
+        if u not in vistos:
+            vistos.add(u)
+            unicos.append((t, u))
+    return unicos[:15]
+
+def buscar_cifras_com(termo):
+    url = "https://www.cifras.com.br/busca?q=" + requests.utils.quote(termo)
+    resp = requests.get(url, headers=HEADERS_CIFRA, timeout=15)
+    if resp.status_code != 200:
+        return []
+    soup = BeautifulSoup(resp.text, "html.parser")
+    res = []
+    for link in soup.select("a[href*='/cifra/']"):
+        titulo = link.get_text(strip=True)
+        href = link.get("href", "")
+        if titulo and href.startswith("/"):
+            res.append((titulo, "https://www.cifras.com.br" + href))
+    vistos, unicos = set(), []
+    for t, u in res:
+        if u not in vistos:
+            vistos.add(u)
+            unicos.append((t, u))
+    return unicos[:15]
+
+def buscar_cifras(termo):
+    """Tenta várias fontes em ordem e devolve a primeira que retornar resultados."""
+    for fn in (buscar_cifra_club, buscar_letras_mus, buscar_cifras_com):
+        try:
+            res = fn(termo)
+            if res:
+                return res
+        except Exception:
+            continue
+    return []
+
 def extrair_cifra(url):
-    """Extrai título + letra com cifras de uma página do Cifra Club."""
+    """Extrai título + conteúdo de uma página de cifra/letra."""
     try:
         resp = requests.get(url, headers=HEADERS_CIFRA, timeout=15)
         if resp.status_code != 200:
@@ -840,16 +909,10 @@ def extrair_cifra(url):
         soup = BeautifulSoup(resp.text, "html.parser")
         h1 = soup.find("h1")
         titulo = h1.get_text(strip=True) if h1 else "Cifra"
-        cifra_div = (soup.find(class_="cifra_cnt")
-                     or soup.find(id="js-cifra-content")
-                     or soup.find(class_="js-cifra-content"))
-        if cifra_div:
-            for tag in cifra_div.find_all(["script", "style"]):
-                tag.decompose()
-            conteudo = cifra_div.get_text("\n", strip=False)
-            linhas = [l.rstrip() for l in conteudo.splitlines()]
-            return titulo, "\n".join(linhas)
-        return titulo, "Não foi possível extrair a cifra desta página."
+        conteudo = _texto_de(soup)
+        if conteudo:
+            return titulo, conteudo
+        return titulo, "Não foi possível extrair o conteúdo desta página."
     except Exception:
         return None
         # ══════════════════ CSS / TEMA (glassmorphism premium + Poppins/Inter) ══════════════════
@@ -1346,13 +1409,13 @@ with tab_producao:
 if os.path.exists(LOGO_PATH):
     with open(LOGO_PATH, "rb") as f:
         logo_b64 = base64.b64encode(f.read()).decode()
-    st.markdown(f"""
+    st.html(f"""
     <style>
     @keyframes ohBounce {{
         0%, 100% {{ transform: translateY(0); }}
         50% {{ transform: translateY(-12px); }}
     }}
-    [data-testid="stPopover"] > button {{
+    [data-testid="stPopover"] button {{
         background-image: url("data:image/png;base64,{logo_b64}") !important;
         background-size: cover !important;
         background-position: center !important;
@@ -1373,7 +1436,7 @@ if os.path.exists(LOGO_PATH):
         box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
         animation: ohBounce 2s ease-in-out infinite !important;
     }}
-    [data-testid="stPopover"] > button:hover {{
+    [data-testid="stPopover"] button:hover {{
         animation-play-state: paused !important;
         transform: scale(1.08);
     }}
@@ -1384,7 +1447,41 @@ if os.path.exists(LOGO_PATH):
         box-shadow: 0 16px 50px rgba(0,0,0,0.6);
     }}
     </style>
-    """, unsafe_allow_html=True)
+    <script>
+    (function() {{
+        var url = "data:image/png;base64,{logo_b64}";
+        var tentativas = 0;
+        var timer = setInterval(function() {{
+            var btn = document.querySelector('[data-testid="stPopover"] button');
+            if (btn) {{
+                btn.style.backgroundImage = 'url("' + url + '")';
+                btn.style.backgroundSize = 'cover';
+                btn.style.backgroundPosition = 'center';
+                btn.style.backgroundColor = 'transparent';
+                btn.style.border = 'none';
+                btn.style.outline = 'none';
+                btn.style.padding = '0';
+                btn.style.width = '110px';
+                btn.style.height = '110px';
+                btn.style.borderRadius = '50%';
+                btn.style.position = 'fixed';
+                btn.style.bottom = '24px';
+                btn.style.left = '24px';
+                btn.style.right = 'auto';
+                btn.style.zIndex = '9999';
+                btn.style.fontSize = '0';
+                btn.style.color = 'transparent';
+                btn.style.boxShadow = '0 8px 30px rgba(249,115,22,0.55)';
+                btn.style.animation = 'ohBounce 2s ease-in-out infinite';
+                clearInterval(timer);
+            }} else if (tentativas > 20) {{
+                clearInterval(timer);
+            }}
+            tentativas++;
+        }}, 500);
+    }})();
+    </script>
+    """)
 
 with st.popover("🍊", use_container_width=False):
     col_t, col_l = st.columns([3, 1])
