@@ -372,7 +372,10 @@ def metricas_html(lista):
         </div>'''
     return f'<div class="oh-metric-grid">{cards}</div>'
 def titulo_secao(icone, texto):
-    return f'<div class="oh-section-title">{icone} {texto}</div>'
+    return (f'<div class="oh-section-title">'
+            f'<span class="oh-title-icon">{icone}</span>'
+            f'<span class="oh-title-text">{texto}</span>'
+            f'<span class="oh-title-line"></span></div>')
 # ══════════════════ VELOCÍMETRO (agulha estilo velocímetro de carro) ══════════════════
 def velocimetro_html(cents, nota):
     cents_c = max(-50.0, min(50.0, float(cents)))
@@ -673,7 +676,7 @@ def gerar_escala(nota, calibracao):
         trechos.append(sinal * env)
         trechos.append(silencio)
     return (sr, np.concatenate(trechos).astype(np.float32))
-# ══════════════════ CSS / TEMA (glassmorphism premium) ══════════════════
+# ══════════════════ CSS / TEMA (glassmorphism premium + abas e títulos) ══════════════════
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
@@ -714,24 +717,65 @@ st.markdown("""
     }
     label { color: #d9d9d9 !important; font-weight: 600; }
 
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    /* ── Abas premium estilo pill ── */
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     .stTabs [data-baseweb="tab"] {
         background: rgba(255,255,255,0.04);
         backdrop-filter: blur(10px);
         border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 14px 14px 0 0;
+        border-radius: 999px;
         color: #d9d9d9;
-        padding: 0.6rem 1.1rem;
+        padding: 0.55rem 1.2rem;
         font-weight: 600;
-        transition: all 0.2s ease;
+        transition: all 0.25s ease;
     }
-    .stTabs [data-baseweb="tab"]:hover { background: rgba(255,255,255,0.08); }
+    .stTabs [data-baseweb="tab"]:hover {
+        background: rgba(255,255,255,0.09);
+        transform: translateY(-1px);
+    }
     .stTabs [aria-selected="true"] {
         background: linear-gradient(135deg, #f97316, #ea580c);
         color: #fff !important;
-        box-shadow: 0 4px 18px rgba(249,115,22,0.35);
+        box-shadow: 0 4px 20px rgba(249,115,22,0.4);
     }
 
+    /* ── Títulos de seção premium ── */
+    .oh-section-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 18px 0 12px;
+    }
+    .oh-title-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, rgba(249,115,22,0.28), rgba(249,115,22,0.08));
+        border: 1px solid rgba(249,115,22,0.35);
+        box-shadow: 0 0 14px rgba(249,115,22,0.25);
+        animation: ohPulse 2.5s infinite;
+    }
+    .oh-title-text {
+        font-size: 1.05rem;
+        font-weight: 800;
+        background: linear-gradient(90deg, #f97316, #ffb066, #f97316);
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: ohGradient 4s linear infinite;
+    }
+    .oh-title-line {
+        flex: 1;
+        height: 2px;
+        border-radius: 2px;
+        background: linear-gradient(90deg, rgba(249,115,22,0.6), transparent);
+    }
+
+    /* ── Cards de métrica ── */
     .oh-metric-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -763,23 +807,20 @@ st.markdown("""
         box-shadow: 0 8px 32px rgba(0,0,0,0.35);
         animation: ohFadeIn 0.5s ease;
     }
-    .oh-section-title {
-        font-size: 1.05rem;
-        font-weight: 800;
-        color: #f97316;
-        margin: 18px 0 10px;
-        letter-spacing: -0.01em;
-    }
 
+    /* ── Animações ── */
     @keyframes ohFadeIn {
         from { opacity: 0; transform: translateY(14px); }
         to { opacity: 1; transform: none; }
     }
     @keyframes ohPulse {
         0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0.45); }
-        50% { box-shadow: 0 0 0 14px rgba(249,115,22,0); }
+        50% { box-shadow: 0 0 0 10px rgba(249,115,22,0); }
     }
-    .oh-pulse { animation: ohPulse 2s infinite; }
+    @keyframes ohGradient {
+        0% { background-position: 0% center; }
+        100% { background-position: 200% center; }
+    }
 
     .stDataFrame { background: rgba(255,255,255,0.03); border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); }
     .stAudio { border-radius: 14px; overflow: hidden; }
@@ -817,7 +858,7 @@ if os.path.exists(LOGO_PATH):
     col_logo.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="height:70px;width:auto;border-radius:12px;box-shadow:0 8px 28px rgba(249,115,22,0.3);">', unsafe_allow_html=True)
 else:
     col_logo.markdown("# 🍊 Orange Harmony")
-st.markdown('<div class="oh-section-title" style="font-size:1.15rem;margin-top:4px;">Seu professor de canto com IA — analise sua voz, afine e evolua.</div>', unsafe_allow_html=True)
+st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Seu professor de canto com IA — analise sua voz, afine e evolua.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
 # ══════════════════ INTERFACE ══════════════════
 tab_analise, tab_afinador, tab_historico, tab_composicoes, tab_edicao, tab_producao = st.tabs(
     ["🎵 Análise e Estudo", "🎸 Afinador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🎛️ Produção"]
