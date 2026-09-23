@@ -7,6 +7,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
+# ── Cifra Hub (busca de cifras na web) ──
+try:
+    import requests
+    from bs4 import BeautifulSoup
+    TEM_CIFRA = True
+except Exception:
+    TEM_CIFRA = False
 # ── WebRTC (tempo real) — protegido: se o pacote faltar, o app não quebra ──
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode
@@ -397,7 +404,6 @@ def gerar_acordes_musicais(audio, sr, tom, bpm, beat_times, estilo="Pop"):
     progressao = gerar_progressao(tom)
     seg_compasso = 60.0 / bpm * 4
     n_compassos = max(1, int(np.ceil(duracao_total / seg_compasso)))
-    # Balada: acorde dura 2 compassos (mais suave); demais: 1 compasso
     duracao_acorde = seg_compasso * (2 if estilo == "Balada" else 1)
     for c in range(n_compassos):
         t0 = c * seg_compasso
@@ -801,6 +807,51 @@ def assistente_resposta(prompt_usuario):
         return "Não consegui responder agora. Tente novamente em instantes."
     except Exception as e:
         return f"Erro ao chamar o assistente: {e}"
+# ══════════════════ CIFRA HUB (busca e extração) ══════════════════
+HEADERS_CIFRA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+def buscar_cifras(termo):
+    """Busca músicas no Cifra Club e retorna lista de (titulo, url)."""
+    try:
+        url = "https://www.cifraclub.com.br/busca/?q=" + requests.utils.quote(termo)
+        resp = requests.get(url, headers=HEADERS_CIFRA, timeout=15)
+        if resp.status_code != 200:
+            return []
+        soup = BeautifulSoup(resp.text, "html.parser")
+        resultados = []
+        for link in soup.select("a[href*='/cifra/']")[:15]:
+            titulo = link.get_text(strip=True)
+            href = link.get("href", "")
+            if titulo and href.startswith("/"):
+                resultados.append((titulo, "https://www.cifraclub.com.br" + href))
+        vistos, unicos = set(), []
+        for t, u in resultados:
+            if u not in vistos:
+                vistos.add(u)
+                unicos.append((t, u))
+        return unicos
+    except Exception:
+        return []
+def extrair_cifra(url):
+    """Extrai título + letra com cifras de uma página do Cifra Club."""
+    try:
+        resp = requests.get(url, headers=HEADERS_CIFRA, timeout=15)
+        if resp.status_code != 200:
+            return None
+        soup = BeautifulSoup(resp.text, "html.parser")
+        h1 = soup.find("h1")
+        titulo = h1.get_text(strip=True) if h1 else "Cifra"
+        cifra_div = (soup.find(class_="cifra_cnt")
+                     or soup.find(id="js-cifra-content")
+                     or soup.find(class_="js-cifra-content"))
+        if cifra_div:
+            for tag in cifra_div.find_all(["script", "style"]):
+                tag.decompose()
+            conteudo = cifra_div.get_text("\n", strip=False)
+            linhas = [l.rstrip() for l in conteudo.splitlines()]
+            return titulo, "\n".join(linhas)
+        return titulo, "Não foi possível extrair a cifra desta página."
+    except Exception:
+        return None
         # ══════════════════ CSS / TEMA (glassmorphism premium + Poppins/Inter) ══════════════════
 st.markdown("""
 <style>
@@ -931,33 +982,6 @@ st.markdown("""
         border: 1px solid rgba(34,197,94,0.3); border-radius: 12px; backdrop-filter: blur(8px);
     }
     [data-testid="stWarning"], [data-testid="stError"], [data-testid="stInfo"] { border-radius: 12px; backdrop-filter: blur(8px); }
-
-    /* ── Laranjinha flutuante (assistente virtual) ── */
-    [data-testid="stPopover"] > button {
-        position: fixed !important;
-        bottom: 24px !important;
-        right: 24px !important;
-        z-index: 9999 !important;
-        width: 78px !important;
-        height: 78px !important;
-        border-radius: 50% !important;
-        background: linear-gradient(135deg, #f97316, #ea580c) !important;
-        border: 2px solid rgba(255,255,255,0.3) !important;
-        font-size: 2.4rem !important;
-        line-height: 1 !important;
-        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
-        animation: ohPulse 2.5s infinite;
-    }
-    [data-testid="stPopover"] > button:hover {
-        transform: scale(1.08);
-        box-shadow: 0 12px 42px rgba(249,115,22,0.75) !important;
-    }
-    [data-testid="stPopoverBody"] {
-        background: #161616;
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 16px;
-        box-shadow: 0 16px 50px rgba(0,0,0,0.6);
-    }
 </style>
 """, unsafe_allow_html=True)
 # ══════════════════ LOGO ══════════════════
@@ -971,8 +995,8 @@ else:
     col_logo.markdown("# 🍊 Orange Harmony")
 st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Seu professor de canto com IA — analise sua voz, afine e evolua.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
 # ══════════════════ INTERFACE ══════════════════
-tab_analise, tab_afinador, tab_historico, tab_composicoes, tab_edicao, tab_producao = st.tabs(
-    ["🎵 Análise e Estudo", "🎸 Afinador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🎛️ Produção"]
+tab_analise, tab_afinador, tab_historico, tab_composicoes, tab_cifra, tab_edicao, tab_producao = st.tabs(
+    ["🎵 Análise e Estudo", "🎸 Afinador", "📊 Histórico", "🎼 Composições", "🎼 Cifra Hub", "✨ Edição Vocal (IA)", "🎛️ Produção"]
 )
 # ── ABA ANÁLISE E ESTUDO ──
 with tab_analise:
@@ -1194,6 +1218,36 @@ with tab_composicoes:
     if letra_atual.strip():
         st.markdown(titulo_secao("👁️", "Visualização da letra"), unsafe_allow_html=True)
         st.markdown(renderizar_composicao_html(letra_atual), unsafe_allow_html=True)
+# ── ABA CIFRA HUB ──
+with tab_cifra:
+    st.markdown(titulo_secao("🎼", "Cifra Hub — pesquise uma música e veja a cifra com a letra original."), unsafe_allow_html=True)
+    if not TEM_CIFRA:
+        st.warning("O módulo de busca de cifras não está disponível (faltam 'requests' ou 'beautifulsoup4' no requirements.txt).")
+    else:
+        busca = st.text_input("🔍 Pesquisar música", placeholder="Ex: Evidências Chitãozinho e Xororó")
+        if st.button("🔎 Buscar", type="primary"):
+            if not busca.strip():
+                st.warning("Digite o nome de uma música.")
+            else:
+                with st.spinner("Buscando no Cifra Club..."):
+                    resultados = buscar_cifras(busca)
+                if not resultados:
+                    st.error("Nenhum resultado encontrado. Tente outro nome ou verifique a conexão.")
+                else:
+                    st.session_state["cifra_resultados"] = resultados
+                    st.session_state["cifra_opcoes"] = {t: u for t, u in resultados}
+        if st.session_state.get("cifra_resultados"):
+            opcoes = st.session_state["cifra_opcoes"]
+            escolha = st.selectbox("Resultados encontrados", list(opcoes.keys()))
+            if st.button("📄 Ver cifra"):
+                with st.spinner("Carregando cifra..."):
+                    dados = extrair_cifra(opcoes[escolha])
+                if dados:
+                    titulo, conteudo = dados
+                    st.markdown(titulo_secao("🎸", f"Cifra: {titulo}"), unsafe_allow_html=True)
+                    st.markdown(renderizar_composicao_html(conteudo), unsafe_allow_html=True)
+                else:
+                    st.error("Não foi possível carregar a cifra desta música.")
 # ── ABA EDIÇÃO VOCAL (IA) ──
 with tab_edicao:
     st.markdown(titulo_secao("✨", "Peça para a IA ajustar sua voz. Ex: *'alinha minha voz no tom'*, *'limpa o ruído e deixa mais presente'*."), unsafe_allow_html=True)
@@ -1289,12 +1343,55 @@ with tab_producao:
         )
         st.info("💡 A separação de stems (voz/violão separados) exige GPU e roda no Colab — o link do notebook fica no README.")
 # ══════════════════ ASSISTENTE VIRTUAL (laranjinha flutuante) ══════════════════
+if os.path.exists(LOGO_PATH):
+    with open(LOGO_PATH, "rb") as f:
+        logo_b64 = base64.b64encode(f.read()).decode()
+    st.markdown(f"""
+    <style>
+    @keyframes ohBounce {{
+        0%, 100% {{ transform: translateY(0); }}
+        50% {{ transform: translateY(-12px); }}
+    }}
+    [data-testid="stPopover"] > button {{
+        background-image: url("data:image/png;base64,{logo_b64}") !important;
+        background-size: cover !important;
+        background-position: center !important;
+        background-color: transparent !important;
+        border: none !important;
+        outline: none !important;
+        padding: 0 !important;
+        width: 110px !important;
+        height: 110px !important;
+        border-radius: 50% !important;
+        position: fixed !important;
+        bottom: 24px !important;
+        left: 24px !important;
+        right: auto !important;
+        z-index: 9999 !important;
+        font-size: 0 !important;
+        color: transparent !important;
+        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
+        animation: ohBounce 2s ease-in-out infinite !important;
+    }}
+    [data-testid="stPopover"] > button:hover {{
+        animation-play-state: paused !important;
+        transform: scale(1.08);
+    }}
+    [data-testid="stPopoverBody"] {{
+        background: #161616;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        box-shadow: 0 16px 50px rgba(0,0,0,0.6);
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
 with st.popover("🍊", use_container_width=False):
-    if os.path.exists(LOGO_PATH):
-        with open(LOGO_PATH, "rb") as f:
-            logo_b64 = base64.b64encode(f.read()).decode()
-        st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="height:46px;border-radius:10px;margin-bottom:6px;">', unsafe_allow_html=True)
-    st.markdown("**Laranjinha — Assistente do Orange Harmony**")
+    col_t, col_l = st.columns([3, 1])
+    col_t.markdown("**Laranjinha — Assistente do Orange Harmony**")
+    if col_l.button("🗑️", key="limpar_chat", help="Limpar conversa"):
+        st.session_state["chat_hist"] = []
+        st.rerun()
     st.caption("Dicas de canto, geração de letra, afinação, tom e exercícios.")
     if "chat_hist" not in st.session_state:
         st.session_state["chat_hist"] = []
