@@ -358,6 +358,22 @@ def audio_para_bytes(audio, sr):
     buf = io.BytesIO()
     sf.write(buf, audio, sr, format="WAV")
     return buf.getvalue()
+# ══════════════════ COMPONENTES VISUAIS (glassmorphism) ══════════════════
+def card_html(conteudo, classe="oh-card"):
+    return f'<div class="{classe}">{conteudo}</div>'
+def metricas_html(lista):
+    """lista = [(rotulo, valor, sub)] — renderiza cards de métrica em grade."""
+    cards = ""
+    for rotulo, valor, sub in lista:
+        cards += f'''
+        <div class="oh-metric">
+            <div class="oh-metric-label">{rotulo}</div>
+            <div class="oh-metric-value">{valor}</div>
+            <div class="oh-metric-sub">{sub}</div>
+        </div>'''
+    return f'<div class="oh-metric-grid">{cards}</div>'
+def titulo_secao(icone, texto):
+    return f'<div class="oh-section-title">{icone} {texto}</div>'
 # ══════════════════ VELOCÍMETRO (agulha estilo velocímetro de carro) ══════════════════
 def velocimetro_html(cents, nota):
     cents_c = max(-50.0, min(50.0, float(cents)))
@@ -373,7 +389,7 @@ def velocimetro_html(cents, nota):
         y2 = 110 - 88 * np.cos(rad)
         marcas += f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="#666" stroke-width="2"/>'
     return f'''<div style="display:flex;justify-content:center;">
-<svg viewBox="0 0 220 130" width="340" style="background:#161616;border-radius:16px;border:1px solid #333;">
+<svg viewBox="0 0 220 130" width="340" style="background:rgba(255,255,255,0.03);backdrop-filter:blur(10px);border-radius:16px;border:1px solid rgba(255,255,255,0.08);box-shadow:0 8px 32px rgba(0,0,0,0.35);">
   <defs>
     <linearGradient id="gg" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="#ef4444"/>
@@ -526,8 +542,8 @@ def renderizar_composicao_html(letra):
             linhas.append('<div style="height:10px;"></div>')
         else:
             linhas.append(f'<div style="color:#ffffff;">{linha}</div>')
-    return (f'<div style="background:#000000;color:#ffffff;padding:20px;border-radius:16px;'
-            f'font-family:monospace;line-height:1.7;border:1px solid #333333;">{"".join(linhas)}</div>')
+    return (f'<div style="background:rgba(255,255,255,0.03);backdrop-filter:blur(10px);color:#ffffff;padding:20px;border-radius:16px;'
+            f'font-family:monospace;line-height:1.7;border:1px solid rgba(255,255,255,0.08);box-shadow:0 8px 32px rgba(0,0,0,0.35);">{"".join(linhas)}</div>')
 # ══════════════════ AFINADOR ══════════════════
 AFINACOES = {
     "Padrão (EADGBE)": ["E2", "A2", "D3", "G3", "B3", "E4"],
@@ -572,7 +588,7 @@ def extrair_pitch_rapido(audio, sr):
 def barra_cents_html(cents):
     pos = max(0.0, min(100.0, (cents + 50) / 100 * 100))
     cor = "#22c55e" if abs(cents) <= 10 else ("#eab308" if abs(cents) <= 25 else "#ef4444")
-    return (f'<div style="background:#222;border-radius:10px;height:26px;position:relative;border:1px solid #333;margin-top:6px;">'
+    return (f'<div style="background:rgba(255,255,255,0.04);border-radius:10px;height:26px;position:relative;border:1px solid rgba(255,255,255,0.1);margin-top:6px;">'
             f'<div style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:#666;"></div>'
             f'<div style="position:absolute;left:{pos}%;top:0;bottom:0;width:6px;background:{cor};border-radius:3px;transform:translateX(-50%);"></div>'
             f'<div style="position:absolute;left:0;top:0;bottom:0;width:50%;border-right:1px solid #444;"></div></div>')
@@ -659,20 +675,148 @@ def gerar_escala(nota, calibracao):
         trechos.append(sinal * env)
         trechos.append(silencio)
     return (sr, np.concatenate(trechos).astype(np.float32))
-# ══════════════════ CSS / TEMA ══════════════════
+# ══════════════════ CSS / TEMA (glassmorphism premium) ══════════════════
 st.markdown("""
 <style>
-    .stApp { background-color: #0d0d0d; }
-    h1, h2, h3, h4 { color: #f97316 !important; }
-    .block-container { padding-top: 1.5rem; }
-    .stButton > button { background-color: #f97316; color: #000; border-radius: 12px; border: 1px solid #f97316; font-weight: 600; }
-    .stButton > button:hover { background-color: #ff8c3a; color: #000; }
-    .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] > div { background-color: #222222; color: #f2f2f2; border-radius: 10px; }
-    label { color: #d9d9d9 !important; }
-    .stDataFrame { background-color: #161616; border-radius: 12px; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    .stApp {
+        font-family: 'Inter', sans-serif;
+        background:
+            radial-gradient(1200px 800px at 85% -10%, rgba(249,115,22,0.14), transparent 60%),
+            radial-gradient(1000px 700px at -10% 110%, rgba(249,115,22,0.10), transparent 55%),
+            radial-gradient(800px 600px at 50% 50%, rgba(255,255,255,0.02), transparent 70%),
+            #0a0a0a;
+    }
+    h1, h2, h3, h4 { color: #f97316 !important; font-weight: 800; letter-spacing: -0.02em; }
+    .block-container { padding-top: 1.5rem; max-width: 1200px; }
+
+    /* ── Botões com gradiente e animação ── */
+    .stButton > button {
+        background: linear-gradient(135deg, #f97316, #ea580c);
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        font-weight: 700;
+        box-shadow: 0 4px 18px rgba(249,115,22,0.35);
+        transition: all 0.25s ease;
+    }
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 28px rgba(249,115,22,0.5);
+    }
+    .stButton > button:active { transform: translateY(0); }
+
+    /* ── Inputs com vidro ── */
+    .stTextInput input, .stTextArea textarea,
+    .stSelectbox div[data-baseweb="select"] > div,
+    .stNumberInput input {
+        background: rgba(255,255,255,0.05);
+        color: #f2f2f2;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 12px;
+        backdrop-filter: blur(8px);
+    }
+    label { color: #d9d9d9 !important; font-weight: 600; }
+
+    /* ── Abas com vidro ── */
     .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-    .stTabs [data-baseweb="tab"] { background-color: #161616; border-radius: 12px 12px 0 0; color: #d9d9d9; padding: 0.5rem 1rem; }
-    .stTabs [aria-selected="true"] { background-color: #f97316; color: #000 !important; font-weight: 600; }
+    .stTabs [data-baseweb="tab"] {
+        background: rgba(255,255,255,0.04);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px 14px 0 0;
+        color: #d9d9d9;
+        padding: 0.6rem 1.1rem;
+        font-weight: 600;
+        transition: all 0.2s ease;
+    }
+    .stTabs [data-baseweb="tab"]:hover { background: rgba(255,255,255,0.08); }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #f97316, #ea580c);
+        color: #fff !important;
+        box-shadow: 0 4px 18px rgba(249,115,22,0.35);
+    }
+
+    /* ── Cards de métrica (grade) ── */
+    .oh-metric-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 14px;
+        margin: 16px 0;
+        animation: ohFadeIn 0.5s ease;
+    }
+    .oh-metric {
+        background: linear-gradient(150deg, rgba(249,115,22,0.14), rgba(255,255,255,0.03));
+        border: 1px solid rgba(249,115,22,0.22);
+        border-radius: 16px;
+        padding: 18px 14px;
+        text-align: center;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .oh-metric:hover { transform: translateY(-4px); box-shadow: 0 14px 34px rgba(249,115,22,0.25); }
+    .oh-metric-label { font-size: 0.75rem; color: #f97316; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+    .oh-metric-value { font-size: 1.6rem; font-weight: 800; color: #fff; margin: 6px 0 2px; }
+    .oh-metric-sub { font-size: 0.78rem; color: #aaa; }
+
+    /* ── Card genérico ── */
+    .oh-card {
+        background: rgba(255,255,255,0.04);
+        backdrop-filter: blur(14px);
+        border: 1px solid rgba(255,255,255,0.09);
+        border-radius: 18px;
+        padding: 20px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+        animation: ohFadeIn 0.5s ease;
+    }
+    .oh-section-title {
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: #f97316;
+        margin: 18px 0 10px;
+        letter-spacing: -0.01em;
+    }
+
+    /* ── Animações ── */
+    @keyframes ohFadeIn {
+        from { opacity: 0; transform: translateY(14px); }
+        to { opacity: 1; transform: none; }
+    }
+    @keyframes ohPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0.45); }
+        50% { box-shadow: 0 0 0 14px rgba(249,115,22,0); }
+    }
+    .oh-pulse { animation: ohPulse 2s infinite; }
+
+    /* ── DataFrames e áudio ── */
+    .stDataFrame { background: rgba(255,255,255,0.03); border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); }
+    .stAudio { border-radius: 14px; overflow: hidden; }
+
+    /* ── File uploader e audio input ── */
+    [data-testid="stFileUploader"], [data-testid="stAudioInput"] {
+        background: rgba(255,255,255,0.04);
+        border: 1px dashed rgba(249,115,22,0.4);
+        border-radius: 14px;
+        padding: 8px;
+        backdrop-filter: blur(8px);
+    }
+    [data-testid="stFileUploader"]:hover, [data-testid="stAudioInput"]:hover {
+        border-color: #f97316;
+    }
+
+    /* ── Spinner e sucesso ── */
+    .stSpinner > div { border-top-color: #f97316 !important; }
+    [data-testid="stSuccess"] {
+        background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(255,255,255,0.03));
+        border: 1px solid rgba(34,197,94,0.3);
+        border-radius: 12px;
+        backdrop-filter: blur(8px);
+    }
+    [data-testid="stWarning"], [data-testid="stError"], [data-testid="stInfo"] {
+        border-radius: 12px;
+        backdrop-filter: blur(8px);
+    }
 </style>
 """, unsafe_allow_html=True)
 # ══════════════════ LOGO ══════════════════
@@ -681,17 +825,17 @@ col_logo, _ = st.columns([1, 3])
 if os.path.exists(LOGO_PATH):
     with open(LOGO_PATH, "rb") as f:
         logo_b64 = base64.b64encode(f.read()).decode()
-    col_logo.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="height:70px;width:auto;border-radius:12px;">', unsafe_allow_html=True)
+    col_logo.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="height:70px;width:auto;border-radius:12px;box-shadow:0 8px 28px rgba(249,115,22,0.3);">', unsafe_allow_html=True)
 else:
     col_logo.markdown("# 🍊 Orange Harmony")
-st.markdown("### Seu professor de canto com IA — analise sua voz, afine e evolua.")
+st.markdown('<div class="oh-section-title" style="font-size:1.15rem;margin-top:4px;">Seu professor de canto com IA — analise sua voz, afine e evolua.</div>', unsafe_allow_html=True)
 # ══════════════════ INTERFACE ══════════════════
 tab_analise, tab_afinador, tab_historico, tab_composicoes, tab_edicao, tab_producao = st.tabs(
     ["🎵 Análise e Estudo", "🎸 Afinador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🎛️ Produção"]
 )
 # ── ABA ANÁLISE E ESTUDO ──
 with tab_analise:
-    st.markdown("**1. Referência de tom** — ouça a nota ou a escala antes de cantar.")
+    st.markdown(titulo_secao("🎯", "1. Referência de tom — ouça a nota ou a escala antes de cantar."), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     nota_ref = c1.selectbox("Nota de referência", NOTAS_REFERENCIA, index=NOTAS_REFERENCIA.index("C4"))
     calibracao = c2.radio("Calibração A4 (Hz)", [440, 442], horizontal=True)
@@ -703,7 +847,7 @@ with tab_analise:
         sr, sinal = gerar_escala(nota_ref, calibracao)
         st.audio(sinal, sample_rate=sr)
     st.markdown("---")
-    st.markdown("**2. Análise da voz** — envie sua gravação e veja o diagnóstico completo.")
+    st.markdown(titulo_secao("🎤", "2. Análise da voz — envie sua gravação e veja o diagnóstico completo."), unsafe_allow_html=True)
     audio_in = st.file_uploader("📂 Subir arquivo de áudio", type=["wav", "mp3", "m4a", "ogg", "flac"])
     st.markdown("**— ou —**")
     audio_gravado = st.audio_input("🎤 Gravar voz agora")
@@ -742,223 +886,24 @@ with tab_analise:
                 registrar_analise_firestore(resultado, modo)
             except Exception as e:
                 st.warning(f"Não foi possível salvar no Firestore: {e}")
-            st.markdown(f"**Nota predominante:** {resultado['nota_predominante']}")
-            st.markdown(f"**Desvio médio absoluto:** {resultado['desvio_medio_cents']:.1f} cents")
-            st.markdown(f"**Tendência:** {resultado['tendencia']} ({resultado['desvio_sinal_cents']:+.1f} cents)")
-            st.markdown(f"**Notas afinadas (±50 cents):** {resultado['pct_afinado']:.1f}%")
-            st.markdown(f"**Frases sustentadas:** {resultado['num_frases']} (média {resultado['sustentacao_media']:.2f} s)")
-            st.markdown(f"**Pausas respiratórias:** {resultado['num_pausas']} (média {resultado['pausa_media']:.2f} s)")
+            st.markdown(titulo_secao("📊", "Diagnóstico da sua voz"), unsafe_allow_html=True)
+            st.markdown(metricas_html([
+                ("Nota predominante", resultado['nota_predominante'], "nota mais cantada"),
+                ("Desvio médio", f"{resultado['desvio_medio_cents']:.1f} cents", "quanto sai do tom"),
+                ("Tendência", resultado['tendencia'], f"{resultado['desvio_sinal_cents']:+.1f} cents"),
+                ("Afinado (±50c)", f"{resultado['pct_afinado']:.1f}%", "das notas no tom"),
+                ("Frases", str(resultado['num_frases']), f"média {resultado['sustentacao_media']:.2f}s"),
+                ("Pausas", str(resultado['num_pausas']), f"média {resultado['pausa_media']:.2f}s"),
+            ]), unsafe_allow_html=True)
             mascara_voz = f0_limpo > 0
             fig, ax = plt.subplots(figsize=(10, 4))
             ax.plot(tempos[mascara_voz], f0_limpo[mascara_voz], linewidth=1.5, color="#f97316")
+            ax.set_facecolor("#0d0d0d")
+            fig.patch.set_facecolor("#0d0d0d")
+            ax.tick_params(colors="#ccc")
+            ax.xaxis.label.set_color("#ccc")
+            ax.yaxis.label.set_color("#ccc")
+            ax.title.set_color("#f97316")
             ax.set_xlabel("Tempo (s)")
             ax.set_ylabel("Frequência fundamental (Hz)")
-            ax.set_title("Curva de Pitch")
-            ax.grid(True, alpha=0.3)
-            fig.tight_layout()
-            st.pyplot(fig)
-            st.markdown("**Devolutiva do Professor:**")
-            st.markdown(devolutiva)
-            st.markdown("---")
-            st.markdown("**3. Vibrato** — detecte a oscilação da sua nota sustentada.")
-            vibratos = detectar_vibrato_v4(f0_limpo, tempos, calibracao_a4=calibracao)
-            if vibratos:
-                linhas = []
-                for v in vibratos:
-                    linhas.append({
-                        "Nota": v["nota"], "Taxa (Hz)": round(v["taxa_hz"], 2),
-                        "Extensão (cents)": round(v["extensao_cents"], 1),
-                        "Deslize (cents)": round(v["deslize_cents"], 1),
-                        "Periodicidade": round(v["periodicidade"], 3),
-                        "Classificação": classificar_vibrato_v4(v["taxa_hz"], v["extensao_cents"], v["deslize_cents"], v["periodicidade"]),
-                        "Dur. (s)": v["duracao_s"],
-                    })
-                st.dataframe(linhas, use_container_width=True)
-            else:
-                st.info("Nenhuma nota sustentada (>= 0.8s). Sustente uma nota firme por 3-4s.")
-# ── ABA AFINADOR ──
-with tab_afinador:
-    st.markdown("**Afinador — violão ou voz.** Escolha a afinação, toque/cante uma nota sustentada e veja o resultado.")
-    c1, c2 = st.columns(2)
-    afincao = c1.selectbox("Afinação", list(AFINACOES.keys()))
-    calib_afinador = c2.radio("Calibração A4", [440, 442], horizontal=True)
-    st.markdown(DESCRICOES_AFINACOES.get(afincao, ""))
-
-    if TEM_WEBRTC:
-        st.markdown("**Modo tempo real — agulha contínua:**")
-        estado_afinador["calibracao"] = calib_afinador
-        webrtc_ctx = webrtc_streamer(
-            key="afinador_tempo_real",
-            mode=WebRtcMode.SENDONLY,
-            audio_frame_callback=_processar_frame_audio,
-            frontend_rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-            media_stream_constraints={"video": False, "audio": True},
-        )
-        if webrtc_ctx.state.playing:
-            placeholder = st.empty()
-            while webrtc_ctx.state.playing:
-                if estado_afinador["ativo"]:
-                    placeholder.markdown(velocimetro_html(estado_afinador["cents"], estado_afinador["nota"]), unsafe_allow_html=True)
-                time.sleep(0.1)
-    else:
-        st.warning(f"Modo tempo real indisponível. Detalhe: {ERRO_WEBRTC}")
-
-    st.markdown("**— ou — grave/subir uma nota:**")
-    audio_afinador = st.file_uploader("📂 Subir nota sustentada", type=["wav", "mp3", "m4a", "ogg", "flac"], key="afinador")
-    st.markdown("**— ou —**")
-    audio_afinador_grav = st.audio_input("🎤 Gravar nota agora", key="afinador_rec")
-    fonte_afinador = audio_afinador if audio_afinador is not None else audio_afinador_grav
-    if fonte_afinador is not None:
-        audio, sr = carregar_audio(fonte_afinador)
-        if audio is None:
-            st.error("Não foi possível ler o áudio. Tente outro formato (WAV ou MP3).")
-        else:
-            nota, cents, status = analisar_afinador(audio, sr, calib_afinador)
-            st.success(f"Nota alvo: **{nota}** — {cents:+.1f} cents — {status}")
-            st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
-# ── ABA HISTÓRICO ──
-with tab_historico:
-    st.markdown("**Evolução da sua performance — salva no Firebase, nunca se perde.**")
-    if st.button("Atualizar Histórico"):
-        analises = carregar_historico_firestore()
-        if not analises:
-            st.info("Nenhuma análise salva ainda.")
-        else:
-            linhas = [{
-                "Data": a.get("data", "")[5:16], "Nota": a.get("nota_predominante", ""),
-                "Desvio (cents)": a.get("desvio_medio_cents", 0), "Tendência": a.get("tendencia", ""),
-                "% Afinado": a.get("pct_afinado", 0), "Frases": a.get("num_frases", 0),
-                "Sustentação (s)": a.get("sustentacao_media", 0), "Tom ref.": a.get("tom_ref", "—") or "—",
-            } for a in analises]
-            st.dataframe(linhas, use_container_width=True)
-            if len(analises) >= 2:
-                rev = list(reversed(analises))
-                datas = [a.get("data", "")[5:16] for a in rev]
-                desvios = [a.get("desvio_medio_cents", 0) for a in rev]
-                pcts = [a.get("pct_afinado", 0) for a in rev]
-                fig, ax1 = plt.subplots(figsize=(10, 4))
-                ax1.plot(datas, desvios, marker="o", color="#f97316", label="Desvio médio (cents)")
-                ax1.set_ylabel("Desvio médio (cents)")
-                ax1.tick_params(axis="x", rotation=45)
-                ax2 = ax1.twinx()
-                ax2.plot(datas, pcts, marker="s", color="#22c55e", label="% afinado")
-                ax2.set_ylabel("% afinado")
-                ax1.set_title("Evolução da performance")
-                fig.tight_layout()
-                st.pyplot(fig)
-# ── ABA COMPOSIÇÕES ──
-with tab_composicoes:
-    st.markdown("**Crie e salve suas composições — com cifras, seções e versionamento.**")
-    c1, c2 = st.columns(2)
-    comp_titulo = c1.text_input("Título da música", placeholder="Ex: Minha canção")
-    comp_tom = c2.text_input("Tom (opcional)", placeholder="Ex: Am, C, G")
-    comp_letra = st.text_area("Letra com cifras e seções", height=280,
-        placeholder="# Verso 1\n[Am] [F] [C] [G]\nSua letra aqui...\n\n# Refrão\n[F] [G] [Am]\nRefrão aqui...")
-    c3, c4 = st.columns(2)
-    if c3.button("👁️ Ver prévia"):
-        if comp_letra.strip():
-            st.markdown(renderizar_composicao_html(comp_letra), unsafe_allow_html=True)
-        else:
-            st.info("Digite a letra para ver a prévia.")
-    if c4.button("💾 Salvar composição", type="primary"):
-        st.success(salvar_composicao_firestore(comp_titulo, comp_tom, comp_letra))
-    st.markdown("---")
-    st.markdown("**Composições salvas**")
-    comps = listar_composicoes()
-    if comps:
-        opcoes = {f"{t} — v{v}": doc_id for t, v, doc_id in comps}
-        escolha = st.selectbox("Selecione para carregar", list(opcoes.keys()))
-        if st.button("📂 Carregar composição"):
-            titulo, tom, letra = carregar_composicao(opcoes[escolha])
-            st.session_state["comp_titulo"] = titulo
-            st.session_state["comp_tom"] = tom
-            st.session_state["comp_letra"] = letra
-            st.rerun()
-    else:
-        st.info("Nenhuma composição salva ainda.")
-# ── ABA EDIÇÃO VOCAL (IA) ──
-with tab_edicao:
-    st.markdown("**Peça para a IA ajustar sua voz.** Ex: *'alinha minha voz no tom'*, *'limpa o ruído e deixa mais presente'*.")
-    edicao_in = st.file_uploader("Voz para editar (use o áudio isolado)", type=["wav", "mp3", "m4a", "ogg", "flac"], key="edicao")
-    comando = st.text_input("Comando para a IA", placeholder="Ex: alinha minha voz no tom e limpa o ruído")
-    if st.button("✨ Aplicar edição com IA", type="primary"):
-        if edicao_in is None:
-            st.warning("Envie um áudio para editar.")
-        else:
-            audio, sr = carregar_audio(edicao_in)
-            if audio is None:
-                st.error("Não foi possível ler o áudio. Tente outro formato (WAV ou MP3).")
-                st.stop()
-            cmd = (comando or "").lower()
-            acoes = []
-            try:
-                import noisereduce as nr
-                if any(p in cmd for p in ["ruído", "ruido", "limpa", "limpe", "barulho"]):
-                    audio = nr.reduce_noise(y=audio, sr=sr, stationary=True)
-                    acoes.append("redução de ruído")
-            except Exception:
-                pass
-            if any(p in cmd for p in ["normaliz", "volume", "alto", "baixo"]):
-                audio = audio / (np.max(np.abs(audio)) + 1e-9)
-                acoes.append("normalização de volume")
-            if any(p in cmd for p in ["tom", "afin", "pitch", "alinha"]):
-                audio = librosa.effects.pitch_shift(audio, sr=sr, n_steps=0.5)
-                acoes.append("ajuste sutil de tom")
-            if any(p in cmd for p in ["presente", "eq", "clareza", "brilho"]):
-                audio = librosa.effects.preemphasis(audio)
-                acoes.append("EQ de presença")
-            if not acoes:
-                audio = audio / (np.max(np.abs(audio)) + 1e-9)
-                acoes.append("normalização de volume")
-            import soundfile as sf
-            out = tempfile.mktemp(suffix=".wav")
-            sf.write(out, audio, sr)
-            st.audio(out, sample_rate=sr)
-            st.success("Edição aplicada: " + ", ".join(acoes) + ".")
-# ── ABA PRODUÇÃO ──
-with tab_producao:
-    st.markdown("**Estúdio de Produção** — grave sua música (voz + violão) e gere baixo e bateria no tom e no BPM detectados da sua gravação.")
-    st.markdown("**1. Captura** — suba o arquivo ou grave direto.")
-    prod_in = st.file_uploader("📂 Subir gravação (voz + violão)", type=["wav", "mp3", "m4a", "ogg", "flac"], key="producao")
-    st.markdown("**— ou —**")
-    prod_grav = st.audio_input("🎤 Gravar música agora")
-    st.markdown("**2. Geração**")
-    c1, c2 = st.columns(2)
-    com_baixo = c1.checkbox("Gerar linha de baixo", value=True)
-    com_bateria = c2.checkbox("Gerar bateria", value=True)
-    if st.button("🎛️ Gerar produção", type="primary"):
-        fonte_prod = prod_in if prod_in is not None else prod_grav
-        if fonte_prod is None:
-            st.warning("Suba um áudio ou grave sua música primeiro.")
-            st.stop()
-        audio, sr_audio = carregar_audio(fonte_prod)
-        if audio is None:
-            st.error("Não foi possível ler o áudio. Tente outro formato (WAV ou MP3).")
-            st.stop()
-        with st.spinner("Analisando BPM, tom e ritmo..."):
-            bpm, beat_times = detectar_bpm_e_beats(audio, sr_audio)
-            tom = detectar_tom(audio, sr_audio)
-        st.success(f"Detectado: **{bpm:.1f} BPM** · Tom aproximado: **{tom}**")
-        baixo = None
-        bateria = None
-        try:
-            if com_baixo:
-                with st.spinner("Gerando linha de baixo..."):
-                    baixo = gerar_baixo_melodico(audio, sr_audio, tom, bpm, beat_times)
-            if com_bateria:
-                with st.spinner("Gerando bateria..."):
-                    bateria = gerar_bateria_ritmica(audio, sr_audio, bpm, beat_times)
-        except Exception as e:
-            st.error(f"Erro ao gerar produção: {e}")
-            st.stop()
-        with st.spinner("Mixando..."):
-            mix = mixar(audio, baixo, bateria)
-        st.markdown("**Resultado mixado (original + baixo + bateria):**")
-        st.audio(mix, sample_rate=sr_audio)
-        st.download_button(
-            "⬇️ Baixar produção (WAV)",
-            data=audio_para_bytes(mix, sr_audio),
-            file_name="producao_orange_harmony.wav",
-            mime="audio/wav",
-        )
-        st.info("💡 A separação de stems (voz/violão separados) exige GPU e roda no Colab — o link do notebook fica no README.")
+            ax.set_title("Curva de Pitch
