@@ -680,6 +680,7 @@ def gerar_escala(nota, calibracao):
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&display=swap');
     .stApp {
         font-family: 'Inter', sans-serif;
         background:
@@ -688,7 +689,12 @@ st.markdown("""
             radial-gradient(800px 600px at 50% 50%, rgba(255,255,255,0.02), transparent 70%),
             #0a0a0a;
     }
-    h1, h2, h3, h4 { color: #f97316 !important; font-weight: 800; letter-spacing: -0.02em; }
+    h1, h2, h3, h4 {
+    font-family: 'Poppins', sans-serif;
+    color: #f97316 !important;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
     .block-container { padding-top: 1.5rem; max-width: 1200px; }
 
     .stButton > button {
@@ -759,9 +765,10 @@ st.markdown("""
         animation: ohPulse 2.5s infinite;
     }
     .oh-title-text {
-        font-size: 1.05rem;
-        font-weight: 800;
-        background: linear-gradient(90deg, #f97316, #ffb066, #f97316);
+    font-family: 'Poppins', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    background: linear-gradient(90deg, #f97316, #ffb066, #f97316);
         background-size: 200% auto;
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
