@@ -18,6 +18,8 @@ except Exception as e:
     ERRO_WEBRTC = str(e)
 # ── Configuração da página (deve ser o primeiro comando do Streamlit) ──
 st.set_page_config(page_title="Orange Harmony", page_icon="🍊", layout="wide")
+# ── Fontes: Poppins (títulos/abas) + Inter (corpo) — via <link>, carrega sempre no Streamlit ──
+st.markdown('<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">', unsafe_allow_html=True)
 # ── Gemini ──
 from google import genai
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -676,11 +678,9 @@ def gerar_escala(nota, calibracao):
         trechos.append(sinal * env)
         trechos.append(silencio)
     return (sr, np.concatenate(trechos).astype(np.float32))
-# ══════════════════ CSS / TEMA (glassmorphism premium + abas e títulos) ══════════════════
+# ══════════════════ CSS / TEMA (glassmorphism premium + Poppins/Inter) ══════════════════
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&display=swap');
     .stApp {
         font-family: 'Inter', sans-serif;
         background:
@@ -690,11 +690,11 @@ st.markdown("""
             #0a0a0a;
     }
     h1, h2, h3, h4 {
-    font-family: 'Poppins', sans-serif;
-    color: #f97316 !important;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-}
+        font-family: 'Poppins', sans-serif;
+        color: #f97316 !important;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+    }
     .block-container { padding-top: 1.5rem; max-width: 1200px; }
 
     .stButton > button {
@@ -723,19 +723,19 @@ st.markdown("""
     }
     label { color: #d9d9d9 !important; font-weight: 600; }
 
-    /* ── Abas premium estilo pill ── */
+    /* ── Abas premium estilo pill (Poppins) ── */
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     .stTabs [data-baseweb="tab"] {
-    font-family: 'Poppins', sans-serif;
-    background: rgba(255,255,255,0.04);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 999px;
-    color: #d9d9d9;
-    padding: 0.55rem 1.2rem;
-    font-weight: 600;
-    transition: all 0.25s ease;
-}
+        font-family: 'Poppins', sans-serif;
+        background: rgba(255,255,255,0.04);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 999px;
+        color: #d9d9d9;
+        padding: 0.55rem 1.2rem;
+        font-weight: 600;
+        transition: all 0.25s ease;
+    }
     .stTabs [data-baseweb="tab"]:hover {
         background: rgba(255,255,255,0.09);
         transform: translateY(-1px);
@@ -746,7 +746,7 @@ st.markdown("""
         box-shadow: 0 4px 20px rgba(249,115,22,0.4);
     }
 
-    /* ── Títulos de seção premium ── */
+    /* ── Títulos de seção premium (Poppins) ── */
     .oh-section-title {
         display: flex;
         align-items: center;
@@ -766,10 +766,10 @@ st.markdown("""
         animation: ohPulse 2.5s infinite;
     }
     .oh-title-text {
-    font-family: 'Poppins', sans-serif;
-    font-size: 1.05rem;
-    font-weight: 700;
-    background: linear-gradient(90deg, #f97316, #ffb066, #f97316);
+        font-family: 'Poppins', sans-serif;
+        font-size: 1.05rem;
+        font-weight: 700;
+        background: linear-gradient(90deg, #f97316, #ffb066, #f97316);
         background-size: 200% auto;
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
