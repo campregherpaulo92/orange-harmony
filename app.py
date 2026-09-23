@@ -189,6 +189,13 @@ ESTILOS_MUSICAIS = {
     "Balada": "Calmo e emotivo — acordes longos e suaves, clima intimista.",
     "Sertanejo": "Violão marcado — acordes abertos e andamento médio.",
     "Funk": "Ritmado — acordes curtos e groove constante.",
+    "MPB": "Melódico e sofisticado — acordes abertos e clima brasileiro.",
+    "Gospel": "Emocional e edificante — acordes longos e clima de adoração.",
+    "Reggae": "Descontraído — batida no contratempo e acordes abertos.",
+    "Blues": "Clima de bar — progressão de blues e swing leve.",
+    "Jazz": "Sofisticado — acordes com tensão (7ª) e andamento médio.",
+    "Forró": "Animado — baião/xote com acordes marcados.",
+    "Eletrônica": "Dançante — acordes curtos e groove constante de club.",
 }
 def detectar_bpm_e_beats(audio, sr):
     try:
@@ -397,7 +404,7 @@ def gerar_acordes_musicais(audio, sr, tom, bpm, beat_times, estilo="Pop"):
     progressao = gerar_progressao(tom)
     seg_compasso = 60.0 / bpm * 4
     n_compassos = max(1, int(np.ceil(duracao_total / seg_compasso)))
-    duracao_acorde = seg_compasso * (2 if estilo == "Balada" else 1)
+    duracao_acorde = seg_compasso * (2 if estilo in ("Balada", "Gospel") else 1)
     for c in range(n_compassos):
         t0 = c * seg_compasso
         if t0 >= duracao_total:
@@ -722,28 +729,31 @@ def afinar_stream(audio, afincao, calibracao):
         status = "🔴 DESAFINADO"
     direcao = "↑ agudo (afrouxe)" if cents > 0 else "↓ grave (aperte)"
     return nota_alvo, f"{cents:+.1f}", f"{nota_alvo} — {cents:+.1f} cents — {direcao} — {status}", barra_cents_html(cents)
-# ══════════════════ FUNÇÕES DE ÁUDIO ══════════════════
+# ══════════════════ FUNÇÕES DE ÁUDIO (aceita mais formatos) ══════════════════
 def carregar_audio(uploaded):
-    """Lê um arquivo enviado (upload ou gravação) e devolve (audio, sr) em 22050 Hz mono."""
+    """Lê um arquivo enviado (upload, gravação ou biblioteca) e devolve (audio, sr) em 22050 Hz mono.
+    Detecta o formato real pelo conteúdo, aceitando WAV, MP3, M4A, AMR, 3GP, AAC, OGG, FLAC, WebM."""
     if uploaded is None:
         return None, None
     dados = uploaded.getvalue()
     if not dados:
         return None, None
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+    nome_orig = getattr(uploaded, "name", "audio.wav") or "audio.wav"
+    ext = os.path.splitext(nome_orig)[1] or ".wav"
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
         tmp.write(dados)
         tmp_path = tmp.name
     try:
-        audio, sr = librosa.load(tmp_path, sr=22050, mono=True)
+        import soundfile as sf
+        audio, sr = sf.read(tmp_path, dtype="float32")
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)
+        if sr != 22050:
+            audio = librosa.resample(audio, orig_sr=sr, target_sr=22050)
+            sr = 22050
     except Exception:
         try:
-            import soundfile as sf
-            audio, sr = sf.read(tmp_path, dtype="float32")
-            if audio.ndim > 1:
-                audio = audio.mean(axis=1)
-            if sr != 22050:
-                audio = librosa.resample(audio, orig_sr=sr, target_sr=22050)
-                sr = 22050
+            audio, sr = librosa.load(tmp_path, sr=22050, mono=True)
         except Exception:
             return None, None
     return audio.astype(np.float32), int(sr)
@@ -808,16 +818,12 @@ def analisar_cover(audio, sr, calibracao=440.0):
     if audio is None or len(audio) < int(sr * 0.5):
         return resultado
     resultado["duracao_s"] = round(len(audio) / sr, 1)
-    # Tom geral da gravação (chroma)
     tom = detectar_tom(audio, sr)
     resultado["tom"] = tom
-    # BPM
     bpm, _ = detectar_bpm_e_beats(audio, sr)
     resultado["bpm"] = bpm
-    # Escala maior do tom detectado
     raiz = NOMES_NOTAS.index(tom)
     escala_pc = set((raiz + i) % 12 for i in ESCALA_MAIOR)
-    # Extrai o pitch da gravação inteira
     tempos, f0 = extrair_pitch(audio, sr)
     f0_limpo = np.where((f0 >= 80) & (f0 <= 1000), f0, 0.0)
     mascara = f0_limpo > 0
@@ -830,16 +836,13 @@ def analisar_cover(audio, sr, calibracao=440.0):
     dentro = np.isin(pc, list(escala_pc))
     pct = float(np.mean(dentro) * 100)
     resultado["pct_na_escala"] = round(pct, 1)
-    # Notas mais presentes
     contagem = {}
     for p in pc:
         contagem[p] = contagem.get(p, 0) + 1
     principais = sorted(contagem.items(), key=lambda x: -x[1])[:6]
     resultado["notas_principais"] = [NOMES_NOTAS[p] for p, _ in principais]
-    # Notas fora da escala
     fora = set(int(p) for p in pc[~dentro])
     resultado["notas_fora"] = [NOMES_NOTAS[p] for p in sorted(fora)]
-    # Veredito
     if pct >= 90:
         resultado["veredito"] = "Excelente — a gravação está casando com o tom"
     elif pct >= 75:
@@ -849,6 +852,20 @@ def analisar_cover(audio, sr, calibracao=440.0):
     else:
         resultado["veredito"] = "Fora do eixo — a gravação não está casando com o tom"
     return resultado
+# ══════════════════ CONVERSOR DE FORMATO ══════════════════
+def converter_audio(audio, sr, formato_destino):
+    """Converte um áudio (numpy) para bytes WAV ou MP3."""
+    if formato_destino == "WAV":
+        return audio_para_bytes(audio, sr), "audio/wav", "convertido.wav"
+    # MP3 — usa lameenc se disponível
+    import lameenc
+    encoder = lameenc.Encoder()
+    encoder.set_bit_rate(192)
+    encoder.set_in_sample_rate(sr)
+    encoder.set_channels(1)
+    pcm = (audio * 32767).astype(np.int16).tobytes()
+    mp3_bytes = encoder.encode(pcm) + encoder.flush()
+    return mp3_bytes, "audio/mpeg", "convertido.mp3"
     # ══════════════════ CSS / TEMA (glassmorphism premium + Poppins/Inter) ══════════════════
 st.markdown("""
 <style>
@@ -992,8 +1009,8 @@ else:
     col_logo.markdown("# 🍊 Orange Harmony")
 st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Seu professor de canto com IA — analise sua voz, afine e evolua.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
 # ══════════════════ INTERFACE ══════════════════
-tab_analise, tab_afinador, tab_historico, tab_composicoes, tab_edicao, tab_producao = st.tabs(
-    ["🎵 Análise e Estudo", "🎸 Afinador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🎛️ Produção"]
+tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao = st.tabs(
+    ["🎵 Análise e Estudo", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção"]
 )
 # ── ABA ANÁLISE E ESTUDO ──
 with tab_analise:
@@ -1010,14 +1027,21 @@ with tab_analise:
         st.audio(sinal, sample_rate=sr)
     st.markdown("---")
     st.markdown(titulo_secao("🎤", "2. Análise da voz — envie sua gravação e veja o diagnóstico completo."), unsafe_allow_html=True)
-    audio_in = st.file_uploader("📂 Subir arquivo de áudio", type=["wav", "mp3", "m4a", "ogg", "flac"])
+    audio_in = st.file_uploader("📂 Subir arquivo de áudio", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"])
     st.markdown("**— ou —**")
     audio_gravado = st.audio_input("🎤 Gravar voz agora")
+    grav_salvas = st.session_state.get("gravacoes", [])
+    opcoes_grav = ["—"] + [g["nome"] for g in grav_salvas]
+    usar_grav = st.selectbox("🎙️ Ou usar uma gravação salva", opcoes_grav, key="usar_grav_analise")
     modo = st.radio("Modo", ["Análise completa", "Afinador", "Análise de Cover"], horizontal=True)
     if st.button("Analisar", type="primary"):
-        fonte = audio_in if audio_in is not None else audio_gravado
+        if usar_grav != "—":
+            idx = [g["nome"] for g in grav_salvas].index(usar_grav)
+            fonte = io.BytesIO(grav_salvas[idx]["bytes"])
+        else:
+            fonte = audio_in if audio_in is not None else audio_gravado
         if fonte is None:
-            st.warning("Envie um áudio ou grave sua voz.")
+            st.warning("Envie um áudio, grave sua voz ou escolha uma gravação salva.")
             st.stop()
         audio, sr_audio = carregar_audio(fonte)
         if audio is None:
@@ -1149,7 +1173,7 @@ with tab_afinador:
     else:
         st.warning(f"Modo tempo real indisponível. Detalhe: {ERRO_WEBRTC}")
     st.markdown(titulo_secao("🎤", "— ou — grave/subir uma nota:"), unsafe_allow_html=True)
-    audio_afinador = st.file_uploader("📂 Subir nota sustentada", type=["wav", "mp3", "m4a", "ogg", "flac"], key="afinador")
+    audio_afinador = st.file_uploader("📂 Subir nota sustentada", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="afinador")
     st.markdown("**— ou —**")
     audio_afinador_grav = st.audio_input("🎤 Gravar nota agora", key="afinador_rec")
     fonte_afinador = audio_afinador if audio_afinador is not None else audio_afinador_grav
@@ -1161,6 +1185,34 @@ with tab_afinador:
             nota, cents, status = analisar_afinador(audio, sr, calib_afinador)
             st.success(f"Nota alvo: **{nota}** — {cents:+.1f} cents — {status}")
             st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
+# ── ABA GRAVADOR ──
+with tab_gravador:
+    st.markdown(titulo_secao("🎙️", "Gravador — grave, salve e gerencie suas gravações dentro do app."), unsafe_allow_html=True)
+    if "gravacoes" not in st.session_state:
+        st.session_state["gravacoes"] = []
+    grav_nome = st.text_input("Nome da gravação", placeholder="Ex: Cover Black do Perdão - 23/09")
+    grav_audio = st.audio_input("🎤 Gravar agora")
+    if st.button("💾 Salvar gravação", type="primary"):
+        if grav_audio is None:
+            st.warning("Grave um áudio primeiro.")
+        elif not grav_nome.strip():
+            st.warning("Dê um nome para a gravação.")
+        else:
+            st.session_state["gravacoes"].append({"nome": grav_nome.strip(), "bytes": grav_audio.getvalue()})
+            st.success(f"✅ '{grav_nome.strip()}' salva na biblioteca.")
+    st.markdown("---")
+    st.markdown(titulo_secao("📚", "Minhas gravações"), unsafe_allow_html=True)
+    if not st.session_state["gravacoes"]:
+        st.info("Nenhuma gravação salva ainda. Grave acima e salve.")
+    else:
+        for i, g in enumerate(st.session_state["gravacoes"]):
+            c1, c2, c3 = st.columns([4, 1, 1])
+            c1.markdown(f"**{g['nome']}**")
+            c2.download_button("⬇️", data=g["bytes"], file_name=f"{g['nome']}.wav", mime="audio/wav", key=f"dl_{i}")
+            if c3.button("🗑️", key=f"delg_{i}"):
+                st.session_state["gravacoes"].pop(i)
+                st.rerun()
+        st.caption("💡 As gravações salvas aparecem na Análise e na Produção (opção 'usar gravação salva').")
 # ── ABA HISTÓRICO ──
 with tab_historico:
     st.markdown(titulo_secao("📊", "Evolução da sua performance — salva no Firebase."), unsafe_allow_html=True)
@@ -1250,7 +1302,7 @@ with tab_composicoes:
 # ── ABA EDIÇÃO VOCAL (IA) ──
 with tab_edicao:
     st.markdown(titulo_secao("✨", "Peça para a IA ajustar sua voz. Ex: *'alinha minha voz no tom'*, *'limpa o ruído e deixa mais presente'*."), unsafe_allow_html=True)
-    edicao_in = st.file_uploader("Voz para editar (use o áudio isolado)", type=["wav", "mp3", "m4a", "ogg", "flac"], key="edicao")
+    edicao_in = st.file_uploader("Voz para editar (use o áudio isolado)", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="edicao")
     comando = st.text_input("Comando para a IA", placeholder="Ex: alinha minha voz no tom e limpa o ruído")
     if st.button("✨ Aplicar edição com IA", type="primary"):
         if edicao_in is None:
@@ -1286,13 +1338,39 @@ with tab_edicao:
             sf.write(out, audio, sr)
             st.audio(out, sample_rate=sr)
             st.success("Edição aplicada: " + ", ".join(acoes) + ".")
+# ── ABA CONVERSOR DE FORMATO ──
+with tab_conversor:
+    st.markdown(titulo_secao("🔄", "Conversor de formato — converta seus áudios entre WAV e MP3."), unsafe_allow_html=True)
+    conv_in = st.file_uploader("📂 Subir áudio para converter", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="conversor")
+    conv_formato = st.radio("Converter para", ["WAV", "MP3"], horizontal=True)
+    if st.button("🔄 Converter", type="primary"):
+        if conv_in is None:
+            st.warning("Envie um áudio para converter.")
+        else:
+            with st.spinner("Convertendo..."):
+                audio, sr = carregar_audio(conv_in)
+                if audio is None:
+                    st.error("Não foi possível ler o áudio. Tente outro formato.")
+                else:
+                    try:
+                        out_bytes, mime, nome = converter_audio(audio, sr, conv_formato)
+                        st.audio(out_bytes, format=mime)
+                        st.download_button("⬇️ Baixar convertido", data=out_bytes, file_name=nome, mime=mime)
+                    except Exception as e:
+                        if conv_formato == "MP3":
+                            st.warning("Conversão para MP3 requer o pacote 'lameenc' no requirements.txt. Adicione 'lameenc' e tente de novo. (WAV funciona normalmente.)")
+                        else:
+                            st.error(f"Erro na conversão: {e}")
 # ── ABA PRODUÇÃO (backing track musical) ──
 with tab_producao:
     st.markdown(titulo_secao("🎛️", "Estúdio de Produção — backing track musical no tom e BPM da sua gravação."), unsafe_allow_html=True)
-    st.markdown(titulo_secao("1️⃣", "Captura — suba o arquivo ou grave direto."), unsafe_allow_html=True)
-    prod_in = st.file_uploader("📂 Subir gravação (voz + violão)", type=["wav", "mp3", "m4a", "ogg", "flac"], key="producao")
+    st.markdown(titulo_secao("1️⃣", "Captura — suba o arquivo, grave direto ou use uma gravação salva."), unsafe_allow_html=True)
+    prod_in = st.file_uploader("📂 Subir gravação (voz + violão)", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="producao")
     st.markdown("**— ou —**")
     prod_grav = st.audio_input("🎤 Gravar música agora")
+    grav_salvas_prod = st.session_state.get("gravacoes", [])
+    opcoes_grav_prod = ["—"] + [g["nome"] for g in grav_salvas_prod]
+    usar_grav_prod = st.selectbox("🎙️ Ou usar uma gravação salva", opcoes_grav_prod, key="usar_grav_prod")
     st.markdown(titulo_secao("2️⃣", "Estilo e geração"), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     estilo = c1.selectbox("🎵 Estilo musical", list(ESTILOS_MUSICAIS.keys()))
@@ -1302,9 +1380,13 @@ with tab_producao:
     com_bateria = c4.checkbox("Gerar bateria", value=True)
     com_acordes = st.checkbox("🎹 Gerar acordes (backing mais musical)", value=True)
     if st.button("🎛️ Gerar produção", type="primary"):
-        fonte_prod = prod_in if prod_in is not None else prod_grav
+        if usar_grav_prod != "—":
+            idx = [g["nome"] for g in grav_salvas_prod].index(usar_grav_prod)
+            fonte_prod = io.BytesIO(grav_salvas_prod[idx]["bytes"])
+        else:
+            fonte_prod = prod_in if prod_in is not None else prod_grav
         if fonte_prod is None:
-            st.warning("Suba um áudio ou grave sua música primeiro.")
+            st.warning("Suba um áudio, grave sua música ou escolha uma gravação salva.")
             st.stop()
         audio, sr_audio = carregar_audio(fonte_prod)
         if audio is None:
