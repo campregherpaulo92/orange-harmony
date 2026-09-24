@@ -1471,15 +1471,15 @@ with tab_analise:
             fig.tight_layout()
             st.pyplot(fig)
             st.markdown(titulo_secao("💬", "Devolutiva do Professor"), unsafe_allow_html=True)
-st.markdown(
-    f'<div style="background:linear-gradient(135deg, rgba(16,185,129,0.20), rgba(16,185,129,0.05));'
-    f'border:1px solid rgba(16,185,129,0.45);border-radius:16px;padding:20px;'
-    f'backdrop-filter:blur(12px);box-shadow:0 8px 32px rgba(16,185,129,0.22);">'
-    f'<div style="font-family:Poppins;font-weight:700;color:#34d399;margin-bottom:8px;">✨ Professor IA (Gemini)</div>'
-    f'{devolutiva}</div>',
-    unsafe_allow_html=True
-)    
-    st.markdown("---")
+            st.markdown(
+                f'<div style="background:linear-gradient(135deg, rgba(16,185,129,0.20), rgba(16,185,129,0.05));'
+                f'border:1px solid rgba(16,185,129,0.45);border-radius:16px;padding:20px;'
+                f'backdrop-filter:blur(12px);box-shadow:0 8px 32px rgba(16,185,129,0.22);">'
+                f'<div style="font-family:Poppins;font-weight:700;color:#34d399;margin-bottom:8px;">✨ Professor IA (Gemini)</div>'
+                f'{devolutiva}</div>',
+                unsafe_allow_html=True
+            )
+            st.markdown("---")
             st.markdown(titulo_secao("🎚️", "Vibrato"), unsafe_allow_html=True)
             vibratos = detectar_vibrato_v4(f0_limpo, tempos, calibracao_a4=calibracao)
             if vibratos:
