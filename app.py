@@ -1927,8 +1927,8 @@ st.html(f"""
     0%, 100% {{ transform: translateY(0); }}
     50% {{ transform: translateY(-12px); }}
 }}
-/* Botão flutuante com o mascote (CSS puro, sem JS) */
-.laranjinha-fab-wrap:has(button) button {{
+/* Botão flutuante com o mascote — mira pelo atributo title do help */
+button[title="Abrir Laranjinha"] {
     position: fixed !important;
     bottom: 28px !important;
     right: 24px !important;
@@ -1949,18 +1949,18 @@ st.html(f"""
     line-height: 0 !important;
     text-indent: -9999px !important;
     overflow: hidden !important;
-}}
-.laranjinha-fab-wrap:has(button) button:hover {{
+}
+button[title="Abrir Laranjinha"]:hover {
     transform: scale(1.08) !important;
-}}
+}
 /* Esconde o texto interno do botão (o emoji 🍊) */
-.laranjinha-fab-wrap:has(button) button p,
-.laranjinha-fab-wrap:has(button) button span,
-.laranjinha-fab-wrap:has(button) button div {{
+button[title="Abrir Laranjinha"] p,
+button[title="Abrir Laranjinha"] span,
+button[title="Abrir Laranjinha"] div {
     font-size: 0 !important;
     color: transparent !important;
     opacity: 0 !important;
-}}
+}
 /* ═══ Balão da Laranjinha (flutuante no canto, sobreposto) ═══ */
 [data-testid="stDialog"] {{
     position: fixed !important;
