@@ -1911,53 +1911,48 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha (mascote embutido direto no HTML, sem JS) ──
-import streamlit.components.v1 as components
-
+# ── Botão flutuante da Laranjinha (mascote via st.html, sem iframe, sem JS) ──
 if laranjinha_b64:
-    components.html(
-        f"""
-        <style>
-        @keyframes ohBounce {{
-            0%, 100% {{ transform: translateY(0); }}
-            50% {{ transform: translateY(-12px); }}
-        }}
-        .laranjinha-fab {{
-            position: fixed;
-            bottom: 28px;
-            right: 24px;
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            background: url("data:image/png;base64,{laranjinha_b64}") center/contain no-repeat;
-            border: none;
-            cursor: pointer;
-            z-index: 10002;
-            box-shadow: 0 8px 30px rgba(249,115,22,0.55);
-            animation: ohBounce 2s ease-in-out infinite;
-            background-color: transparent;
-        }}
-        .laranjinha-fab:hover {{
-            transform: scale(1.08);
-        }}
-        </style>
-        <button class="laranjinha-fab" onclick="window.parent.location.href='?laranjinha=1'"></button>
-        """,
-        height=0,
-    )
+    st.html(f"""
+    <style>
+    @keyframes ohBounce {{
+        0%, 100% {{ transform: translateY(0); }}
+        50% {{ transform: translateY(-12px); }}
+    }}
+    .laranjinha-fab {{
+        position: fixed !important;
+        bottom: 28px !important;
+        right: 24px !important;
+        width: 120px !important;
+        height: 120px !important;
+        border-radius: 50% !important;
+        background: url("data:image/png;base64,{laranjinha_b64}") center/contain no-repeat !important;
+        background-color: transparent !important;
+        border: none !important;
+        cursor: pointer !important;
+        z-index: 10002 !important;
+        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
+        animation: ohBounce 2s ease-in-out infinite !important;
+        display: block !important;
+    }}
+    .laranjinha-fab:hover {{
+        transform: scale(1.08) !important;
+    }}
+    </style>
+    <a class="laranjinha-fab" href="?laranjinha=1" aria-label="Abrir Laranjinha"></a>
+    """)
 
 if st.query_params.get("laranjinha") == "1":
     st.query_params.clear()
     laranjinha_dialog()
 
-# CSS do balão da Laranjinha (mantém o visual de balão flutuante)
+# CSS do balão da Laranjinha (visual de balão flutuante)
 st.html("""
 <style>
 @keyframes ohBounce {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-12px); }
 }
-/* ═══ LARANJINHA — balão flutuante MAIOR, sobreposto à tela ═══ */
 [data-testid="stDialog"] {
     position: fixed !important;
     bottom: 175px !important;
