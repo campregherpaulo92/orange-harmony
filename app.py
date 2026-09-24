@@ -1797,7 +1797,6 @@ with tab_producao:
             mime="audio/wav",
         )
         st.info("💡 A separação de stems (voz/violão separados) exige GPU e roda no Colab — o link do notebook fica no README.")
-        # ══════════════════ ASSISTENTE VIRTUAL (laranjinha com memória e chats) ══════════════════
 # ══════════════════ ASSISTENTE VIRTUAL (laranjinha com memória e chats) ══════════════════
 LARANJINHA_PATH = "laranjinha.png"
 laranjinha_b64 = ""
@@ -1814,7 +1813,6 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, [])
         st.session_state["chat_hist"] = []
-        st.rerun()
     # ── Seleção / criação de chats (um por música) ──
     chats = listar_chats_firestore()
     opcoes_chat = {f"{nome}": cid for nome, cid in chats}
@@ -1835,7 +1833,6 @@ def laranjinha_dialog():
             st.session_state["chat_atual_id"] = sel_id
             st.session_state["chat_atual_nome"] = sel_nome
             st.session_state["chat_hist"] = carregar_chat_firestore(sel_id)
-            st.rerun()
     c_nome, c_cria = st.columns([3, 1])
     novo_nome = c_nome.text_input("Novo chat (ex: nome da música)", key="novo_chat_nome")
     if c_cria.button("➕", key="criar_chat_btn", help="Criar novo chat"):
@@ -1846,7 +1843,6 @@ def laranjinha_dialog():
             st.session_state["chat_atual_nome"] = nome_final
             st.session_state["chat_hist"] = []
             st.session_state["sel_chat_prev"] = nome_final
-            st.rerun()
         else:
             st.warning("Não foi possível criar o chat (Firebase?).")
     st.markdown("---")
@@ -1856,23 +1852,22 @@ def laranjinha_dialog():
     for msg in st.session_state["chat_hist"][-20:]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-    # ── Campo de mensagem (fica sempre por último) ──
-    pergunta = st.text_input("Escreva sua mensagem...", key="laranjinha_input", label_visibility="collapsed")
-    if st.button("Enviar", key="enviar_chat_btn", type="primary"):
-        if pergunta.strip():
-            st.session_state["chat_hist"].append({"role": "user", "content": pergunta.strip()})
-            with st.chat_message("user"):
-                st.markdown(pergunta.strip())
-            with st.chat_message("assistant"):
-                with st.spinner("Pensando..."):
-                    resp = assistente_resposta(pergunta.strip(), chat_id=st.session_state.get("chat_atual_id"), historico=st.session_state["chat_hist"])
-                st.markdown(resp)
-            st.session_state["chat_hist"].append({"role": "assistant", "content": resp})
-            chat_atual = st.session_state.get("chat_atual_id")
-            if chat_atual:
-                salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
-            st.session_state["laranjinha_input"] = ""
-            st.rerun()
+    # ── Campo de mensagem (form limpa sozinho e não fecha o diálogo) ──
+    with st.form("laranjinha_form", clear_on_submit=True):
+        pergunta = st.text_input("Escreva sua mensagem...", label_visibility="collapsed")
+        enviar = st.form_submit_button("Enviar", type="primary")
+    if enviar and pergunta.strip():
+        st.session_state["chat_hist"].append({"role": "user", "content": pergunta.strip()})
+        with st.chat_message("user"):
+            st.markdown(pergunta.strip())
+        with st.chat_message("assistant"):
+            with st.spinner("Pensando..."):
+                resp = assistente_resposta(pergunta.strip(), chat_id=st.session_state.get("chat_atual_id"), historico=st.session_state["chat_hist"])
+            st.markdown(resp)
+        st.session_state["chat_hist"].append({"role": "assistant", "content": resp})
+        chat_atual = st.session_state.get("chat_atual_id")
+        if chat_atual:
+            salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
 # ── Botão flutuante da Laranjinha (ícone laranja fixo) ──
 if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
@@ -1916,7 +1911,7 @@ if laranjinha_b64:
                 alvo.style.bottom = '28px';
                 alvo.style.right = '24px';
                 alvo.style.left = 'auto';
-                alvo.style.zIndex = '9999';
+                alvo.style.zIndex = '10002';
                 alvo.style.fontSize = '0';
                 alvo.style.color = 'transparent';
                 alvo.style.boxShadow = '0 8px 30px rgba(249,115,22,0.55)';
