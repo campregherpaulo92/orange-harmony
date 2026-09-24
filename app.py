@@ -1798,9 +1798,16 @@ with tab_producao:
         )
         st.info("💡 A separação de stems (voz/violão separados) exige GPU e roda no Colab — o link do notebook fica no README.")
 # ══════════════════ ASSISTENTE VIRTUAL (laranjinha com memória e chats) ══════════════════
-LARANJINHA_PATH = "laranjinha.png"
+def _encontrar_laranjinha():
+    for caminho in ["laranjinha.png", "assets/laranjinha.png", "img/laranjinha.png",
+                    "static/laranjinha.png", "images/laranjinha.png"]:
+        if os.path.exists(caminho):
+            return caminho
+    return None
+
+LARANJINHA_PATH = _encontrar_laranjinha()
 laranjinha_b64 = ""
-if os.path.exists(LARANJINHA_PATH):
+if LARANJINHA_PATH:
     with open(LARANJINHA_PATH, "rb") as f:
         laranjinha_b64 = base64.b64encode(f.read()).decode()
 
@@ -1875,9 +1882,14 @@ def laranjinha_dialog():
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # ── Campo de mensagem (form limpa sozinho e não fecha o diálogo) ──
+    # ── Campo de mensagem (cresce para baixo ao escrever, ideal para letras) ──
     with st.form("laranjinha_form", clear_on_submit=True):
-        pergunta = st.text_input("Escreva sua mensagem...", label_visibility="collapsed")
+        pergunta = st.text_area(
+            "Escreva sua mensagem...",
+            height=120,
+            label_visibility="collapsed",
+            placeholder="Escreva sua mensagem ou cole a letra da música aqui...",
+        )
         enviar = st.form_submit_button("Enviar", type="primary")
     if enviar and pergunta.strip():
         st.session_state["chat_hist"].append({"role": "user", "content": pergunta.strip()})
@@ -1896,104 +1908,106 @@ def laranjinha_dialog():
 if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
     laranjinha_dialog()
 
-if laranjinha_b64:
-    st.html(f"""
-    <style>
-    @keyframes ohBounce {{
-        0%, 100% {{ transform: translateY(0); }}
-        50% {{ transform: translateY(-12px); }}
-    }}
-    /* ═══ LARANJINHA — diálogo estilo balão flutuante no canto ═══ */
-    [data-testid="stDialog"] {{
-        position: fixed !important;
-        bottom: 175px !important;
-        right: 24px !important;
-        left: auto !important;
-        top: auto !important;
-        width: 420px !important;
-        max-width: calc(100vw - 48px) !important;
-        max-height: 65vh !important;
-        overflow-y: auto !important;
-        background: linear-gradient(165deg, rgba(35,22,10,0.97), rgba(18,12,6,0.98)) !important;
-        border: 1px solid rgba(249,115,22,0.35) !important;
-        border-radius: 20px !important;
-        box-shadow: 0 22px 70px rgba(249,115,22,0.28), 0 0 0 1px rgba(0,0,0,0.4) !important;
-        backdrop-filter: blur(16px) !important;
-        animation: ohPopIn 0.3s ease !important;
-        z-index: 10001 !important;
-    }}
-    /* Remove o fundo escuro atrás do diálogo */
-    [data-testid="stDialogBackdrop"], dialog::backdrop {{
-        background: transparent !important;
-        backdrop-filter: none !important;
-    }}
-    @keyframes ohPopIn {{
-        from {{ opacity: 0; transform: translateY(16px) scale(0.97); }}
-        to {{ opacity: 1; transform: none; }}
-    }}
-    /* Caixa de texto MAIOR (tamanho do quadrado laranja) */
-    [data-testid="stDialog"] .stTextInput input, [role="dialog"] .stTextInput input {{
-        min-height: 56px !important;
-        font-size: 1.05rem !important;
-        border-radius: 14px !important;
-        background: rgba(255,255,255,0.06) !important;
-        border: 1px solid rgba(249,115,22,0.4) !important;
-        color: #fff !important;
-        padding: 14px 16px !important;
-    }}
-    /* Mensagens do chat dentro do balão */
-    [data-testid="stDialog"] .stChatMessage, [role="dialog"] .stChatMessage {{
-        background: rgba(255,255,255,0.04) !important;
-        border-radius: 14px !important;
-        border: 1px solid rgba(255,255,255,0.06) !important;
-        margin-bottom: 8px !important;
-    }}
-    [data-testid="stDialog"] .stChatMessage[data-testid="stChatMessageAssistant"],
-    [role="dialog"] .stChatMessage[data-testid="stChatMessageAssistant"] {{
-        background: linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.03)) !important;
-        border: 1px solid rgba(249,115,22,0.22) !important;
-    }}
-    </style>
-    <script>
-    (function() {{
-        var url = "data:image/png;base64,{laranjinha_b64}";
-        var tentativas = 0;
-        var timer = setInterval(function() {{
-            var btns = document.querySelectorAll('button');
-            var alvo = null;
-            for (var i = 0; i < btns.length; i++) {{
-                if ((btns[i].textContent || '').indexOf('🍊') !== -1) {{
-                    alvo = btns[i];
-                    break;
-                }}
+st.html(f"""
+<style>
+@keyframes ohBounce {{
+    0%, 100% {{ transform: translateY(0); }}
+    50% {{ transform: translateY(-12px); }}
+}}
+/* ═══ LARANJINHA — balão flutuante MAIOR, sobreposto à tela ═══ */
+[data-testid="stDialog"] {{
+    position: fixed !important;
+    bottom: 175px !important;
+    right: 24px !important;
+    left: auto !important;
+    top: auto !important;
+    width: 620px !important;
+    max-width: calc(100vw - 32px) !important;
+    max-height: 72vh !important;
+    overflow-y: auto !important;
+    background: linear-gradient(165deg, rgba(35,22,10,0.97), rgba(18,12,6,0.98)) !important;
+    border: 1px solid rgba(249,115,22,0.35) !important;
+    border-radius: 20px !important;
+    box-shadow: 0 22px 70px rgba(249,115,22,0.28), 0 0 0 1px rgba(0,0,0,0.4) !important;
+    backdrop-filter: blur(16px) !important;
+    animation: ohPopIn 0.3s ease !important;
+    z-index: 10001 !important;
+}}
+/* Remove o fundo escuro atrás do balão */
+[data-testid="stDialogBackdrop"], dialog::backdrop {{
+    background: transparent !important;
+    backdrop-filter: none !important;
+}}
+@keyframes ohPopIn {{
+    from {{ opacity: 0; transform: translateY(16px) scale(0.97); }}
+    to {{ opacity: 1; transform: none; }}
+}}
+/* Caixa de texto que cresce + borda laranja */
+[data-testid="stDialog"] textarea {{
+    min-height: 120px !important;
+    font-size: 1.02rem !important;
+    line-height: 1.5 !important;
+    border-radius: 14px !important;
+    background: rgba(255,255,255,0.06) !important;
+    border: 1px solid rgba(249,115,22,0.4) !important;
+    color: #fff !important;
+    padding: 14px 16px !important;
+    resize: vertical !important;
+}}
+/* Mensagens do chat dentro do balão */
+[data-testid="stDialog"] .stChatMessage {{
+    background: rgba(255,255,255,0.04) !important;
+    border-radius: 14px !important;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+    margin-bottom: 8px !important;
+}}
+[data-testid="stDialog"] .stChatMessage[data-testid="stChatMessageAssistant"] {{
+    background: linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.03)) !important;
+    border: 1px solid rgba(249,115,22,0.22) !important;
+}}
+</style>
+<script>
+(function() {{
+    var url = "data:image/png;base64,{laranjinha_b64}";
+    // Aplica a imagem do mascote no botão flutuante em loop (sobrevive aos re-renders)
+    setInterval(function() {{
+        var btns = document.querySelectorAll('button');
+        for (var i = 0; i < btns.length; i++) {{
+            if ((btns[i].textContent || '').indexOf('🍊') !== -1) {{
+                var b = btns[i];
+                b.style.backgroundImage = 'url("' + url + '")';
+                b.style.backgroundSize = 'contain';
+                b.style.backgroundPosition = 'center';
+                b.style.backgroundRepeat = 'no-repeat';
+                b.style.backgroundColor = 'transparent';
+                b.style.border = 'none';
+                b.style.outline = 'none';
+                b.style.padding = '0';
+                b.style.width = '120px';
+                b.style.height = '120px';
+                b.style.borderRadius = '50%';
+                b.style.position = 'fixed';
+                b.style.bottom = '28px';
+                b.style.right = '24px';
+                b.style.left = 'auto';
+                b.style.zIndex = '10002';
+                b.style.fontSize = '0';
+                b.style.color = 'transparent';
+                b.style.boxShadow = '0 8px 30px rgba(249,115,22,0.55)';
+                b.style.animation = 'ohBounce 2s ease-in-out infinite';
             }}
-            if (alvo) {{
-                alvo.style.backgroundImage = 'url("' + url + '")';
-                alvo.style.backgroundSize = 'contain';
-                alvo.style.backgroundPosition = 'center';
-                alvo.style.backgroundRepeat = 'no-repeat';
-                alvo.style.backgroundColor = 'transparent';
-                alvo.style.border = 'none';
-                alvo.style.outline = 'none';
-                alvo.style.padding = '0';
-                alvo.style.width = '120px';
-                alvo.style.height = '120px';
-                alvo.style.borderRadius = '50%';
-                alvo.style.position = 'fixed';
-                alvo.style.bottom = '28px';
-                alvo.style.right = '24px';
-                alvo.style.left = 'auto';
-                alvo.style.zIndex = '10002';
-                alvo.style.fontSize = '0';
-                alvo.style.color = 'transparent';
-                alvo.style.boxShadow = '0 8px 30px rgba(249,115,22,0.55)';
-                alvo.style.animation = 'ohBounce 2s ease-in-out infinite';
-                clearInterval(timer);
-            }} else if (tentativas > 20) {{
-                clearInterval(timer);
-            }}
-            tentativas++;
-        }}, 500);
-    }})();
-    </script>
-    """)
+        }}
+    }}, 700);
+    // Auto-expande a caixa de texto para baixo ao digitar/colar
+    function autoGrow() {{
+        var areas = document.querySelectorAll('[data-testid="stDialog"] textarea');
+        for (var i = 0; i < areas.length; i++) {{
+            areas[i].style.height = 'auto';
+            areas[i].style.height = (areas[i].scrollHeight + 4) + 'px';
+        }}
+    }}
+    document.addEventListener('input', autoGrow);
+    setInterval(autoGrow, 600);
+}})();
+</script>
+""")
