@@ -163,8 +163,8 @@ def excluir_gravacao_firestore(nome):
 def get_gravacoes():
     nomes = listar_gravacoes_firestore()
     if nomes:
-        return nomes
-    return [g["nome"] for g in st.session_state.get("gravacoes", [])]
+        return list(dict.fromkeys(nomes))
+    return list(dict.fromkeys(g["nome"] for g in st.session_state.get("gravacoes", [])))
 def get_gravacao_bytes(nome):
     dados = baixar_gravacao_firestore(nome)
     if dados is not None:
@@ -1405,21 +1405,23 @@ with tab_gravador:
                 else:
                     if "gravacoes" not in st.session_state:
                         st.session_state["gravacoes"] = []
-                    st.session_state["gravacoes"].append({"nome": nome_grav, "bytes": fonte_grav.getvalue()})
-                    st.warning("Não foi possível salvar na nuvem — gravação salva temporariamente na sessão. Verifique o Firebase.")
+                    lista = [g for g in st.session_state["gravacoes"] if g["nome"] != nome_grav]
+                    lista.append({"nome": nome_grav, "bytes": fonte_grav.getvalue()})
+                    st.session_state["gravacoes"] = lista
+                    st.warning("Não foi possível salvar na nuvem — gravação salva temporariamente na sessão. Confira se 'lameenc' está no requirements.txt e se o Firebase está conectado.")
     st.markdown("---")
     st.markdown(titulo_secao("📚", "Minhas gravações"), unsafe_allow_html=True)
     gravacoes = get_gravacoes()
     if not gravacoes:
         st.info("Nenhuma gravação salva ainda. Grave ou suba um áudio acima e salve.")
     else:
-        for nome in gravacoes:
+        for i, nome in enumerate(gravacoes):
             dados = get_gravacao_bytes(nome)
             c1, c2, c3 = st.columns([4, 1, 1])
             c1.markdown(f"**{nome}**")
             if dados:
-                c2.download_button("⬇️", data=dados, file_name=f"{nome}.mp3", mime="audio/mpeg", key=f"dl_{nome}")
-            if c3.button("🗑️", key=f"delg_{nome}"):
+                c2.download_button("⬇️", data=dados, file_name=f"{nome}.mp3", mime="audio/mpeg", key=f"dl_{i}_{nome}")
+            if c3.button("🗑️", key=f"delg_{i}_{nome}"):
                 if excluir_gravacao_firestore(nome):
                     st.success(f"'{nome}' excluída da nuvem.")
                     st.rerun()
