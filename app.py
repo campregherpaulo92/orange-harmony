@@ -1922,55 +1922,55 @@ if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
 if st.session_state.get("laranjinha_aberta"):
     laranjinha_dialog()
 
-# ── JS que aplica o mascote no botão (via iframe invisível → alcança o botão real) ──
+# ── Aplica o PNG no botão (JS roda direto na página via st.markdown) ──
 if laranjinha_b64:
-    components.html(
-        """
-        <script>
-        (function() {
-            var url = "data:image/png;base64,""" + laranjinha_b64 + """;
-            setInterval(function() {
-                var btns = window.parent.document.querySelectorAll('button');
-                for (var i = 0; i < btns.length; i++) {
-                    var b = btns[i];
-                    if ((b.textContent || '').indexOf('🍊') !== -1) {
-                        b.style.backgroundImage = 'url("' + url + '")';
-                        b.style.backgroundSize = 'contain';
-                        b.style.backgroundPosition = 'center';
-                        b.style.backgroundRepeat = 'no-repeat';
-                        b.style.backgroundColor = 'transparent';
-                        b.style.border = 'none';
-                        b.style.outline = 'none';
-                        b.style.padding = '0';
-                        b.style.width = '120px';
-                        b.style.height = '120px';
-                        b.style.borderRadius = '50%';
-                        b.style.position = 'fixed';
-                        b.style.bottom = '28px';
-                        b.style.right = '24px';
-                        b.style.left = 'auto';
-                        b.style.zIndex = '99999';
-                        b.style.boxShadow = '0 8px 30px rgba(249,115,22,0.55)';
-                        b.style.fontSize = '0';
-                        b.style.color = 'transparent';
-                        b.style.lineHeight = '0';
-                        b.style.textIndent = '-9999px';
-                        b.style.overflow = 'hidden';
-                        var filhos = b.querySelectorAll('*');
-                        for (var j = 0; j < filhos.length; j++) {
-                            filhos[j].style.fontSize = '0';
-                            filhos[j].style.color = 'transparent';
-                            filhos[j].style.opacity = '0';
-                        }
+    st.markdown("""
+    <script>
+    (function() {
+        if (window.__laranjinhaFab) return;
+        window.__laranjinhaFab = true;
+        var url = "data:image/png;base64,""" + laranjinha_b64 + """;
+        function apply() {
+            var btns = document.querySelectorAll('button');
+            for (var i = 0; i < btns.length; i++) {
+                var b = btns[i];
+                if ((b.textContent || '').indexOf('🍊') !== -1) {
+                    b.style.backgroundImage = 'url("' + url + '")';
+                    b.style.backgroundSize = 'contain';
+                    b.style.backgroundPosition = 'center';
+                    b.style.backgroundRepeat = 'no-repeat';
+                    b.style.backgroundColor = 'transparent';
+                    b.style.border = 'none';
+                    b.style.outline = 'none';
+                    b.style.padding = '0';
+                    b.style.width = '120px';
+                    b.style.height = '120px';
+                    b.style.borderRadius = '50%';
+                    b.style.position = 'fixed';
+                    b.style.bottom = '28px';
+                    b.style.right = '24px';
+                    b.style.left = 'auto';
+                    b.style.zIndex = '99999';
+                    b.style.boxShadow = '0 8px 30px rgba(249,115,22,0.55)';
+                    b.style.fontSize = '0';
+                    b.style.color = 'transparent';
+                    b.style.lineHeight = '0';
+                    b.style.textIndent = '-9999px';
+                    b.style.overflow = 'hidden';
+                    var filhos = b.querySelectorAll('*');
+                    for (var j = 0; j < filhos.length; j++) {
+                        filhos[j].style.fontSize = '0';
+                        filhos[j].style.color = 'transparent';
+                        filhos[j].style.opacity = '0';
                     }
                 }
-            }, 500);
-        })();
-        </script>
-        """,
-        height=0,
-    )
-
+            }
+        }
+        apply();
+        setInterval(apply, 800);
+    })();
+    </script>
+    """, unsafe_allow_html=True)
 # ── CSS do balão do diálogo (via st.markdown, para valer sem iframe) ──
 st.markdown("""
 <style>
