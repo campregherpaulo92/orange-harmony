@@ -24,6 +24,15 @@ st.markdown('<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@6
 from google import genai
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 cliente = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+# ── Modelos de IA disponíveis (seletor no app, sem editar código) ──
+MODELOS_DISPONIVEIS = [
+    "gemini-3-flash",      # nível Pro, rápido, no tier grátis (recomendado)
+    "gemini-3.5-flash",    # geração anterior Flash
+    "gemini-3.1-pro",      # top de qualidade (pode exigir tier pago)
+    "gemini-2.5-flash",    # estável e confiável
+]
+def modelo_atual():
+    return st.session_state.get("modelo_ia", MODELOS_DISPONIVEIS[0])
 # ── Firebase ──
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -41,6 +50,102 @@ if not firebase_admin._apps:
 db = firestore.client() if firebase_admin._apps else None
 COL_ANALISES = "orange_harmony_analises"
 COL_COMPOSICOES = "orange_harmony_composicoes"
+COL_GRAVACOES = "orange_harmony_gravacoes"
+# ══════════════════ GRAVAÇÕES NO FIRESTORE (comprimidas em MP3, sem Storage) ══════════════════
+CHUNK_MAX = 800_000  # Firestore limita ~1MB por documento; 800KB por pedaço é seguro
+def _sanitizar_nome(nome):
+    nome = nome.strip().replace("/", "_").replace("\\", "_")
+    return nome[:120] or "gravacao"
+def comprimir_audio_mp3(dados):
+    """Decodifica bytes de áudio e re-encoda em MP3 64kbps mono (pequeno o suficiente p/ Firestore)."""
+    try:
+        audio, sr = carregar_audio(io.BytesIO(dados))
+        if audio is None:
+            return None
+        import lameenc
+        enc = lameenc.Encoder()
+        enc.set_bit_rate(64)
+        enc.set_in_sample_rate(sr)
+        enc.set_channels(1)
+        pcm = (audio * 32767).astype(np.int16).tobytes()
+        return enc.encode(pcm) + enc.flush()
+    except Exception:
+        return None
+def salvar_gravacao_firestore(nome, dados):
+    """Salva a gravação no Firestore (MP3 comprimido, em pedaços). Retorna True se funcionou."""
+    if db is None:
+        return False
+    try:
+        mp3 = comprimir_audio_mp3(dados)
+        if mp3 is None:
+            return False
+        doc_id = _sanitizar_nome(nome)
+        ref = db.collection(COL_GRAVACOES).document(doc_id)
+        for c in ref.collection("chunks").stream():
+            c.reference.delete()
+        ref.delete()
+        n_chunks = 0
+        for i in range(0, len(mp3), CHUNK_MAX):
+            ref.collection("chunks").document(f"chunk_{n_chunks:03d}").set({"dados": mp3[i:i+CHUNK_MAX]})
+            n_chunks += 1
+        ref.set({"nome": nome.strip(), "data": datetime.now().isoformat(),
+                 "num_chunks": n_chunks, "tamanho_bytes": len(mp3)})
+        return True
+    except Exception:
+        return False
+def listar_gravacoes_firestore():
+    if db is None:
+        return []
+    try:
+        docs = db.collection(COL_GRAVACOES).order_by("data", direction=firestore.Query.DESCENDING).limit(100).stream()
+        return [d.to_dict().get("nome", d.id) for d in docs]
+    except Exception:
+        return []
+def baixar_gravacao_firestore(nome):
+    if db is None:
+        return None
+    try:
+        doc_id = _sanitizar_nome(nome)
+        ref = db.collection(COL_GRAVACOES).document(doc_id)
+        meta = ref.get()
+        if not meta.exists:
+            return None
+        n = meta.to_dict().get("num_chunks", 0)
+        partes = []
+        for i in range(n):
+            c = ref.collection("chunks").document(f"chunk_{i:03d}").get()
+            if c.exists:
+                partes.append(c.to_dict().get("dados", b""))
+        if not partes:
+            return None
+        return b"".join(partes)
+    except Exception:
+        return None
+def excluir_gravacao_firestore(nome):
+    if db is None:
+        return False
+    try:
+        doc_id = _sanitizar_nome(nome)
+        ref = db.collection(COL_GRAVACOES).document(doc_id)
+        for c in ref.collection("chunks").stream():
+            c.reference.delete()
+        ref.delete()
+        return True
+    except Exception:
+        return False
+def get_gravacoes():
+    nomes = listar_gravacoes_firestore()
+    if nomes:
+        return nomes
+    return [g["nome"] for g in st.session_state.get("gravacoes", [])]
+def get_gravacao_bytes(nome):
+    dados = baixar_gravacao_firestore(nome)
+    if dados is not None:
+        return dados
+    for g in st.session_state.get("gravacoes", []):
+        if g["nome"] == nome:
+            return g["bytes"]
+    return None
 # ── Constantes musicais ──
 NOMES_NOTAS = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 NOTAS_REFERENCIA = [f"{n}{o}" for o in range(2, 6) for n in NOMES_NOTAS]
@@ -80,7 +185,6 @@ def analisar_afinacao(f0_limpo, tempos, calibracao=440.0, nota_ref=None):
     if mascara.sum() == 0:
         return vazio
     f0_voz = f0_limpo[mascara]
-    # ── Correção de oitava (pyin às vezes pega o 2º/4º harmônico) ──
     mediana_orig = float(np.median(f0_voz))
     f0_pred = mediana_orig
     for divisor in (2, 4):
@@ -92,7 +196,6 @@ def analisar_afinacao(f0_limpo, tempos, calibracao=440.0, nota_ref=None):
     midi_pred = f0_para_midi_calibrado(f0_pred, calibracao)
     midi_arred_pred = int(round(midi_pred))
     nota_pred = f"{NOMES_NOTAS[midi_arred_pred % 12]}{midi_arred_pred // 12 - 1}"
-    # ── Referência para medir a afinação (a nota que você quer cantar) ──
     if nota_ref:
         f_ref = f0_para_freq(nota_ref, calibracao)
     else:
@@ -103,7 +206,6 @@ def analisar_afinacao(f0_limpo, tempos, calibracao=440.0, nota_ref=None):
     pct_afinado = float(np.mean(np.abs(cents) <= 50) * 100)
     tendencia = ("neutra (bem centrada)" if abs(desvio_sinal) < 10
                  else ("aguda (sharp)" if desvio_sinal > 0 else "grave (flat)"))
-    # ── Frases e pausas ──
     dt = tempos[1] - tempos[0] if len(tempos) > 1 else 0.01
     mudancas = np.diff(mascara.astype(int))
     inicios = np.where(mudancas == 1)[0] + 1
@@ -789,8 +891,10 @@ def gerar_escala(nota, calibracao):
         trechos.append(sinal * env)
         trechos.append(silencio)
     return (sr, np.concatenate(trechos).astype(np.float32))
-# ══════════════════ ASSISTENTE VIRTUAL (Gemini) ══════════════════
+# ══════════════════ ASSISTENTE VIRTUAL (Gemini, com áudio) ══════════════════
 def assistente_resposta(prompt_usuario):
+    """Laranjinha — responde texto e, se o usuário pedir para avaliar uma gravação salva,
+    envia o áudio real para o Gemini ouvir e avaliar."""
     if cliente is None:
         return "A Laranjinha está indisponível (configure a chave Gemini)."
     sistema = (
@@ -800,14 +904,38 @@ def assistente_resposta(prompt_usuario):
         "sustentação), gerar letras e composições a partir de uma descrição (com cifras e seções), "
         "e orientar sobre afinação, tom e exercícios vocais. Seja específico e encorajador."
     )
+    # ── Detecta se o usuário pediu para avaliar uma gravação salva ──
+    audio_anexo = None
+    texto = prompt_usuario.lower()
+    for nome in get_gravacoes():
+        if nome.lower() in texto:
+            dados = get_gravacao_bytes(nome)
+            if dados:
+                audio_anexo = (nome, dados)
+                break
     try:
-        for modelo in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-2.5-flash"]:
+        modelo = modelo_atual()
+        if audio_anexo is not None:
+            nome, dados = audio_anexo
             try:
-                interaction = cliente.interactions.create(model=modelo, input=sistema + "\n\nPergunta: " + prompt_usuario)
+                arquivo = cliente.files.upload(file=io.BytesIO(dados), config={"mime_type": "audio/mpeg", "display_name": nome})
+                for _ in range(30):
+                    estado = cliente.files.get(name=arquivo.name)
+                    if estado.state.name == "ACTIVE":
+                        break
+                    time.sleep(1)
+                interaction = cliente.interactions.create(
+                    model=modelo,
+                    input=[
+                        sistema + f"\n\nO usuário pediu: {prompt_usuario}\n\nOuça a gravação '{nome}' e faça uma avaliação completa do canto: afinação, notas, técnica, pontos fortes e pontos a melhorar. Seja específico e encorajador.",
+                        arquivo,
+                    ],
+                )
                 return interaction.output_text
-            except Exception:
-                continue
-        return "Não consegui responder agora. Tente novamente em instantes."
+            except Exception as e:
+                return f"Consegui achar a gravação '{nome}', mas não consegui enviar o áudio para análise agora ({e}). Tente novamente ou use o modelo Flash."
+        interaction = cliente.interactions.create(model=modelo, input=sistema + "\n\nPergunta: " + prompt_usuario)
+        return interaction.output_text
     except Exception as e:
         return f"Erro ao chamar o assistente: {e}"
 # ══════════════════ ANÁLISE DE COVER (gravação completa) ══════════════════
@@ -857,7 +985,6 @@ def converter_audio(audio, sr, formato_destino):
     """Converte um áudio (numpy) para bytes WAV ou MP3."""
     if formato_destino == "WAV":
         return audio_para_bytes(audio, sr), "audio/wav", "convertido.wav"
-    # MP3 — usa lameenc se disponível
     import lameenc
     encoder = lameenc.Encoder()
     encoder.set_bit_rate(192)
@@ -1008,6 +1135,20 @@ if os.path.exists(LOGO_PATH):
 else:
     col_logo.markdown("# 🍊 Orange Harmony")
 st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Seu professor de canto com IA — analise sua voz, afine e evolua.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
+# ══════════════════ SELETOR DE MODELO DE IA (sem editar código) ══════════════════
+with st.sidebar:
+    st.markdown("### 🍊 Orange Harmony")
+    st.markdown("#### 🤖 Modelo de IA")
+    modelo_escolhido = st.selectbox(
+        "Modelo",
+        MODELOS_DISPONIVEIS,
+        index=MODELOS_DISPONIVEIS.index(modelo_atual()),
+        key="sel_modelo",
+    )
+    st.session_state["modelo_ia"] = modelo_escolhido
+    st.caption("Troque o modelo aqui — sem mexer no código.")
+    st.markdown("---")
+    st.caption("💡 Gemini 3 Flash é o recomendado: nível Pro no preço de Flash.")
 # ══════════════════ INTERFACE ══════════════════
 tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao = st.tabs(
     ["🎵 Análise e Estudo", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção"]
@@ -1030,14 +1171,13 @@ with tab_analise:
     audio_in = st.file_uploader("📂 Subir arquivo de áudio", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"])
     st.markdown("**— ou —**")
     audio_gravado = st.audio_input("🎤 Gravar voz agora")
-    grav_salvas = st.session_state.get("gravacoes", [])
-    opcoes_grav = ["—"] + [g["nome"] for g in grav_salvas]
+    grav_salvas = get_gravacoes()
+    opcoes_grav = ["—"] + grav_salvas
     usar_grav = st.selectbox("🎙️ Ou usar uma gravação salva", opcoes_grav, key="usar_grav_analise")
     modo = st.radio("Modo", ["Análise completa", "Afinador", "Análise de Cover"], horizontal=True)
     if st.button("Analisar", type="primary"):
         if usar_grav != "—":
-            idx = [g["nome"] for g in grav_salvas].index(usar_grav)
-            fonte = io.BytesIO(grav_salvas[idx]["bytes"])
+            fonte = io.BytesIO(get_gravacao_bytes(usar_grav))
         else:
             fonte = audio_in if audio_in is not None else audio_gravado
         if fonte is None:
@@ -1090,7 +1230,7 @@ with tab_analise:
             devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
             if cliente is not None:
                 ultimo_erro = ""
-                for modelo in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-2.5-flash"]:
+                for modelo in [modelo_atual(), "gemini-3-flash", "gemini-3.5-flash", "gemini-2.5-flash"]:
                     try:
                         interaction = cliente.interactions.create(model=modelo, input=montar_prompt_professor(resultado))
                         devolutiva = interaction.output_text
@@ -1185,12 +1325,10 @@ with tab_afinador:
             nota, cents, status = analisar_afinador(audio, sr, calib_afinador)
             st.success(f"Nota alvo: **{nota}** — {cents:+.1f} cents — {status}")
             st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
-# ── ABA GRAVADOR ──
+# ── ABA GRAVADOR (persistente no Firestore) ──
 with tab_gravador:
-    st.markdown(titulo_secao("🎙️", "Gravador — grave, salve e gerencie suas gravações dentro do app."), unsafe_allow_html=True)
-    if "gravacoes" not in st.session_state:
-        st.session_state["gravacoes"] = []
-    grav_nome = st.text_input("Nome da gravação", placeholder="Ex: Cover Black - 23/09")
+    st.markdown(titulo_secao("🎙️", "Gravador — grave, salve e gerencie suas gravações (salvas na nuvem, Firestore)."), unsafe_allow_html=True)
+    grav_nome = st.text_input("Nome da gravação", placeholder="Ex: Cover Snuff - 23/09")
     grav_audio = st.audio_input("🎤 Gravar agora")
     if st.button("💾 Salvar gravação", type="primary"):
         if grav_audio is None:
@@ -1198,21 +1336,35 @@ with tab_gravador:
         elif not grav_nome.strip():
             st.warning("Dê um nome para a gravação.")
         else:
-            st.session_state["gravacoes"].append({"nome": grav_nome.strip(), "bytes": grav_audio.getvalue()})
-            st.success(f"✅ '{grav_nome.strip()}' salva na biblioteca.")
+            ok = salvar_gravacao_firestore(grav_nome.strip(), grav_audio.getvalue())
+            if ok:
+                st.success(f"✅ '{grav_nome.strip()}' salva na nuvem (Firestore).")
+            else:
+                if "gravacoes" not in st.session_state:
+                    st.session_state["gravacoes"] = []
+                st.session_state["gravacoes"].append({"nome": grav_nome.strip(), "bytes": grav_audio.getvalue()})
+                st.warning("Não foi possível salvar na nuvem — gravação salva temporariamente na sessão. Verifique o Firebase.")
     st.markdown("---")
     st.markdown(titulo_secao("📚", "Minhas gravações"), unsafe_allow_html=True)
-    if not st.session_state["gravacoes"]:
+    gravacoes = get_gravacoes()
+    if not gravacoes:
         st.info("Nenhuma gravação salva ainda. Grave acima e salve.")
     else:
-        for i, g in enumerate(st.session_state["gravacoes"]):
+        for nome in gravacoes:
+            dados = get_gravacao_bytes(nome)
             c1, c2, c3 = st.columns([4, 1, 1])
-            c1.markdown(f"**{g['nome']}**")
-            c2.download_button("⬇️", data=g["bytes"], file_name=f"{g['nome']}.wav", mime="audio/wav", key=f"dl_{i}")
-            if c3.button("🗑️", key=f"delg_{i}"):
-                st.session_state["gravacoes"].pop(i)
-                st.rerun()
-        st.caption("💡 As gravações salvas aparecem na Análise e na Produção (opção 'usar gravação salva').")
+            c1.markdown(f"**{nome}**")
+            if dados:
+                c2.download_button("⬇️", data=dados, file_name=f"{nome}.mp3", mime="audio/mpeg", key=f"dl_{nome}")
+            if c3.button("🗑️", key=f"delg_{nome}"):
+                if excluir_gravacao_firestore(nome):
+                    st.success(f"'{nome}' excluída da nuvem.")
+                    st.rerun()
+                else:
+                    if "gravacoes" in st.session_state:
+                        st.session_state["gravacoes"] = [g for g in st.session_state["gravacoes"] if g["nome"] != nome]
+                    st.rerun()
+        st.caption("💡 As gravações aparecem na Análise, na Produção e a Laranjinha pode avaliá-las pelo nome.")
 # ── ABA HISTÓRICO ──
 with tab_historico:
     st.markdown(titulo_secao("📊", "Evolução da sua performance — salva no Firebase."), unsafe_allow_html=True)
@@ -1368,8 +1520,8 @@ with tab_producao:
     prod_in = st.file_uploader("📂 Subir gravação (voz + violão)", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="producao")
     st.markdown("**— ou —**")
     prod_grav = st.audio_input("🎤 Gravar música agora")
-    grav_salvas_prod = st.session_state.get("gravacoes", [])
-    opcoes_grav_prod = ["—"] + [g["nome"] for g in grav_salvas_prod]
+    grav_salvas_prod = get_gravacoes()
+    opcoes_grav_prod = ["—"] + grav_salvas_prod
     usar_grav_prod = st.selectbox("🎙️ Ou usar uma gravação salva", opcoes_grav_prod, key="usar_grav_prod")
     st.markdown(titulo_secao("2️⃣", "Estilo e geração"), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
@@ -1381,8 +1533,7 @@ with tab_producao:
     com_acordes = st.checkbox("🎹 Gerar acordes (backing mais musical)", value=True)
     if st.button("🎛️ Gerar produção", type="primary"):
         if usar_grav_prod != "—":
-            idx = [g["nome"] for g in grav_salvas_prod].index(usar_grav_prod)
-            fonte_prod = io.BytesIO(grav_salvas_prod[idx]["bytes"])
+            fonte_prod = io.BytesIO(get_gravacao_bytes(usar_grav_prod))
         else:
             fonte_prod = prod_in if prod_in is not None else prod_grav
         if fonte_prod is None:
@@ -1510,7 +1661,7 @@ with st.popover("🍊", use_container_width=False):
     if col_l.button("🗑️", key="limpar_chat", help="Limpar conversa"):
         st.session_state["chat_hist"] = []
         st.rerun()
-    st.caption("Dicas de canto, geração de letra, afinação, tom e exercícios.")
+    st.caption("Dicas de canto, geração de letra, afinação, tom e exercícios. Peça: 'avalia a gravação [nome]'.")
     if "chat_hist" not in st.session_state:
         st.session_state["chat_hist"] = []
     for msg in st.session_state["chat_hist"][-12:]:
