@@ -9,4 +9,3 @@ av
 google-genai
 firebase-admin
 lameenc
-aubio
