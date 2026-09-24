@@ -918,10 +918,52 @@ def gerar_escala(nota, calibracao):
         trechos.append(sinal * env)
         trechos.append(silencio)
     return (sr, np.concatenate(trechos).astype(np.float32))
-# ══════════════════ ASSISTENTE VIRTUAL (Gemini, com áudio) ══════════════════
+# ══════════════════ CHAMADA GEMINI COM FALLBACK AUTOMÁTICO ══════════════════
+def chamar_gemini_com_fallback(prompt, audio_anexo=None):
+    """Tenta os modelos em ordem até um responder de verdade.
+    Retorna (texto, modelo_usado) ou (None, ultimo_erro)."""
+    if cliente is None:
+        return None, "Gemini não configurado."
+    modelos_tentar = [modelo_atual()] + [m for m in MODELOS_DISPONIVEIS if m != modelo_atual()]
+    arquivo = None
+    if audio_anexo is not None:
+        try:
+            from google.genai import types
+            nome, dados = audio_anexo
+            arquivo = cliente.files.upload(
+                file=io.BytesIO(dados),
+                config=types.UploadFileConfig(mime_type="audio/mpeg", display_name=nome),
+            )
+            for _ in range(30):
+                estado = cliente.files.get(name=arquivo.name)
+                if estado.state.name == "ACTIVE":
+                    break
+                time.sleep(1)
+        except Exception as e:
+            return None, f"Falha ao enviar o áudio: {e}"
+    ultimo_erro = ""
+    for modelo in modelos_tentar:
+        try:
+            if arquivo is not None:
+                from google.genai import types
+                resposta = cliente.models.generate_content(
+                    model=modelo,
+                    contents=[prompt, types.Part.from_uri(file_uri=arquivo.uri, mime_type="audio/mpeg")],
+                )
+            else:
+                resposta = cliente.models.generate_content(model=modelo, contents=prompt)
+            texto = resposta.text
+            if texto and texto.strip():
+                return texto, modelo
+            ultimo_erro = "Resposta vazia"
+        except Exception as e:
+            ultimo_erro = str(e)
+            continue
+    return None, ultimo_erro
+# ══════════════════ ASSISTENTE VIRTUAL (Gemini, com áudio e fallback) ══════════════════
 def assistente_resposta(prompt_usuario):
     """Laranjinha — responde texto e, se o usuário pedir para avaliar uma gravação salva,
-    envia o áudio real para o Gemini ouvir e avaliar."""
+    envia o áudio real para o Gemini ouvir e avaliar. Testa os modelos automaticamente."""
     if cliente is None:
         return "A Laranjinha está indisponível (configure a chave Gemini)."
     sistema = (
@@ -931,7 +973,6 @@ def assistente_resposta(prompt_usuario):
         "sustentação), gerar letras e composições a partir de uma descrição (com cifras e seções), "
         "e orientar sobre afinação, tom e exercícios vocais. Seja específico e encorajador."
     )
-    # ── Detecta se o usuário pediu para avaliar uma gravação salva ──
     audio_anexo = None
     texto = prompt_usuario.lower()
     for nome in get_gravacoes():
@@ -943,38 +984,21 @@ def assistente_resposta(prompt_usuario):
                 return (f"Achei a gravação '{nome}' na lista, mas não consegui carregar o áudio do banco. "
                         f"Salve a gravação de novo na aba Gravador e tente outra vez.")
             break
-    try:
-        modelo = modelo_atual()
-        if audio_anexo is not None:
-            nome, dados = audio_anexo
-            try:
-                from google.genai import types
-                arquivo = cliente.files.upload(
-                    file=io.BytesIO(dados),
-                    config=types.UploadFileConfig(mime_type="audio/mpeg", display_name=nome),
-                )
-                for _ in range(30):
-                    estado = cliente.files.get(name=arquivo.name)
-                    if estado.state.name == "ACTIVE":
-                        break
-                    time.sleep(1)
-                resposta = cliente.models.generate_content(
-                    model=modelo,
-                    contents=[
-                        sistema + f"\n\nO usuário pediu: {prompt_usuario}\n\nOuça a gravação '{nome}' e faça uma avaliação completa do canto: afinação, notas, técnica, pontos fortes e pontos a melhorar. Seja específico e encorajador.",
-                        types.Part.from_uri(file_uri=arquivo.uri, mime_type="audio/mpeg"),
-                    ],
-                )
-                return resposta.text
-            except Exception as e:
-                return f"Consegui achar a gravação '{nome}', mas não consegui enviar o áudio para análise agora ({e}). Tente novamente ou use o modelo Flash."
-        resposta = cliente.models.generate_content(
-            model=modelo,
-            contents=sistema + "\n\nPergunta: " + prompt_usuario,
-        )
-        return resposta.text
-    except Exception as e:
-        return f"Erro ao chamar o assistente: {e}"
+    if audio_anexo is not None:
+        nome, _ = audio_anexo
+        prompt = (sistema + f"\n\nO usuário pediu: {prompt_usuario}\n\n"
+                  f"Ouça a gravação '{nome}' e faça uma avaliação completa do canto: afinação, notas, "
+                  f"técnica, pontos fortes e pontos a melhorar. Seja específico e encorajador.")
+        texto_resp, modelo = chamar_gemini_com_fallback(prompt, audio_anexo)
+        if texto_resp:
+            return texto_resp
+        return (f"Consegui achar a gravação '{nome}', mas nenhum modelo conseguiu analisá-la agora "
+                f"({modelo}). Tente novamente em instantes.")
+    prompt = sistema + "\n\nPergunta: " + prompt_usuario
+    texto_resp, modelo = chamar_gemini_com_fallback(prompt)
+    if texto_resp:
+        return texto_resp
+    return f"Erro ao chamar o assistente: {modelo}"
 # ══════════════════ ANÁLISE DE COVER (gravação completa) ══════════════════
 def analisar_cover(audio, sr, calibracao=440.0):
     """Analisa a gravação inteira (voz + instrumental) e verifica se está casando com o tom."""
@@ -1171,21 +1195,21 @@ if os.path.exists(LOGO_PATH):
     col_logo.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="height:70px;width:auto;border-radius:12px;box-shadow:0 8px 28px rgba(249,115,22,0.3);">', unsafe_allow_html=True)
 else:
     col_logo.markdown("# 🍊 Orange Harmony")
-st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Seu professor de canto com IA — analise sua voz, afine e evolua.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
-# ══════════════════ SELETOR DE MODELO DE IA (sem editar código) ══════════════════
-with st.sidebar:
-    st.markdown("### 🍊 Orange Harmony")
-    st.markdown("#### 🤖 Modelo de IA")
-    modelo_escolhido = st.selectbox(
-        "Modelo",
-        MODELOS_DISPONIVEIS,
-        index=MODELOS_DISPONIVEIS.index(modelo_atual()) if modelo_atual() in MODELOS_DISPONIVEIS else 0,
-        key="sel_modelo",
-    )
-    st.session_state["modelo_ia"] = modelo_escolhido
-    st.caption("Troque o modelo aqui — sem mexer no código.")
-    st.markdown("---")
-    st.caption("💡 O app lista automaticamente os modelos liberados na sua chave.")
+# ══════════════════ SUBTÍTULO + SELETOR DE MODELO (sutil, botão 🤖) ══════════════════
+col_sub, col_sel = st.columns([4, 1])
+with col_sub:
+    st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Seu professor de canto com IA — analise sua voz, afine e evolua.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
+with col_sel:
+    with st.popover("🤖", help="Escolher modelo de IA"):
+        st.markdown("**Modelo de IA**")
+        modelo_escolhido = st.selectbox(
+            "Modelo",
+            MODELOS_DISPONIVEIS,
+            index=MODELOS_DISPONIVEIS.index(modelo_atual()) if modelo_atual() in MODELOS_DISPONIVEIS else 0,
+            key="sel_modelo",
+        )
+        st.session_state["modelo_ia"] = modelo_escolhido
+        st.caption("Se um modelo falhar, o app testa o próximo sozinho.")
 # ══════════════════ INTERFACE ══════════════════
 tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao = st.tabs(
     ["🎵 Análise e Estudo", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção"]
@@ -1266,18 +1290,11 @@ with tab_analise:
             resultado = analisar_afinacao(f0_limpo, tempos, calibracao, nota_ref=nota_ref)
             devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
             if cliente is not None:
-                ultimo_erro = ""
-                modelos_tentar = [modelo_atual()] + [m for m in MODELOS_DISPONIVEIS if m != modelo_atual()]
-                for modelo in modelos_tentar:
-                    try:
-                        resposta = cliente.models.generate_content(model=modelo, contents=montar_prompt_professor(resultado))
-                        devolutiva = resposta.text
-                        break
-                    except Exception as e:
-                        ultimo_erro = str(e)
-                        continue
-                if devolutiva.startswith("[!]"):
-                    devolutiva = f"[!] Professor indisponível. Detalhe do erro: {ultimo_erro}"
+                texto_resp, modelo = chamar_gemini_com_fallback(montar_prompt_professor(resultado))
+                if texto_resp:
+                    devolutiva = texto_resp
+                else:
+                    devolutiva = f"[!] Professor indisponível. Detalhe do erro: {modelo}"
             try:
                 registrar_analise_firestore(resultado, modo)
             except Exception as e:
@@ -1363,30 +1380,38 @@ with tab_afinador:
             nota, cents, status = analisar_afinador(audio, sr, calib_afinador)
             st.success(f"Nota alvo: **{nota}** — {cents:+.1f} cents — {status}")
             st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
-# ── ABA GRAVADOR (persistente no Firestore) ──
+# ── ABA GRAVADOR (persistente no Firestore, com upload) ──
 with tab_gravador:
-    st.markdown(titulo_secao("🎙️", "Gravador — grave, salve e gerencie suas gravações (salvas na nuvem, Firestore)."), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🎙️", "Gravador — grave ou suba um áudio, salve e gerencie suas gravações (salvas na nuvem, Firestore)."), unsafe_allow_html=True)
     grav_nome = st.text_input("Nome da gravação", placeholder="Ex: Cover Snuff - 23/09")
     grav_audio = st.audio_input("🎤 Gravar agora")
+    st.markdown("**— ou —**")
+    grav_upload = st.file_uploader("📂 Subir arquivo de áudio para salvar", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="grav_upload")
     if st.button("💾 Salvar gravação", type="primary"):
-        if grav_audio is None:
-            st.warning("Grave um áudio primeiro.")
-        elif not grav_nome.strip():
-            st.warning("Dê um nome para a gravação.")
+        fonte_grav = grav_audio if grav_audio is not None else grav_upload
+        if fonte_grav is None:
+            st.warning("Grave um áudio ou suba um arquivo primeiro.")
         else:
-            ok = salvar_gravacao_firestore(grav_nome.strip(), grav_audio.getvalue())
-            if ok:
-                st.success(f"✅ '{grav_nome.strip()}' salva na nuvem (Firestore).")
+            nome_grav = grav_nome.strip()
+            if not nome_grav:
+                nome_arquivo = getattr(grav_upload, "name", "") if grav_upload is not None else ""
+                nome_grav = os.path.splitext(nome_arquivo)[0].strip() if nome_arquivo else ""
+            if not nome_grav:
+                st.warning("Dê um nome para a gravação.")
             else:
-                if "gravacoes" not in st.session_state:
-                    st.session_state["gravacoes"] = []
-                st.session_state["gravacoes"].append({"nome": grav_nome.strip(), "bytes": grav_audio.getvalue()})
-                st.warning("Não foi possível salvar na nuvem — gravação salva temporariamente na sessão. Verifique o Firebase.")
+                ok = salvar_gravacao_firestore(nome_grav, fonte_grav.getvalue())
+                if ok:
+                    st.success(f"✅ '{nome_grav}' salva na nuvem (Firestore).")
+                else:
+                    if "gravacoes" not in st.session_state:
+                        st.session_state["gravacoes"] = []
+                    st.session_state["gravacoes"].append({"nome": nome_grav, "bytes": fonte_grav.getvalue()})
+                    st.warning("Não foi possível salvar na nuvem — gravação salva temporariamente na sessão. Verifique o Firebase.")
     st.markdown("---")
     st.markdown(titulo_secao("📚", "Minhas gravações"), unsafe_allow_html=True)
     gravacoes = get_gravacoes()
     if not gravacoes:
-        st.info("Nenhuma gravação salva ainda. Grave acima e salve.")
+        st.info("Nenhuma gravação salva ainda. Grave ou suba um áudio acima e salve.")
     else:
         for nome in gravacoes:
             dados = get_gravacao_bytes(nome)
