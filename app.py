@@ -416,48 +416,89 @@ def nota_para_midi(nome, oitava):
 def midi_para_freq(midi, calibracao=440.0):
     return calibracao * 2 ** ((midi - 69) / 12)
 def gerar_kick(sr, volume=0.95):
-    n = int(sr * 0.3)
-    t = np.linspace(0, 0.3, n, endpoint=False)
-    freq = 50 * np.exp(-20 * t) + 40
+    n = int(sr * 0.35)
+    t = np.linspace(0, 0.35, n, endpoint=False)
+    # corpo: sweep de pitch mais profundo e com mais punch
+    freq = 55 * np.exp(-18 * t) + 38
     fase = 2 * np.pi * np.cumsum(freq) / sr
-    sinal = np.sin(fase)
-    click = np.exp(-60 * t) * np.sin(2 * np.pi * 800 * t) * 0.3
-    env = np.exp(-10 * t)
-    return ((sinal + click) * env * volume).astype(np.float32)
+    corpo = np.sin(fase)
+    # ataque: click curto em duas camadas (transiente + "thump")
+    click = np.exp(-90 * t) * np.sin(2 * np.pi * 1000 * t) * 0.25
+    thump = np.exp(-45 * t) * np.sin(2 * np.pi * 120 * t) * 0.35
+    # envelope: ataque instantâneo, decaimento com "sustain" curto
+    env = np.exp(-7 * t) * (1 - np.exp(-2000 * t))
+    sinal = (corpo + click + thump) * env
+    sinal = np.tanh(1.3 * sinal)  # saturação suave dá peso sem distorcer
+    return (sinal * volume).astype(np.float32)
+
 def gerar_snare(sr, volume=0.7):
-    n = int(sr * 0.25)
-    t = np.linspace(0, 0.25, n, endpoint=False)
-    ruido = np.random.default_rng(42).standard_normal(n)
-    ruido_f = np.diff(ruido, prepend=0)
-    tom = np.sin(2 * np.pi * 180 * t) * 0.4
-    corpo = np.sin(2 * np.pi * 320 * t) * np.exp(-30 * t) * 0.3
-    env = np.exp(-16 * t)
-    return ((0.6 * ruido_f + tom + corpo) * env * volume).astype(np.float32)
-def gerar_hat(sr, volume=0.4):
-    n = int(sr * 0.1)
-    t = np.linspace(0, 0.1, n, endpoint=False)
-    ruido = np.random.default_rng(7).standard_normal(n)
-    sinal = np.diff(ruido, prepend=0)
-    env = np.exp(-35 * t)
+    n = int(sr * 0.28)
+    t = np.linspace(0, 0.28, n, endpoint=False)
+    rng = np.random.default_rng(42)
+    ruido = rng.standard_normal(n)
+    # corpo da caixa: dois tons (fundamental + ressonância)
+    tom1 = np.sin(2 * np.pi * 185 * t) * np.exp(-28 * t) * 0.5
+    tom2 = np.sin(2 * np.pi * 330 * t) * np.exp(-35 * t) * 0.3
+    # "esteira": ruído filtrado passa-banda (soa metálico, não chiado)
+    from scipy.signal import butter, lfilter
+    b, a = butter(2, [800 / (sr / 2), 7000 / (sr / 2)], btype="band")
+    esteira = lfilter(b, a, ruido)
+    env_ruido = np.exp(-14 * t)
+    # snap do ataque
+    snap = np.exp(-120 * t) * ruido * 0.4
+    sinal = (0.55 * esteira * env_ruido + tom1 + tom2 + snap)
+    env = (1 - np.exp(-3000 * t)) * np.exp(-9 * t)
     return (sinal * env * volume).astype(np.float32)
+
+def gerar_hat(sr, volume=0.4):
+    n = int(sr * 0.09)
+    t = np.linspace(0, 0.09, n, endpoint=False)
+    rng = np.random.default_rng(7)
+    ruido = rng.standard_normal(n)
+    # passa-alta em ~8kHz: tira o corpo grave e deixa só o "tsss" metálico
+    from scipy.signal import butter, lfilter
+    b, a = butter(2, 8000 / (sr / 2), btype="high")
+    sinal = lfilter(b, a, ruido)
+    # brilho metálico: leve modulação
+    sinal *= (1 + 0.3 * np.sin(2 * np.pi * 40 * t))
+    env = np.exp(-45 * t) * (1 - np.exp(-5000 * t))
+    return (sinal * env * volume).astype(np.float32)
+
 def gerar_crash(sr, volume=0.5):
-    n = int(sr * 1.2)
-    t = np.linspace(0, 1.2, n, endpoint=False)
-    ruido = np.random.default_rng(99).standard_normal(n)
-    sinal = np.diff(ruido, prepend=0)
-    env = np.exp(-2.5 * t)
+    n = int(sr * 1.5)
+    t = np.linspace(0, 1.5, n, endpoint=False)
+    rng = np.random.default_rng(99)
+    ruido = rng.standard_normal(n)
+    from scipy.signal import butter, lfilter
+    # passa-alta mais baixo que o hat (prato tem mais corpo) + shimmer
+    b, a = butter(2, 3500 / (sr / 2), btype="high")
+    sinal = lfilter(b, a, ruido)
+    # shimmer: modulação lenta dá o "sussurro" do prato
+    sinal *= (1 + 0.4 * np.sin(2 * np.pi * 6 * t))
+    env = np.exp(-2.2 * t) * (1 - np.exp(-800 * t))
     return (sinal * env * volume).astype(np.float32)
 def gerar_nota_baixo_encorpada(freq, duracao, sr, volume=0.55):
     n = int(sr * duracao)
     t = np.linspace(0, duracao, n, endpoint=False)
+    # harmônicos + sub-oitava (o sub dá a "carne" que faltava)
     sinal = (np.sin(2 * np.pi * freq * t)
              + 0.5 * np.sin(2 * np.pi * 2 * freq * t)
-             + 0.3 * np.sin(2 * np.pi * 3 * freq * t)
-             + 0.15 * np.sin(2 * np.pi * 4 * freq * t))
-    env = np.exp(-2.0 * t / duracao)
-    sinal = np.tanh(1.5 * sinal * env)
+             + 0.25 * np.sin(2 * np.pi * 3 * freq * t)
+             + 0.4 * np.sin(2 * np.pi * freq * 0.5 * t))
+    # leve vibrato humaniza a nota
+    vibrato = 1 + 0.003 * np.sin(2 * np.pi * 5 * t)
+    sinal = sinal * vibrato
+    # envelope ADSR: ataque rápido, sustain e release suave
+    ataque = int(0.008 * sr)
+    env = np.ones(n)
+    env[:ataque] = np.linspace(0, 1, ataque)
+    release = int(min(0.08 * sr, n * 0.3))
+    env[-release:] *= np.linspace(1, 0, release)
+    env *= np.exp(-1.2 * t / duracao)  # decaimento natural mais lento
+    sinal = np.tanh(1.4 * sinal * env)
     return (sinal * volume).astype(np.float32)
 def gerar_baixo_melodico(audio, sr, tom, bpm, beat_times):
+    """Linha de baixo com groove: notas nos tempos, pausas e dinâmica."""
     sr = int(sr)
     bpm = float(bpm)
     duracao_total = float(len(audio)) / sr
@@ -469,6 +510,7 @@ def gerar_baixo_melodico(audio, sr, tom, bpm, beat_times):
     escala = [raiz_midi + i for i in [0, 2, 4, 5, 7, 9, 11]]
     f0, voiced, _ = librosa.pyin(audio, fmin=80, fmax=1000, sr=sr, frame_length=2048, hop_length=512)
     tempos_f0 = librosa.times_like(f0, sr=sr, hop_length=512)
+
     if beat_times is None or len(beat_times) == 0:
         seg_compasso = 60.0 / bpm * 4
         n_compassos = max(1, int(np.ceil(duracao_total / seg_compasso)))
@@ -477,11 +519,15 @@ def gerar_baixo_melodico(audio, sr, tom, bpm, beat_times):
                                for c in range(n_compassos) for i in range(8)])
     seg_compasso = 60.0 / bpm * 4
     colcheia = seg_compasso / 8
+
+    rng = np.random.default_rng(42)
+
     def melodia_em(t):
         masc = (tempos_f0 >= t - 0.25) & (tempos_f0 <= t + 0.25) & (f0 > 0)
         if masc.sum() == 0:
             return None
         return float(np.median(f0[masc]))
+
     def nota_baixo_para(freq_mel):
         if freq_mel is None:
             return escala[0]
@@ -497,21 +543,45 @@ def gerar_baixo_melodico(audio, sr, tom, bpm, beat_times):
                         melhor_dist = dist
                         melhor = midi_cand
         return melhor
+
+    # Padrão de groove por posição no compasso (colcheias 0-7):
+    # (toca?, duração em colcheias, volume)
+    padrao_groove = {
+        0: (True, 1.8, 1.00),   # tempo 1 — forte
+        2: (True, 1.8, 0.75),   # tempo 2 — mais suave
+        4: (True, 1.8, 0.90),   # tempo 3 — forte
+        6: (True, 0.9, 0.70),   # tempo 4 — suave e curto
+        7: (True, 0.9, 0.55),   # "e" do 4 — nota de passagem
+    }
+
     for t in beat_times:
         if t >= duracao_total:
             break
         idx = int(t * sr)
         if idx >= n_total:
             break
+        posicao = int(round((t % seg_compasso) / colcheia)) % 8
+        cfg = padrao_groove.get(posicao)
+        if cfg is None or not cfg[0]:
+            continue  # contratempos ficam em silêncio — o baixo respira
+        _, dur_colcheias, volume = cfg
         freq_mel = melodia_em(t)
         midi_nota = nota_baixo_para(freq_mel)
         freq = midi_para_freq(midi_nota)
-        nota = gerar_nota_baixo_encorpada(freq, colcheia * 0.9, sr)
-        fim = min(idx + len(nota), n_total + sr)
-        if fim > idx:
-            trilha[idx:fim] += nota[:fim - idx]
+        # humanização: leve variação de timing e volume
+        jitter = rng.uniform(-0.012, 0.012)
+        vol = volume * rng.uniform(0.92, 1.05)
+        idx_nota = max(0, int((t + jitter) * sr))
+        if idx_nota >= n_total:
+            continue
+        nota = gerar_nota_baixo_encorpada(freq, colcheia * dur_colcheias * 0.92, sr)
+        nota = nota * vol
+        fim = min(idx_nota + len(nota), n_total + sr)
+        if fim > idx_nota:
+            trilha[idx_nota:fim] += nota[:fim - idx_nota]
     return trilha[:n_total]
 def gerar_bateria_ritmica(audio, sr, bpm, beat_times):
+    """Bateria com dinâmica: acentos nos tempos fortes, sem chimbais duplicados."""
     sr = int(sr)
     bpm = float(bpm)
     duracao_total = float(len(audio)) / sr
@@ -527,8 +597,7 @@ def gerar_bateria_ritmica(audio, sr, bpm, beat_times):
     rms = librosa.feature.rms(y=audio, frame_length=2048, hop_length=hop)[0]
     rms_times = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=hop)
     rms_norm = rms / (np.max(rms) + 1e-9)
-    onsets = librosa.onset.onset_detect(y=audio, sr=sr, hop_length=hop)
-    onset_times = librosa.frames_to_time(onsets, sr=sr, hop_length=hop)
+
     if beat_times is None or len(beat_times) == 0:
         seg_compasso = 60.0 / bpm * 4
         n_compassos = max(1, int(np.ceil(duracao_total / seg_compasso)))
@@ -537,14 +606,19 @@ def gerar_bateria_ritmica(audio, sr, bpm, beat_times):
                                for c in range(n_compassos) for i in range(8)])
     seg_compasso = 60.0 / bpm * 4
     colcheia = seg_compasso / 8
+
+    rng = np.random.default_rng(7)
+
     def energia_no_tempo(t):
         pos = int(np.searchsorted(rms_times, t))
         pos = min(max(pos, 0), len(rms_norm) - 1)
         return float(rms_norm[pos])
-    def tocar(idx, amostra):
+
+    def tocar(idx, amostra, volume=1.0):
         fim = min(idx + len(amostra), n_total + sr)
         if fim > idx:
-            trilha[idx:fim] += amostra[:fim - idx]
+            trilha[idx:fim] += amostra[:fim - idx] * volume
+
     for t in beat_times:
         if t >= duracao_total:
             break
@@ -553,26 +627,20 @@ def gerar_bateria_ritmica(audio, sr, bpm, beat_times):
             break
         energia = energia_no_tempo(t)
         posicao = int(round((t % seg_compasso) / colcheia)) % 8
-        tocar(idx, hat)
+        # chimbal: forte nos tempos, fraco nos contratempos
+        vol_hat = 0.9 if posicao % 2 == 0 else 0.5
+        tocar(idx, hat, vol_hat * rng.uniform(0.9, 1.05))
         if posicao in (0, 4):
-            tocar(idx, kick)
+            tocar(idx, kick, 1.0 if posicao == 0 else 0.85)
         if posicao in (2, 6) and energia > 0.18:
-            tocar(idx, snare)
+            tocar(idx, snare, 0.9 * rng.uniform(0.9, 1.05))
         if posicao == 0 and int(t // seg_compasso) % 2 == 0:
-            tocar(idx, crash)
-        if energia > 0.55:
+            tocar(idx, crash, 0.7)
+        # quando a energia sobe muito, um chimbal extra sutil (em vez de vários empilhados)
+        if energia > 0.55 and posicao in (6, 7):
             t_extra = t + colcheia / 2
             if t_extra < duracao_total:
-                tocar(int(t_extra * sr), hat)
-    for t_onset in onset_times:
-        if t_onset >= duracao_total:
-            break
-        idx = int(t_onset * sr)
-        if idx >= n_total:
-            break
-        proximo = beat_times[beat_times >= t_onset - 0.05] if len(beat_times) else np.array([])
-        if len(proximo) == 0 or (proximo[0] - t_onset) > 0.12:
-            tocar(idx, hat)
+                tocar(int(t_extra * sr), hat, 0.55)
     return trilha[:n_total]
 # ── Acordes (backing mais musical) ──
 def gerar_progressao(tom):
@@ -584,10 +652,23 @@ def gerar_acorde_encorpado(freqs, duracao, sr, volume=0.30):
     n = int(sr * duracao)
     t = np.linspace(0, duracao, n, endpoint=False)
     sinal = np.zeros(n)
+    rng = np.random.default_rng(3)
     for f in freqs:
-        sinal += np.sin(2 * np.pi * f * t) + 0.3 * np.sin(2 * np.pi * 2 * f * t)
-    env = np.exp(-1.2 * t / duracao)
-    sinal = np.tanh(1.2 * sinal * env)
+        # detune sutil entre vozes: soa como instrumentos reais (nunca perfeitamente afinados)
+        detune = 1 + rng.uniform(-0.002, 0.002)
+        # forma de onda mais rica: senoide + 2ª harmônica + triangular suave
+        voz = (np.sin(2 * np.pi * f * detune * t)
+               + 0.25 * np.sin(2 * np.pi * 2 * f * detune * t)
+               + 0.12 * np.sin(2 * np.pi * 3 * f * detune * t))
+        sinal += voz
+    # envelope com ataque suave (pad) e release longo
+    ataque = int(0.05 * sr)
+    env = np.ones(n)
+    env[:ataque] = np.linspace(0, 1, ataque) ** 2
+    release = int(min(0.25 * sr, n * 0.35))
+    env[-release:] *= np.linspace(1, 0, release) ** 1.5
+    env *= np.exp(-0.8 * t / duracao)
+    sinal = np.tanh(1.1 * sinal * env)
     return (sinal * volume).astype(np.float32)
 def gerar_acordes_musicais(audio, sr, tom, bpm, beat_times, estilo="Pop"):
     sr = int(sr)
@@ -620,21 +701,40 @@ def gerar_acordes_musicais(audio, sr, tom, bpm, beat_times, estilo="Pop"):
             trilha[idx:fim] += acorde[:fim - idx]
     return trilha[:n_total]
 def mixar(audio, baixo, bateria, acordes=None):
-    total = audio.astype(np.float32)
-    if baixo is not None:
-        total = total + 0.6 * baixo
-    if bateria is not None:
-        total = total + 0.65 * bateria
-    if acordes is not None:
-        total = total + 0.30 * acordes
-    total = np.tanh(1.2 * total)
+    """Mistura com níveis calibrados por trilha e limitador suave (sem distorção)."""
+    total = audio.astype(np.float32).copy()
+
+    # 1) Normaliza a gravação original para um nível saudável de referência
     pico = np.max(np.abs(total)) + 1e-9
-    return (total / pico * 0.95).astype(np.float32)
-def audio_para_bytes(audio, sr):
-    import soundfile as sf
-    buf = io.BytesIO()
-    sf.write(buf, audio, sr, format="WAV")
-    return buf.getvalue()
+    total *= 0.70 / pico
+
+    # 2) Cada trilha entra normalizada (pico 1.0) e com ganho calibrado
+    def adicionar(trilha, ganho):
+        if trilha is None:
+            return
+        t = np.asarray(trilha, dtype=np.float32)
+        pico_t = np.max(np.abs(t)) + 1e-9
+        t = t / pico_t
+        n = min(len(total), len(t))
+        total[:n] += ganho * t[:n]
+
+    adicionar(baixo, 0.28)
+    adicionar(bateria, 0.32)
+    adicionar(acordes, 0.16)
+
+    # 3) Limitador suave: comprime só o que passar do teto, sem saturar o resto
+    limite = 0.95
+    acima = np.abs(total) > limite
+    if np.any(acima):
+        sinal = np.sign(total[acima])
+        excesso = np.abs(total[acima]) - limite
+        total[acima] = sinal * (limite + excesso * 0.15)
+
+    # 4) Teto de segurança final
+    pico_final = np.max(np.abs(total)) + 1e-9
+    if pico_final > 1.0:
+        total = total / pico_final
+    return total.astype(np.float32)
 # ══════════════════ COMPONENTES VISUAIS (glassmorphism) ══════════════════
 def card_html(conteudo, classe="oh-card"):
     return f'<div class="{classe}">{conteudo}</div>'
