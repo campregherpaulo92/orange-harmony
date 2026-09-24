@@ -1319,16 +1319,8 @@ st.markdown("""
         font-family: 'Inter', sans-serif !important;
     }
 
-    /* ═══ LARANJINHA — balão fixo, laranja e animado ═══ */
-    [data-testid="stPopoverBody"] {
-        position: fixed !important;
-        bottom: 175px !important;
-        right: 24px !important;
-        left: auto !important;
-        width: 400px !important;
-        max-width: calc(100vw - 48px) !important;
-        max-height: 62vh !important;
-        overflow-y: auto !important;
+        /* ═══ LARANJINHA — diálogo fixo, laranja e animado ═══ */
+    [role="dialog"], [data-testid="stDialog"] {
         background: linear-gradient(165deg, rgba(35,22,10,0.97), rgba(18,12,6,0.98)) !important;
         border: 1px solid rgba(249,115,22,0.35) !important;
         border-radius: 20px !important;
@@ -1340,13 +1332,14 @@ st.markdown("""
         from { opacity: 0; transform: translateY(16px) scale(0.97); }
         to { opacity: 1; transform: none; }
     }
-    [data-testid="stPopoverBody"] .stChatMessage {
+    [role="dialog"] .stChatMessage, [data-testid="stDialog"] .stChatMessage {
         background: rgba(255,255,255,0.04) !important;
         border-radius: 14px !important;
         border: 1px solid rgba(255,255,255,0.06) !important;
         margin-bottom: 8px !important;
     }
-    [data-testid="stPopoverBody"] .stChatMessage[data-testid="stChatMessageAssistant"] {
+    [role="dialog"] .stChatMessage[data-testid="stChatMessageAssistant"],
+    [data-testid="stDialog"] .stChatMessage[data-testid="stChatMessageAssistant"] {
         background: linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.03)) !important;
         border: 1px solid rgba(249,115,22,0.22) !important;
     }
@@ -1366,17 +1359,16 @@ col_sub, col_sel = st.columns([4, 1])
 with col_sub:
     st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Seu professor de canto com IA — analise sua voz, afine e evolua.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
 with col_sel:
-    with st.popover("🤖", help="Escolher modelo de IA"):
-        st.markdown("**Modelo de IA**")
-        modelo_escolhido = st.selectbox(
-            "Modelo",
-            MODELOS_DISPONIVEIS,
-            index=MODELOS_DISPONIVEIS.index(modelo_atual()) if modelo_atual() in MODELOS_DISPONIVEIS else 0,
-            key="sel_modelo",
-        )
-        st.session_state["modelo_ia"] = modelo_escolhido
-        st.caption("Se um modelo falhar, o app testa o próximo sozinho.")
-# ══════════════════ INTERFACE ══════════════════
+    st.markdown("🤖 Modelo")
+    modelo_escolhido = st.selectbox(
+        "Modelo de IA",
+        MODELOS_DISPONIVEIS,
+        index=MODELOS_DISPONIVEIS.index(modelo_atual()) if modelo_atual() in MODELOS_DISPONIVEIS else 0,
+        key="sel_modelo",
+        label_visibility="collapsed",
+    )
+    st.session_state["modelo_ia"] = modelo_escolhido
+    st.caption("Se um modelo falhar, o app testa o próximo sozinho.")# ══════════════════ INTERFACE ══════════════════
 tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao = st.tabs(
     ["🎵 Análise e Estudo", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção"]
 )
@@ -1806,81 +1798,15 @@ with tab_producao:
         )
         st.info("💡 A separação de stems (voz/violão separados) exige GPU e roda no Colab — o link do notebook fica no README.")
         # ══════════════════ ASSISTENTE VIRTUAL (laranjinha com memória e chats) ══════════════════
+# ══════════════════ ASSISTENTE VIRTUAL (laranjinha com memória e chats) ══════════════════
 LARANJINHA_PATH = "laranjinha.png"
+laranjinha_b64 = ""
 if os.path.exists(LARANJINHA_PATH):
     with open(LARANJINHA_PATH, "rb") as f:
         laranjinha_b64 = base64.b64encode(f.read()).decode()
-    st.html(f"""
-    <style>
-    @keyframes ohBounce {{
-        0%, 100% {{ transform: translateY(0); }}
-        50% {{ transform: translateY(-12px); }}
-    }}
-    [data-testid="stPopover"] button {{
-        background-image: url("data:image/png;base64,{laranjinha_b64}") !important;
-        background-size: contain !important;
-        background-position: center !important;
-        background-repeat: no-repeat !important;
-        background-color: transparent !important;
-        border: none !important;
-        outline: none !important;
-        padding: 0 !important;
-        width: 120px !important;
-        height: 120px !important;
-        border-radius: 50% !important;
-        position: fixed !important;
-        bottom: 28px !important;
-        right: 24px !important;
-        left: auto !important;
-        z-index: 9999 !important;
-        font-size: 0 !important;
-        color: transparent !important;
-        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
-        animation: ohBounce 2s ease-in-out infinite !important;
-    }}
-    [data-testid="stPopover"] button:hover {{
-        animation-play-state: paused !important;
-        transform: scale(1.08);
-    }}
-    </style>
-    <script>
-    (function() {{
-        var url = "data:image/png;base64,{laranjinha_b64}";
-        var tentativas = 0;
-        var timer = setInterval(function() {{
-            var btn = document.querySelector('[data-testid="stPopover"] button');
-            if (btn) {{
-                btn.style.backgroundImage = 'url("' + url + '")';
-                btn.style.backgroundSize = 'contain';
-                btn.style.backgroundPosition = 'center';
-                btn.style.backgroundRepeat = 'no-repeat';
-                btn.style.backgroundColor = 'transparent';
-                btn.style.border = 'none';
-                btn.style.outline = 'none';
-                btn.style.padding = '0';
-                btn.style.width = '120px';
-                btn.style.height = '120px';
-                btn.style.borderRadius = '50%';
-                btn.style.position = 'fixed';
-                btn.style.bottom = '28px';
-                btn.style.right = '24px';
-                btn.style.left = 'auto';
-                btn.style.zIndex = '9999';
-                btn.style.fontSize = '0';
-                btn.style.color = 'transparent';
-                btn.style.boxShadow = '0 8px 30px rgba(249,115,22,0.55)';
-                btn.style.animation = 'ohBounce 2s ease-in-out infinite';
-                clearInterval(timer);
-            }} else if (tentativas > 20) {{
-                clearInterval(timer);
-            }}
-            tentativas++;
-        }}, 500);
-    }})();
-    </script>
-    """)
 
-with st.popover("🍊", use_container_width=False):
+@st.dialog("🍊 Laranjinha", width="large")
+def laranjinha_dialog():
     col_t, col_l = st.columns([3, 1])
     col_t.markdown("**🍊 Laranjinha — Assistente do Orange Harmony**")
     if col_l.button("🗑️", key="limpar_chat_btn", help="Limpar conversa atual"):
@@ -1902,7 +1828,6 @@ with st.popover("🍊", use_container_width=False):
     else:
         idx = 0
     sel_nome = st.selectbox("Chat (um por música)", nomes_opcoes, index=idx, key="sel_chat")
-    # Só troca de chat quando o usuário MUDAR a seleção (nunca no primeiro render)
     if sel_nome:
         sel_id = opcoes_chat[sel_nome]
         if st.session_state.get("sel_chat_prev") != sel_nome:
@@ -1931,7 +1856,7 @@ with st.popover("🍊", use_container_width=False):
     for msg in st.session_state["chat_hist"][-20:]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-    # ── Campo de mensagem (fica sempre por último, dentro do balão) ──
+    # ── Campo de mensagem (fica sempre por último) ──
     pergunta = st.text_input("Escreva sua mensagem...", key="laranjinha_input", label_visibility="collapsed")
     if st.button("Enviar", key="enviar_chat_btn", type="primary"):
         if pergunta.strip():
@@ -1946,4 +1871,62 @@ with st.popover("🍊", use_container_width=False):
             chat_atual = st.session_state.get("chat_atual_id")
             if chat_atual:
                 salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
+            st.session_state["laranjinha_input"] = ""
             st.rerun()
+
+# ── Botão flutuante da Laranjinha (ícone laranja fixo) ──
+if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
+    laranjinha_dialog()
+
+if laranjinha_b64:
+    st.html(f"""
+    <style>
+    @keyframes ohBounce {{
+        0%, 100% {{ transform: translateY(0); }}
+        50% {{ transform: translateY(-12px); }}
+    }}
+    </style>
+    <script>
+    (function() {{
+        var url = "data:image/png;base64,{laranjinha_b64}";
+        var tentativas = 0;
+        var timer = setInterval(function() {{
+            var btns = document.querySelectorAll('button');
+            var alvo = null;
+            for (var i = 0; i < btns.length; i++) {{
+                var txt = (btns[i].textContent || '').trim();
+                if (txt === '🍊') {{
+                    alvo = btns[i];
+                    break;
+                }}
+            }}
+            if (alvo) {{
+                alvo.style.backgroundImage = 'url("' + url + '")';
+                alvo.style.backgroundSize = 'contain';
+                alvo.style.backgroundPosition = 'center';
+                alvo.style.backgroundRepeat = 'no-repeat';
+                alvo.style.backgroundColor = 'transparent';
+                alvo.style.border = 'none';
+                alvo.style.outline = 'none';
+                alvo.style.padding = '0';
+                alvo.style.width = '120px';
+                alvo.style.height = '120px';
+                alvo.style.borderRadius = '50%';
+                alvo.style.position = 'fixed';
+                alvo.style.bottom = '28px';
+                alvo.style.right = '24px';
+                alvo.style.left = 'auto';
+                alvo.style.zIndex = '9999';
+                alvo.style.fontSize = '0';
+                alvo.style.color = 'transparent';
+                alvo.style.boxShadow = '0 8px 30px rgba(249,115,22,0.55)';
+                alvo.style.animation = 'ohBounce 2s ease-in-out infinite';
+                clearInterval(timer);
+            }} else if (tentativas > 20) {{
+                clearInterval(timer);
+            }}
+            tentativas++;
+        }}, 500);
+    }})();
+    </script>
+    """)
