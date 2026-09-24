@@ -1808,15 +1808,13 @@ def _encontrar_laranjinha():
             caminho = os.path.join(pasta, nome) if pasta else nome
             if os.path.exists(caminho):
                 return caminho
-    # Busca recursiva por PNG com nome parecido
     for raiz, _, arquivos in os.walk("."):
         if raiz.count(os.sep) > 2:
             continue
         for arq in arquivos:
             if arq.lower().endswith(".png") and any(
-                p in arq.lower() for p in ["laranj", "orange", "mascote", "generated_image"]):
+                p in arq.lower() for p in ["laranj", "orange", "mascote"]):
                 return os.path.join(raiz, arq)
-    # ÚLTIMO RECURSO: qualquer PNG na raiz
     for arq in os.listdir("."):
         if arq.lower().endswith(".png"):
             return arq
@@ -1916,64 +1914,25 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha (SEMPRE visível) ──
+# ── Botão flutuante da Laranjinha (st.markdown + estilo inline → SEM iframe) ──
 if laranjinha_b64:
-    fab_html = """
-    <style>
-    @keyframes ohBounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-12px); }
-    }
-    .laranjinha-fab {
-        position: fixed !important;
-        bottom: 28px !important;
-        right: 24px !important;
-        width: 120px !important;
-        height: 120px !important;
-        border-radius: 50% !important;
-        background: url("data:image/png;base64,""" + laranjinha_b64 + """) center/contain no-repeat !important;
-        background-color: transparent !important;
-        border: none !important;
-        cursor: pointer !important;
-        z-index: 10002 !important;
-        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
-        animation: ohBounce 2s ease-in-out infinite !important;
-        display: block !important;
-    }
-    .laranjinha-fab:hover { transform: scale(1.08) !important; }
-    </style>
-    <a class="laranjinha-fab" href="?laranjinha=1" aria-label="Abrir Laranjinha"></a>
-    """
+    fab_html = (
+        '<a href="?laranjinha=1" aria-label="Abrir Laranjinha" '
+        'style="position:fixed;bottom:28px;right:24px;width:120px;height:120px;'
+        'border-radius:50%;z-index:99999;display:block;cursor:pointer;'
+        'background:url(data:image/png;base64,' + laranjinha_b64 + ') center/contain no-repeat;'
+        'background-color:transparent;border:none;'
+        'box-shadow:0 8px 30px rgba(249,115,22,0.55);"></a>'
+    )
 else:
-    fab_html = """
-    <style>
-    @keyframes ohBounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-12px); }
-    }
-    .laranjinha-fab-emoji {
-        position: fixed !important;
-        bottom: 28px !important;
-        right: 24px !important;
-        width: 120px !important;
-        height: 120px !important;
-        border-radius: 50% !important;
-        background: rgba(249,115,22,0.9) !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        font-size: 60px !important;
-        color: #fff !important;
-        text-decoration: none !important;
-        z-index: 10002 !important;
-        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
-        animation: ohBounce 2s ease-in-out infinite !important;
-        cursor: pointer !important;
-    }
-    </style>
-    <a class="laranjinha-fab-emoji" href="?laranjinha=1" aria-label="Abrir Laranjinha">🍊</a>
-    """
-st.html(fab_html)
+    fab_html = (
+        '<a href="?laranjinha=1" aria-label="Abrir Laranjinha" '
+        'style="position:fixed;bottom:28px;right:24px;width:120px;height:120px;'
+        'border-radius:50%;z-index:99999;display:flex;align-items:center;justify-content:center;'
+        'background:rgba(249,115,22,0.9);font-size:60px;text-decoration:none;color:#fff;'
+        'box-shadow:0 8px 30px rgba(249,115,22,0.55);">🍊</a>'
+    )
+st.markdown(fab_html, unsafe_allow_html=True)
 
 # ── Abre o diálogo: pelo link OU mantém aberto pela sessão ──
 if st.query_params.get("laranjinha") == "1":
@@ -1982,8 +1941,8 @@ if st.query_params.get("laranjinha") == "1":
 if st.session_state.get("laranjinha_aberta"):
     laranjinha_dialog()
 
-# ── CSS do balão do diálogo (sem f-string → chaves normais) ──
-st.html("""
+# ── CSS do balão do diálogo (também via st.markdown, para valer sem iframe) ──
+st.markdown("""
 <style>
 [data-testid="stDialog"] {
     position: fixed !important;
@@ -2033,4 +1992,4 @@ st.html("""
     border: 1px solid rgba(249,115,22,0.22) !important;
 }
 </style>
-""")
+""", unsafe_allow_html=True)
