@@ -1368,7 +1368,7 @@ with col_sel:
         label_visibility="collapsed",
     )
     st.session_state["modelo_ia"] = modelo_escolhido
-    st.caption("Se um modelo falhar, o app testa o próximo sozinho.")# ══════════════════ INTERFACE ══════════════════
+    st.caption("auto")# ══════════════════ INTERFACE ══════════════════
 tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao = st.tabs(
     ["🎵 Análise e Estudo", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção"]
 )
