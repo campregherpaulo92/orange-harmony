@@ -2216,34 +2216,33 @@ st.markdown("""
 """, unsafe_allow_html=True)
 # ── ABA IA COMPOSITORA (geração de música por IA) ──
 def gerar_musica_ia(prompt, duracao_segundos=20):
-    """via MusicGen (Hugging Face)."""
-    import requests
-    from scipy.io import wavfile
+    """Gera música instrumental via MusicGen (Hugging Face, biblioteca oficial)."""
+    try:
+        from huggingface_hub import InferenceClient
+    except ImportError:
+        return None, "Biblioteca ausente. Adicione 'huggingface_hub' ao requirements.txt."
     token = st.secrets.get("HF_TOKEN", "")
     if not token:
         return None, "Configure o HF_TOKEN nos Secrets do Streamlit Cloud (Settings → Secrets)."
-    url = "https://router.huggingface.co/hf-inference/models/facebook/musicgen-small"
-    headers = {"Authorization": f"Bearer {token}"}
-    payload = {"inputs": prompt, "parameters": {"max_new_tokens": int(duracao_segundos * 50)}}
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=600)
+        client = InferenceClient(token=token)
+        audio_bytes = client.text_to_audio(prompt, model="facebook/musicgen-small")
     except Exception as e:
-        return None, f"Erro de conexão: {e}"
-    if resp.status_code == 503:
-        return None, "O modelo está carregando (cold start da primeira vez). Tente de novo em ~1 minuto."
-    if resp.status_code == 429:
-        return None, "Limite de uso gratuito atingido por agora. Tente mais tarde."
-    if resp.status_code != 200:
-        return None, f"Erro da API ({resp.status_code}). Verifique o token nos Secrets."
+        msg = str(e)
+        if "503" in msg or "loading" in msg.lower():
+            return None, "O modelo está carregando (cold start da primeira vez). Tente de novo em ~1 minuto."
+        if "429" in msg:
+            return None, "Limite de uso gratuito atingido por agora. Tente mais tarde."
+        return None, f"Erro da API: {msg[:300]}"
     try:
         import soundfile as sf
-        audio_ia, sr_ia = sf.read(io.BytesIO(resp.content))
+        audio_ia, sr_ia = sf.read(io.BytesIO(audio_bytes))
         if audio_ia.ndim > 1:
             audio_ia = audio_ia.mean(axis=1)
         return (audio_ia.astype(np.float32), int(sr_ia)), None
     except Exception:
         return None, "Resposta inesperada da API."
-
+        
 with tab_ia_compositora:
     st.markdown(titulo_secao("🤖", "IA Compositora"), unsafe_allow_html=True)
     st.caption("Descreva a música que você quer e a IA gera um trecho instrumental pronto. "
