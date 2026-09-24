@@ -1902,9 +1902,11 @@ with st.popover("🍊", use_container_width=False):
     else:
         idx = 0
     sel_nome = st.selectbox("Chat (um por música)", nomes_opcoes, index=idx, key="sel_chat")
+    # Só troca de chat quando o usuário MUDAR a seleção (nunca no primeiro render)
     if sel_nome:
         sel_id = opcoes_chat[sel_nome]
-        if sel_id != chat_atual_id:
+        if st.session_state.get("sel_chat_prev") != sel_nome:
+            st.session_state["sel_chat_prev"] = sel_nome
             st.session_state["chat_atual_id"] = sel_id
             st.session_state["chat_atual_nome"] = sel_nome
             st.session_state["chat_hist"] = carregar_chat_firestore(sel_id)
@@ -1918,6 +1920,7 @@ with st.popover("🍊", use_container_width=False):
             st.session_state["chat_atual_id"] = novo_id
             st.session_state["chat_atual_nome"] = nome_final
             st.session_state["chat_hist"] = []
+            st.session_state["sel_chat_prev"] = nome_final
             st.rerun()
         else:
             st.warning("Não foi possível criar o chat (Firebase?).")
