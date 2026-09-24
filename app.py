@@ -1982,14 +1982,14 @@ st.html(f"""
 }}
 </style>
 <script>
-(function() {{
+(function() {
     var url = "data:image/png;base64,{laranjinha_b64}";
     // Aplica a imagem do mascote no botão flutuante em loop (sobrevive aos re-renders)
-    setInterval(function() {{
+    setInterval(function() {
         var btns = document.querySelectorAll('button');
-        for (var i = 0; i < btns.length; i++) {{
-            if ((btns[i].textContent || '').indexOf('🍊') !== -1) {{
-                var b = btns[i];
+        for (var i = 0; i < btns.length; i++) {
+            var b = btns[i];
+            if ((b.textContent || '').indexOf('🍊') !== -1) {
                 b.style.backgroundImage = 'url("' + url + '")';
                 b.style.backgroundSize = 'contain';
                 b.style.backgroundPosition = 'center';
@@ -2006,23 +2006,33 @@ st.html(f"""
                 b.style.right = '24px';
                 b.style.left = 'auto';
                 b.style.zIndex = '10002';
-                b.style.fontSize = '0';
-                b.style.color = 'transparent';
                 b.style.boxShadow = '0 8px 30px rgba(249,115,22,0.55)';
                 b.style.animation = 'ohBounce 2s ease-in-out infinite';
-            }}
-        }}
-    }}, 700);
+                // Esconde o botão E todos os elementos internos (o emoji 🍊)
+                b.style.fontSize = '0';
+                b.style.color = 'transparent';
+                b.style.lineHeight = '0';
+                b.style.textIndent = '-9999px';
+                var filhos = b.querySelectorAll('*');
+                for (var j = 0; j < filhos.length; j++) {
+                    filhos[j].style.fontSize = '0';
+                    filhos[j].style.color = 'transparent';
+                    filhos[j].style.lineHeight = '0';
+                    filhos[j].style.opacity = '0';
+                }
+            }
+        }
+    }, 700);
     // Auto-expande a caixa de texto para baixo ao digitar/colar
-    function autoGrow() {{
+    function autoGrow() {
         var areas = document.querySelectorAll('[data-testid="stDialog"] textarea');
-        for (var i = 0; i < areas.length; i++) {{
+        for (var i = 0; i < areas.length; i++) {
             areas[i].style.height = 'auto';
             areas[i].style.height = (areas[i].scrollHeight + 4) + 'px';
-        }}
-    }}
+        }
+    }
     document.addEventListener('input', autoGrow);
     setInterval(autoGrow, 600);
-}})();
+})();
 </script>
 """)
