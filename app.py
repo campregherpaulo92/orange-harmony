@@ -1242,7 +1242,7 @@ def converter_audio(audio, sr, formato_destino):
     pcm = (audio * 32767).astype(np.int16).tobytes()
     mp3_bytes = encoder.encode(pcm) + encoder.flush()
     return mp3_bytes, "audio/mpeg", "convertido.mp3"
-    # ══════════════════ CSS / TEMA (glassmorphism premium + Poppins/Inter) ══════════════════
+# ══════════════════ CSS / TEMA (glassmorphism premium + Poppins/Inter) ══════════════════
 st.markdown("""
 <style>
     .stApp {
@@ -1378,17 +1378,13 @@ st.markdown("""
         font-family: 'Inter', sans-serif !important;
     }
     label, .stSelectbox label, .stRadio label, .stTextInput label,
-    .stNumberInput label, .stTextArea label, .stFileUploader label {
+    .stNumberInput label, .stTextArea label {
         font-family: 'Poppins', sans-serif !important;
     }
     .stButton > button, .stDownloadButton > button {
         font-family: 'Poppins', sans-serif !important;
     }
     .stTabs [data-baseweb="tab"] {
-        font-family: 'Poppins', sans-serif !important;
-    }
-    [data-testid="stFileUploader"], [data-testid="stFileUploader"] *,
-    [data-testid="stAudioInput"], [data-testid="stAudioInput"] * {
         font-family: 'Poppins', sans-serif !important;
     }
     .stSelectbox div[data-baseweb="select"] *,
