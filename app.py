@@ -719,7 +719,7 @@ def _freq_para_nota_cents(freq, calibracao=440.0):
 estado_afinador = {"nota": "—", "cents": 0.0, "ativo": False,
                    "calibracao": 440.0, "buffer": np.zeros(0, dtype=np.float32),
                    "hist_freq": [], "nota_estavel": "", "contador_estavel": 0,
-                   "cents_suavizado": 0.0}
+                   "cents_suavizado": 0.0, "contador_sem_sinal": 0}
 def _processar_frame_audio(frame):
     arr = frame.to_ndarray()
     if arr.ndim == 2:
@@ -734,11 +734,12 @@ def _processar_frame_audio(frame):
         buf = buf[-max_len:]
     estado_afinador["buffer"] = buf
     if len(buf) >= 2048:
-        freq = _detectar_pitch_aubio(buf[-2048:], frame.rate)
+        freq = _detectar_pitch_autocorr(buf[-2048:], frame.rate)
         if freq is not None:
+            estado_afinador["contador_sem_sinal"] = 0
             hist = estado_afinador["hist_freq"]
             hist.append(freq)
-            if len(hist) > 8:
+            if len(hist) > 12:
                 hist.pop(0)
             freq_suave = float(np.median(hist))
             nota, cents = _freq_para_nota_cents(freq_suave, estado_afinador["calibracao"])
@@ -747,12 +748,19 @@ def _processar_frame_audio(frame):
             else:
                 estado_afinador["nota_estavel"] = nota
                 estado_afinador["contador_estavel"] = 0
+                estado_afinador["cents_suavizado"] = 0.0
             if estado_afinador["contador_estavel"] >= 3:
                 prev = estado_afinador["cents_suavizado"]
-                estado_afinador["cents_suavizado"] = 0.4 * cents + 0.6 * prev
+                estado_afinador["cents_suavizado"] = 0.3 * cents + 0.7 * prev
                 estado_afinador["nota"] = nota
                 estado_afinador["cents"] = estado_afinador["cents_suavizado"]
                 estado_afinador["ativo"] = True
+        else:
+            estado_afinador["contador_sem_sinal"] += 1
+            if estado_afinador["contador_sem_sinal"] > 8:
+                estado_afinador["ativo"] = False
+    else:
+        estado_afinador["contador_sem_sinal"] += 1
     return frame
 # ══════════════════ PROFESSOR (Gemini) ══════════════════
 def montar_prompt_professor(resultado):
