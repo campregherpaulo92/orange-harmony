@@ -694,6 +694,35 @@ def velocimetro_html(cents, nota):
   <text x="110" y="84" text-anchor="middle" fill="#ffffff" font-size="30" font-weight="800" font-family="Montserrat,Poppins,Inter">{nota}</text>
   <text x="110" y="120" text-anchor="middle" fill="#bbbbbb" font-size="13" font-family="Montserrat,Inter">{cents_c:+.0f} cents · {status}</text>
 </svg></div>'''
+def afinador_simples_html(cents, nota):
+    """Afinador simplificado: nota grande + barra de cents + status colorido."""
+    cents_c = max(-50.0, min(50.0, float(cents)))
+    pos = (cents_c + 50) / 100 * 100
+    if abs(cents_c) <= 10:
+        cor = "#22c55e"
+        status = "AFINADO"
+    elif abs(cents_c) <= 25:
+        cor = "#eab308"
+        status = "PRÓXIMO"
+    else:
+        cor = "#ef4444"
+        status = "DESAFINADO"
+    return f'''
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;
+                background:linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01));
+                backdrop-filter:blur(12px);border-radius:20px;padding:26px 20px;
+                border:1px solid rgba(255,255,255,0.10);box-shadow:0 10px 40px rgba(0,0,0,0.45);">
+        <div style="font-size:58px;font-weight:800;font-family:Montserrat,Poppins,Inter;color:#ffffff;line-height:1;">{nota}</div>
+        <div style="font-size:14px;font-family:Inter;color:#bbbbbb;">{cents_c:+.0f} cents</div>
+        <div style="width:100%;max-width:420px;height:14px;border-radius:7px;
+                    background:linear-gradient(90deg,#ef4444,#eab308,#22c55e,#eab308,#ef4444);
+                    position:relative;margin:8px 0;">
+            <div style="position:absolute;left:50%;top:-4px;bottom:-4px;width:2px;background:rgba(255,255,255,0.7);"></div>
+            <div style="position:absolute;left:{pos}%;top:-6px;width:8px;height:26px;border-radius:4px;
+                        background:{cor};transform:translateX(-50%);box-shadow:0 0 12px {cor};"></div>
+        </div>
+        <div style="font-size:15px;font-weight:700;font-family:Montserrat,Poppins,Inter;color:{cor};letter-spacing:0.05em;">{status}</div>
+    </div>'''
 # ══════════════════ AFINADOR TEMPO REAL (WebRTC) ══════════════════
 def _detectar_pitch_aubio(amostras, sr):
     if not TEM_AUBIO:
@@ -1424,7 +1453,7 @@ with tab_analise:
         if modo == "Afinador":
             nota, cents, status = analisar_afinador(audio, sr_audio, calibracao)
             st.success(f"Nota detectada: **{nota}** — {cents:+.1f} cents — {status}")
-            st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
+            st.markdown(afinador_simples_html(cents, nota), unsafe_allow_html=True)
         elif modo == "Análise de Cover":
             with st.spinner("Analisando a gravação completa (voz + instrumental)..."):
                 cover = analisar_cover(audio, sr_audio, calibracao)
@@ -1543,7 +1572,7 @@ with tab_afinador:
             while webrtc_ctx.state.playing:
                 nota_v = estado_afinador["nota"] if estado_afinador["ativo"] else "—"
                 cents_v = estado_afinador["cents"] if estado_afinador["ativo"] else 0.0
-                placeholder.markdown(velocimetro_html(cents_v, nota_v), unsafe_allow_html=True)
+                placeholder.markdown(afinador_simples_html(cents_v, nota_v), unsafe_allow_html=True)
                 time.sleep(0.15)
                 if time.time() - inicio > 60:
                     break
@@ -1563,7 +1592,7 @@ with tab_afinador:
         else:
             nota, cents, status = analisar_afinador(audio, sr, calib_afinador)
             st.success(f"Nota alvo: **{nota}** — {cents:+.1f} cents — {status}")
-            st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
+            st.markdown(afinador_simples_html(cents, nota), unsafe_allow_html=True)
 # ── ABA GRAVADOR (persistente no Firestore, com upload) ──
 with tab_gravador:
     st.markdown(titulo_secao("🎙️", "Gravador"), unsafe_allow_html=True)
