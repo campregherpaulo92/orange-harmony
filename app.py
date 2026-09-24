@@ -8,6 +8,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
 import streamlit.components.v1 as components
+import aubio
 # ── WebRTC (tempo real) — protegido: se o pacote faltar, o app não quebra ──
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode
@@ -689,23 +690,20 @@ def velocimetro_html(cents, nota):
   <text x="110" y="120" text-anchor="middle" fill="#bbbbbb" font-size="13" font-family="Montserrat,Inter">{cents_c:+.0f} cents · {status}</text>
 </svg></div>'''
 # ══════════════════ AFINADOR TEMPO REAL (WebRTC) ══════════════════
-def _detectar_pitch_autocorr(amostras, sr):
-    n = len(amostras)
-    if n < 256:
+def _detectar_pitch_aubio(amostras, sr):
+    """Detecta pitch com aubio (YIN) — mais rápido e preciso que a autocorrelação."""
+    if len(amostras) < 512:
         return None
-    x = amostras - np.mean(amostras)
-    corr = np.correlate(x, x, mode="full")[n - 1:]
-    lag_min = max(1, int(sr / 1000))
-    lag_max = int(sr / 55)
-    if lag_max >= len(corr):
-        lag_max = len(corr) - 1
-    if lag_max <= lag_min:
-        return None
-    faixa = corr[lag_min:lag_max + 1]
-    pico = int(np.argmax(faixa)) + lag_min
-    if corr[pico] <= 0 or pico <= 0:
-        return None
-    return sr / pico
+    det = estado_afinador.get("detector_aubio")
+    if det is None:
+        det = aubio.pitch("yin", 2048, 512, sr)
+        det.set_unit("Hz")
+        det.set_tolerance(0.8)
+        estado_afinador["detector_aubio"] = det
+    freq = det(amostras.astype(np.float32))[0]
+    if freq and 55 <= freq <= 1000:
+        return float(freq)
+    return None
 def _freq_para_nota_cents(freq, calibracao=440.0):
     midi = 69 + 12 * np.log2(freq / calibracao)
     midi_arred = int(round(midi))
@@ -730,7 +728,7 @@ def _processar_frame_audio(frame):
         buf = buf[-max_len:]
     estado_afinador["buffer"] = buf
     if len(buf) >= 2048:
-        freq = _detectar_pitch_autocorr(buf[-2048:], frame.rate)
+        freq = _detectar_pitch_aubio(buf[-2048:], frame.rate)
         if freq is not None:
             hist = estado_afinador["hist_freq"]
             hist.append(freq)
