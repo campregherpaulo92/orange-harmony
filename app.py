@@ -1911,56 +1911,44 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha ──
-if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
-    st.session_state["laranjinha_aberta"] = True
-
-if st.session_state.get("laranjinha_aberta"):
-    laranjinha_dialog()
-
-# ── CSS do botão com o mascote (concatenação, NÃO f-string → sem erro de chaves) ──
+# ── Botão flutuante da Laranjinha (link <a> com mascote via CSS — método que JÁ funcionou) ──
 if laranjinha_b64:
-    css_botao = """
+    css_fab = """
     <style>
     @keyframes ohBounce {
         0%, 100% { transform: translateY(0); }
         50% { transform: translateY(-12px); }
     }
-    button[title="Abrir Laranjinha"] {
+    .laranjinha-fab {
         position: fixed !important;
         bottom: 28px !important;
         right: 24px !important;
-        left: auto !important;
         width: 120px !important;
         height: 120px !important;
         border-radius: 50% !important;
         background: url("data:image/png;base64,""" + laranjinha_b64 + """) center/contain no-repeat !important;
         background-color: transparent !important;
         border: none !important;
-        outline: none !important;
         cursor: pointer !important;
         z-index: 10002 !important;
         box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
         animation: ohBounce 2s ease-in-out infinite !important;
-        font-size: 0 !important;
-        color: transparent !important;
-        line-height: 0 !important;
-        text-indent: -9999px !important;
-        overflow: hidden !important;
+        display: block !important;
     }
-    button[title="Abrir Laranjinha"]:hover {
+    .laranjinha-fab:hover {
         transform: scale(1.08) !important;
     }
-    button[title="Abrir Laranjinha"] p,
-    button[title="Abrir Laranjinha"] span,
-    button[title="Abrir Laranjinha"] div {
-        font-size: 0 !important;
-        color: transparent !important;
-        opacity: 0 !important;
-    }
     </style>
+    <a class="laranjinha-fab" href="?laranjinha=1" aria-label="Abrir Laranjinha"></a>
     """
-    st.html(css_botao)
+    st.html(css_fab)
+
+# ── Abre o diálogo: pelo link OU mantém aberto pela sessão ──
+if st.query_params.get("laranjinha") == "1":
+    st.session_state["laranjinha_aberta"] = True
+    st.query_params.clear()
+if st.session_state.get("laranjinha_aberta"):
+    laranjinha_dialog()
 
 # ── CSS do balão do diálogo (sem f-string → chaves normais) ──
 st.html("""
