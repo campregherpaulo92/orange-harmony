@@ -1922,11 +1922,8 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha (st.button → abre o chat na hora, sem reload) ──
+# ── Botão flutuante da Laranjinha (abre o chat só quando clicar no botão) ──
 if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
-    st.session_state["laranjinha_aberta"] = True
-
-if st.session_state.get("laranjinha_aberta"):
     laranjinha_dialog()
 
 # ── CSS do botão flutuante (posição fixa, PNG do mascote no próprio botão) ──
