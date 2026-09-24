@@ -7,6 +7,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
+import streamlit.components.v1 as components
 # ── WebRTC (tempo real) — protegido: se o pacote faltar, o app não quebra ──
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode
@@ -1921,50 +1922,56 @@ if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
 if st.session_state.get("laranjinha_aberta"):
     laranjinha_dialog()
 
-# ── CSS do botão com o mascote (mira o botão pelo data-testid do Streamlit) ──
+# ── JS que aplica o mascote no botão (via iframe invisível → alcança o botão real) ──
 if laranjinha_b64:
-    css_fab = """
-    <style>
-    @keyframes ohBounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-12px); }
-    }
-    button[data-testid="baseButton-secondary"] {
-        position: fixed !important;
-        bottom: 28px !important;
-        right: 24px !important;
-        left: auto !important;
-        width: 120px !important;
-        height: 120px !important;
-        border-radius: 50% !important;
-        background: url("data:image/png;base64,""" + laranjinha_b64 + """) center/contain no-repeat !important;
-        background-color: transparent !important;
-        border: none !important;
-        outline: none !important;
-        cursor: pointer !important;
-        z-index: 99999 !important;
-        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
-        animation: ohBounce 2s ease-in-out infinite !important;
-        font-size: 0 !important;
-        color: transparent !important;
-        line-height: 0 !important;
-        text-indent: -9999px !important;
-        overflow: hidden !important;
-    }
-    button[data-testid="baseButton-secondary"]:hover {
-        transform: scale(1.08) !important;
-    }
-    button[data-testid="baseButton-secondary"] p,
-    button[data-testid="baseButton-secondary"] span,
-    button[data-testid="baseButton-secondary"] div {
-        font-size: 0 !important;
-        color: transparent !important;
-        opacity: 0 !important;
-    }
-    </style>
-    """
-    st.markdown(css_fab, unsafe_allow_html=True)
-# ── CSS do balão do diálogo (também via st.markdown, para valer sem iframe) ──
+    components.html(
+        """
+        <script>
+        (function() {
+            var url = "data:image/png;base64,""" + laranjinha_b64 + """;
+            setInterval(function() {
+                var btns = window.parent.document.querySelectorAll('button');
+                for (var i = 0; i < btns.length; i++) {
+                    var b = btns[i];
+                    if ((b.textContent || '').indexOf('🍊') !== -1) {
+                        b.style.backgroundImage = 'url("' + url + '")';
+                        b.style.backgroundSize = 'contain';
+                        b.style.backgroundPosition = 'center';
+                        b.style.backgroundRepeat = 'no-repeat';
+                        b.style.backgroundColor = 'transparent';
+                        b.style.border = 'none';
+                        b.style.outline = 'none';
+                        b.style.padding = '0';
+                        b.style.width = '120px';
+                        b.style.height = '120px';
+                        b.style.borderRadius = '50%';
+                        b.style.position = 'fixed';
+                        b.style.bottom = '28px';
+                        b.style.right = '24px';
+                        b.style.left = 'auto';
+                        b.style.zIndex = '99999';
+                        b.style.boxShadow = '0 8px 30px rgba(249,115,22,0.55)';
+                        b.style.fontSize = '0';
+                        b.style.color = 'transparent';
+                        b.style.lineHeight = '0';
+                        b.style.textIndent = '-9999px';
+                        b.style.overflow = 'hidden';
+                        var filhos = b.querySelectorAll('*');
+                        for (var j = 0; j < filhos.length; j++) {
+                            filhos[j].style.fontSize = '0';
+                            filhos[j].style.color = 'transparent';
+                            filhos[j].style.opacity = '0';
+                        }
+                    }
+                }
+            }, 500);
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
+# ── CSS do balão do diálogo (via st.markdown, para valer sem iframe) ──
 st.markdown("""
 <style>
 [data-testid="stDialog"] {
