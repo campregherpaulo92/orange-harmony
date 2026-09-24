@@ -918,24 +918,31 @@ def assistente_resposta(prompt_usuario):
         if audio_anexo is not None:
             nome, dados = audio_anexo
             try:
-                arquivo = cliente.files.upload(file=io.BytesIO(dados), config={"mime_type": "audio/mpeg", "display_name": nome})
+                from google.genai import types
+                arquivo = cliente.files.upload(
+                    file=io.BytesIO(dados),
+                    config=types.UploadFileConfig(mime_type="audio/mpeg", display_name=nome),
+                )
                 for _ in range(30):
                     estado = cliente.files.get(name=arquivo.name)
                     if estado.state.name == "ACTIVE":
                         break
                     time.sleep(1)
-                interaction = cliente.interactions.create(
+                resposta = cliente.models.generate_content(
                     model=modelo,
-                    input=[
+                    contents=[
                         sistema + f"\n\nO usuário pediu: {prompt_usuario}\n\nOuça a gravação '{nome}' e faça uma avaliação completa do canto: afinação, notas, técnica, pontos fortes e pontos a melhorar. Seja específico e encorajador.",
                         arquivo,
                     ],
                 )
-                return interaction.output_text
+                return resposta.text
             except Exception as e:
                 return f"Consegui achar a gravação '{nome}', mas não consegui enviar o áudio para análise agora ({e}). Tente novamente ou use o modelo Flash."
-        interaction = cliente.interactions.create(model=modelo, input=sistema + "\n\nPergunta: " + prompt_usuario)
-        return interaction.output_text
+        resposta = cliente.models.generate_content(
+            model=modelo,
+            contents=sistema + "\n\nPergunta: " + prompt_usuario,
+        )
+        return resposta.text
     except Exception as e:
         return f"Erro ao chamar o assistente: {e}"
 # ══════════════════ ANÁLISE DE COVER (gravação completa) ══════════════════
@@ -1228,12 +1235,12 @@ with tab_analise:
         else:
             resultado = analisar_afinacao(f0_limpo, tempos, calibracao, nota_ref=nota_ref)
             devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
-            if cliente is not None:
+             if cliente is not None:
                 ultimo_erro = ""
                 for modelo in [modelo_atual(), "gemini-3-flash", "gemini-3.5-flash", "gemini-2.5-flash"]:
                     try:
-                        interaction = cliente.interactions.create(model=modelo, input=montar_prompt_professor(resultado))
-                        devolutiva = interaction.output_text
+                        resposta = cliente.models.generate_content(model=modelo, contents=montar_prompt_professor(resultado))
+                        devolutiva = resposta.text
                         break
                     except Exception as e:
                         ultimo_erro = str(e)
