@@ -1539,10 +1539,16 @@ with tab_afinador:
         )
         if webrtc_ctx.state.playing:
             placeholder = st.empty()
+            inicio = time.time()
             while webrtc_ctx.state.playing:
-                if estado_afinador["ativo"]:
-                    placeholder.markdown(velocimetro_html(estado_afinador["cents"], estado_afinador["nota"]), unsafe_allow_html=True)
+                nota_v = estado_afinador["nota"] if estado_afinador["ativo"] else "—"
+                cents_v = estado_afinador["cents"] if estado_afinador["ativo"] else 0.0
+                placeholder.markdown(velocimetro_html(cents_v, nota_v), unsafe_allow_html=True)
                 time.sleep(0.15)
+                if time.time() - inicio > 60:
+                    break
+        else:
+            st.info("Clique em 'Iniciar' para ativar o microfone e ver a agulha em tempo real.")
     else:
         st.warning(f"Modo tempo real indisponível. Detalhe: {ERRO_WEBRTC}")
     st.markdown(titulo_secao("🎤", "Subir uma nota"), unsafe_allow_html=True)
