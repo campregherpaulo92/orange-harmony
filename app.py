@@ -173,6 +173,66 @@ def get_gravacao_bytes(nome):
         if g["nome"] == nome:
             return g["bytes"]
     return None
+# ══════════════════ CHATS DA LARANJINHA (memória persistente no Firestore) ══════════════════
+COL_CHATS = "orange_harmony_chats"
+
+def criar_chat_firestore(nome):
+    """Cria um novo chat e retorna o id."""
+    if db is None:
+        return None
+    try:
+        doc = db.collection(COL_CHATS).add({
+            "nome": (nome or "Novo chat").strip()[:80],
+            "data": datetime.now().isoformat(),
+            "mensagens": [],
+        })
+        return doc[1].id
+    except Exception:
+        return None
+
+def listar_chats_firestore():
+    """Retorna lista de (nome, chat_id), mais recentes primeiro."""
+    if db is None:
+        return []
+    try:
+        docs = db.collection(COL_CHATS).order_by("data", direction=firestore.Query.DESCENDING).limit(50).stream()
+        return [(d.to_dict().get("nome", "Chat"), d.id) for d in docs]
+    except Exception:
+        return []
+
+def carregar_chat_firestore(chat_id):
+    """Retorna a lista de mensagens de um chat."""
+    if db is None or not chat_id:
+        return []
+    try:
+        doc = db.collection(COL_CHATS).document(chat_id).get()
+        if not doc.exists:
+            return []
+        return doc.to_dict().get("mensagens", [])
+    except Exception:
+        return []
+
+def salvar_chat_firestore(chat_id, mensagens):
+    """Salva as mensagens de um chat (mantém as últimas 60)."""
+    if db is None or not chat_id:
+        return False
+    try:
+        db.collection(COL_CHATS).document(chat_id).update({
+            "mensagens": mensagens[-60:],
+            "data": datetime.now().isoformat(),
+        })
+        return True
+    except Exception:
+        return False
+
+def excluir_chat_firestore(chat_id):
+    if db is None or not chat_id:
+        return False
+    try:
+        db.collection(COL_CHATS).document(chat_id).delete()
+        return True
+    except Exception:
+        return False
 # ── Constantes musicais ──
 NOMES_NOTAS = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 NOTAS_REFERENCIA = [f"{n}{o}" for o in range(2, 6) for n in NOMES_NOTAS]
@@ -944,7 +1004,6 @@ def chamar_gemini_com_fallback(prompt, audio_anexo=None):
     if cliente is None:
         return None, "Gemini não configurado."
     if audio_anexo is not None:
-        # Só modelos com suporte a áudio, na ordem de prioridade
         modelos_tentar = [m for m in MODELOS_COM_AUDIO if m in MODELOS_DISPONIVEIS]
         if not modelos_tentar:
             modelos_tentar = MODELOS_COM_AUDIO
@@ -988,19 +1047,42 @@ def chamar_gemini_com_fallback(prompt, audio_anexo=None):
             ultimo_erro = str(e)
             continue
     return None, ultimo_erro
-# ══════════════════ ASSISTENTE VIRTUAL (Gemini, com áudio e fallback) ══════════════════
-def assistente_resposta(prompt_usuario):
-    """Laranjinha — responde texto e, se o usuário pedir para avaliar uma gravação salva,
-    envia o áudio real para o Gemini ouvir e avaliar. Testa os modelos automaticamente."""
+# ══════════════════ CONHECIMENTO DO APP (memória da Laranjinha) ══════════════════
+CONHECIMENTO_APP = """
+Você é a assistente oficial do Orange Harmony e conhece TODO o aplicativo. Guia completo:
+
+## Abas do aplicativo
+1. **🎵 Análise e Estudo**: Referência de tom (tocar nota ou escala maior antes de cantar), análise da voz (upload de áudio, gravação direta ou gravação salva). Modos: Análise completa (nota predominante, desvio em cents, tendência, % afinado, frases, pausas, curva de pitch e devolutiva do professor), Afinador (nota e cents) e Análise de Cover (tom, BPM, % de notas na escala, veredito). Também detecta vibrato.
+2. **🎸 Afinador**: Afinador de violão/guitarra/voz com várias afinações (padrão, Drop D, Drop C, Drop B, meio tom abaixo, Open G, DADGAD, Open D, Open C, 7 cordas, ukulele), calibração A4 (440/442) e modo tempo real.
+3. **🎙️ Gravador**: Grava ou sobe um áudio, nomeia e salva na nuvem (Firestore). As gravações aparecem na Análise, na Produção e você pode pedir para a Laranjinha avaliá-las pelo nome.
+4. **📊 Histórico**: Evolução da performance salva no Firebase, com tabela e gráfico de desvio médio e % afinado ao longo do tempo. Dá para excluir análises.
+5. **🎼 Composições**: Cria e salva composições com cifras [Am], seções (# Verso, # Refrão) e versionamento (v1, v2...). Dá para ver prévia, salvar e carregar.
+6. **✨ Edição Vocal (IA)**: Ajusta a voz com comandos (ex: "alinha minha voz no tom", "limpa o ruído e deixa mais presente"). Aplica redução de ruído, normalização, ajuste de tom e EQ de presença.
+7. **🔄 Conversor**: Converte áudio entre WAV e MP3.
+8. **🎛️ Produção**: Estúdio que gera backing track (baixo, bateria e acordes) no tom e BPM detectados da gravação, em vários estilos (Pop, Rock, Balada, Sertanejo, Funk, MPB, Gospel, Reggae, Blues, Jazz, Forró, Eletrônica).
+
+## Como você funciona
+- Você avalia gravações salvas quando o usuário pede "avalia a gravação [nome]".
+- Você dá dicas de canto, explicação técnica (pitch, afinação, vibrato, respiração, sustentação), gera letras e composições, e orienta sobre afinação e tom.
+- Responda em português, de forma acolhedora, prática e específica. Seja encorajador.
+"""
+# ══════════════════ ASSISTENTE VIRTUAL (Gemini, com áudio, memória e conhecimento do app) ══════════════════
+def assistente_resposta(prompt_usuario, chat_id=None, historico=None):
+    """Laranjinha — conhece o app, tem memória da conversa e avalia gravações pelo nome."""
     if cliente is None:
         return "A Laranjinha está indisponível (configure a chave Gemini)."
-    sistema = (
-        "Você é a Laranjinha, assistente virtual do Orange Harmony, um app de estudo de canto "
-        "e didática musical com IA. Responda em português, de forma acolhedora e prática. "
-        "Você pode: dar dicas de canto e explicação técnica (pitch, afinação, vibrato, respiração, "
-        "sustentação), gerar letras e composições a partir de uma descrição (com cifras e seções), "
-        "e orientar sobre afinação, tom e exercícios vocais. Seja específico e encorajador."
-    )
+    sistema = CONHECIMENTO_APP
+    # ── Contexto da conversa (últimas mensagens) ──
+    contexto = ""
+    if historico:
+        ultimas = historico[-8:]
+        partes = []
+        for m in ultimas:
+            papel = "Usuário" if m.get("role") == "user" else "Laranjinha"
+            partes.append(f"{papel}: {m.get('content', '')}")
+        if partes:
+            contexto = "\n\nHistórico recente da conversa:\n" + "\n".join(partes)
+    # ── Detecta se o usuário pediu para avaliar uma gravação salva ──
     audio_anexo = None
     texto = prompt_usuario.lower()
     for nome in get_gravacoes():
@@ -1014,7 +1096,7 @@ def assistente_resposta(prompt_usuario):
             break
     if audio_anexo is not None:
         nome, _ = audio_anexo
-        prompt = (sistema + f"\n\nO usuário pediu: {prompt_usuario}\n\n"
+        prompt = (sistema + contexto + f"\n\nO usuário pediu: {prompt_usuario}\n\n"
                   f"Ouça a gravação '{nome}' e faça uma avaliação completa do canto: afinação, notas, "
                   f"técnica, pontos fortes e pontos a melhorar. Seja específico e encorajador.")
         texto_resp, modelo = chamar_gemini_com_fallback(prompt, audio_anexo)
@@ -1022,7 +1104,7 @@ def assistente_resposta(prompt_usuario):
             return texto_resp
         return (f"Consegui achar a gravação '{nome}', mas nenhum modelo conseguiu analisá-la agora "
                 f"({modelo}). Tente novamente em instantes.")
-    prompt = sistema + "\n\nPergunta: " + prompt_usuario
+    prompt = sistema + contexto + "\n\nPergunta: " + prompt_usuario
     texto_resp, modelo = chamar_gemini_com_fallback(prompt)
     if texto_resp:
         return texto_resp
@@ -1217,34 +1299,56 @@ st.markdown("""
     html, body, .stApp, .stApp * {
         font-family: 'Inter', sans-serif !important;
     }
-
-    /* Rótulos dos campos (Nota de referência, Calibração, Nome da gravação...) */
     label, .stSelectbox label, .stRadio label, .stTextInput label,
     .stNumberInput label, .stTextArea label, .stFileUploader label {
         font-family: 'Poppins', sans-serif !important;
     }
-
-    /* Texto dos botões (Analisar, Salvar gravação, Converter...) */
     .stButton > button, .stDownloadButton > button {
         font-family: 'Poppins', sans-serif !important;
     }
-
-    /* Abas (Afinador, Gravador, Histórico...) */
     .stTabs [data-baseweb="tab"] {
         font-family: 'Poppins', sans-serif !important;
     }
-
-    /* Upload (Subir arquivo) e Gravação (Gravar voz agora) */
     [data-testid="stFileUploader"], [data-testid="stFileUploader"] *,
     [data-testid="stAudioInput"], [data-testid="stAudioInput"] * {
         font-family: 'Poppins', sans-serif !important;
     }
-
-    /* Selectbox, radio e inputs */
     .stSelectbox div[data-baseweb="select"] *,
     .stRadio div[role="radiogroup"] *,
     .stNumberInput input, .stTextInput input, .stTextArea textarea {
         font-family: 'Inter', sans-serif !important;
+    }
+
+    /* ═══ LARANJINHA — balão fixo, laranja e animado ═══ */
+    [data-testid="stPopoverBody"] {
+        position: fixed !important;
+        bottom: 175px !important;
+        right: 24px !important;
+        left: auto !important;
+        width: 400px !important;
+        max-width: calc(100vw - 48px) !important;
+        max-height: 62vh !important;
+        overflow-y: auto !important;
+        background: linear-gradient(165deg, rgba(35,22,10,0.97), rgba(18,12,6,0.98)) !important;
+        border: 1px solid rgba(249,115,22,0.35) !important;
+        border-radius: 20px !important;
+        box-shadow: 0 22px 70px rgba(249,115,22,0.28), 0 0 0 1px rgba(0,0,0,0.4) !important;
+        backdrop-filter: blur(16px) !important;
+        animation: ohPopIn 0.3s ease !important;
+    }
+    @keyframes ohPopIn {
+        from { opacity: 0; transform: translateY(16px) scale(0.97); }
+        to { opacity: 1; transform: none; }
+    }
+    [data-testid="stPopoverBody"] .stChatMessage {
+        background: rgba(255,255,255,0.04) !important;
+        border-radius: 14px !important;
+        border: 1px solid rgba(255,255,255,0.06) !important;
+        margin-bottom: 8px !important;
+    }
+    [data-testid="stPopoverBody"] .stChatMessage[data-testid="stChatMessageAssistant"] {
+        background: linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.03)) !important;
+        border: 1px solid rgba(249,115,22,0.22) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1701,8 +1805,8 @@ with tab_producao:
             mime="audio/wav",
         )
         st.info("💡 A separação de stems (voz/violão separados) exige GPU e roda no Colab — o link do notebook fica no README.")
-# ══════════════════ ASSISTENTE VIRTUAL (laranjinha flutuante) ══════════════════
-LARANJINHA_PATH = "laranjinha.png"  # só a laranjinha, fundo transparente
+        # ══════════════════ ASSISTENTE VIRTUAL (laranjinha com memória e chats) ══════════════════
+LARANJINHA_PATH = "laranjinha.png"
 if os.path.exists(LARANJINHA_PATH):
     with open(LARANJINHA_PATH, "rb") as f:
         laranjinha_b64 = base64.b64encode(f.read()).decode()
@@ -1737,12 +1841,6 @@ if os.path.exists(LARANJINHA_PATH):
     [data-testid="stPopover"] button:hover {{
         animation-play-state: paused !important;
         transform: scale(1.08);
-    }}
-    [data-testid="stPopoverBody"] {{
-        background: #161616;
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 16px;
-        box-shadow: 0 16px 50px rgba(0,0,0,0.6);
     }}
     </style>
     <script>
@@ -1784,23 +1882,65 @@ if os.path.exists(LARANJINHA_PATH):
 
 with st.popover("🍊", use_container_width=False):
     col_t, col_l = st.columns([3, 1])
-    col_t.markdown("**Laranjinha — Assistente do Orange Harmony**")
-    if col_l.button("🗑️", key="limpar_chat", help="Limpar conversa"):
+    col_t.markdown("**🍊 Laranjinha — Assistente do Orange Harmony**")
+    if col_l.button("🗑️", key="limpar_chat_btn", help="Limpar conversa atual"):
+        chat_atual = st.session_state.get("chat_atual_id")
+        if chat_atual:
+            salvar_chat_firestore(chat_atual, [])
         st.session_state["chat_hist"] = []
         st.rerun()
-    st.caption("Dicas de canto, geração de letra, afinação, tom e exercícios. Peça: 'avalia a gravação [nome]'.")
+    # ── Seleção / criação de chats (um por música) ──
+    chats = listar_chats_firestore()
+    opcoes_chat = {f"{nome}": cid for nome, cid in chats}
+    chat_atual_id = st.session_state.get("chat_atual_id")
+    chat_atual_nome = st.session_state.get("chat_atual_nome", "")
+    if chat_atual_id and chat_atual_id not in opcoes_chat.values():
+        opcoes_chat[chat_atual_nome or "Chat atual"] = chat_atual_id
+    nomes_opcoes = list(opcoes_chat.keys())
+    if chat_atual_id:
+        idx = nomes_opcoes.index(chat_atual_nome) if chat_atual_nome in nomes_opcoes else 0
+    else:
+        idx = 0
+    sel_nome = st.selectbox("Chat (um por música)", nomes_opcoes, index=idx, key="sel_chat")
+    if sel_nome:
+        sel_id = opcoes_chat[sel_nome]
+        if sel_id != chat_atual_id:
+            st.session_state["chat_atual_id"] = sel_id
+            st.session_state["chat_atual_nome"] = sel_nome
+            st.session_state["chat_hist"] = carregar_chat_firestore(sel_id)
+            st.rerun()
+    c_nome, c_cria = st.columns([3, 1])
+    novo_nome = c_nome.text_input("Novo chat (ex: nome da música)", key="novo_chat_nome")
+    if c_cria.button("➕", key="criar_chat_btn", help="Criar novo chat"):
+        nome_final = novo_nome.strip() or f"Chat {datetime.now().strftime('%d/%m %H:%M')}"
+        novo_id = criar_chat_firestore(nome_final)
+        if novo_id:
+            st.session_state["chat_atual_id"] = novo_id
+            st.session_state["chat_atual_nome"] = nome_final
+            st.session_state["chat_hist"] = []
+            st.rerun()
+        else:
+            st.warning("Não foi possível criar o chat (Firebase?).")
+    st.markdown("---")
+    # ── Histórico da conversa ──
     if "chat_hist" not in st.session_state:
         st.session_state["chat_hist"] = []
-    for msg in st.session_state["chat_hist"][-12:]:
+    for msg in st.session_state["chat_hist"][-20:]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-    pergunta = st.chat_input("Pergunte algo...")
-    if pergunta:
-        st.session_state["chat_hist"].append({"role": "user", "content": pergunta})
-        with st.chat_message("user"):
-            st.markdown(pergunta)
-        with st.chat_message("assistant"):
-            with st.spinner("Pensando..."):
-                resp = assistente_resposta(pergunta)
-            st.markdown(resp)
-        st.session_state["chat_hist"].append({"role": "assistant", "content": resp})
+    # ── Campo de mensagem (fica sempre por último, dentro do balão) ──
+    pergunta = st.text_input("Escreva sua mensagem...", key="laranjinha_input", label_visibility="collapsed")
+    if st.button("Enviar", key="enviar_chat_btn", type="primary"):
+        if pergunta.strip():
+            st.session_state["chat_hist"].append({"role": "user", "content": pergunta.strip()})
+            with st.chat_message("user"):
+                st.markdown(pergunta.strip())
+            with st.chat_message("assistant"):
+                with st.spinner("Pensando..."):
+                    resp = assistente_resposta(pergunta.strip(), chat_id=st.session_state.get("chat_atual_id"), historico=st.session_state["chat_hist"])
+                st.markdown(resp)
+            st.session_state["chat_hist"].append({"role": "assistant", "content": resp})
+            chat_atual = st.session_state.get("chat_atual_id")
+            if chat_atual:
+                salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
+            st.rerun()
