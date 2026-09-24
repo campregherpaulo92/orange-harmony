@@ -1948,7 +1948,8 @@ if laranjinha_b64:
         overflow: hidden !important;
     }
     </style>
-    """, unsafe_allow_html=True)if laranjinha_b64:
+    """, unsafe_allow_html=True)
+    if laranjinha_b64:
     st.markdown("""
     <style>
     .laranjinha-fab {
