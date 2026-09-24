@@ -1478,8 +1478,8 @@ st.markdown(
     f'<div style="font-family:Poppins;font-weight:700;color:#34d399;margin-bottom:8px;">✨ Professor IA (Gemini)</div>'
     f'{devolutiva}</div>',
     unsafe_allow_html=True
-)
-            st.markdown("---")
+)    
+    st.markdown("---")
             st.markdown(titulo_secao("🎚️", "Vibrato"), unsafe_allow_html=True)
             vibratos = detectar_vibrato_v4(f0_limpo, tempos, calibracao_a4=calibracao)
             if vibratos:
