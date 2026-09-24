@@ -1806,6 +1806,22 @@ if os.path.exists(LARANJINHA_PATH):
 
 @st.dialog("🍊 Laranjinha", width="large")
 def laranjinha_dialog():
+    # ── Garante um chat atual (cria "Chat geral" automaticamente se não houver) ──
+    if "chat_atual_id" not in st.session_state:
+        chats = listar_chats_firestore()
+        if chats:
+            st.session_state["chat_atual_id"] = chats[0][1]
+            st.session_state["chat_atual_nome"] = chats[0][0]
+        else:
+            novo_id = criar_chat_firestore("Chat geral")
+            if novo_id:
+                st.session_state["chat_atual_id"] = novo_id
+                st.session_state["chat_atual_nome"] = "Chat geral"
+            else:
+                st.session_state["chat_atual_id"] = None
+                st.session_state["chat_atual_nome"] = "Chat geral"
+        st.session_state["chat_hist"] = carregar_chat_firestore(st.session_state.get("chat_atual_id")) if st.session_state.get("chat_atual_id") else []
+
     col_t, col_l = st.columns([3, 1])
     col_t.markdown("**🍊 Laranjinha — Assistente do Orange Harmony**")
     if col_l.button("🗑️", key="limpar_chat_btn", help="Limpar conversa atual"):
@@ -1813,7 +1829,8 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, [])
         st.session_state["chat_hist"] = []
-    # ── Seleção / criação de chats (um por música) ──
+
+    # ── Seleção de chats (um por música) ──
     chats = listar_chats_firestore()
     opcoes_chat = {f"{nome}": cid for nome, cid in chats}
     chat_atual_id = st.session_state.get("chat_atual_id")
@@ -1828,11 +1845,12 @@ def laranjinha_dialog():
     sel_nome = st.selectbox("Chat (um por música)", nomes_opcoes, index=idx, key="sel_chat")
     if sel_nome:
         sel_id = opcoes_chat[sel_nome]
-        if st.session_state.get("sel_chat_prev") != sel_nome:
-            st.session_state["sel_chat_prev"] = sel_nome
+        if sel_id != chat_atual_id:
             st.session_state["chat_atual_id"] = sel_id
             st.session_state["chat_atual_nome"] = sel_nome
             st.session_state["chat_hist"] = carregar_chat_firestore(sel_id)
+
+    # ── Criar novo chat ──
     c_nome, c_cria = st.columns([3, 1])
     novo_nome = c_nome.text_input("Novo chat (ex: nome da música)", key="novo_chat_nome")
     if c_cria.button("➕", key="criar_chat_btn", help="Criar novo chat"):
@@ -1842,16 +1860,21 @@ def laranjinha_dialog():
             st.session_state["chat_atual_id"] = novo_id
             st.session_state["chat_atual_nome"] = nome_final
             st.session_state["chat_hist"] = []
-            st.session_state["sel_chat_prev"] = nome_final
         else:
-            st.warning("Não foi possível criar o chat (Firebase?).")
+            st.warning("Não foi possível criar o chat no Firebase — usando sessão temporária.")
+            st.session_state["chat_atual_id"] = None
+            st.session_state["chat_atual_nome"] = nome_final
+            st.session_state["chat_hist"] = []
+
     st.markdown("---")
+
     # ── Histórico da conversa ──
     if "chat_hist" not in st.session_state:
         st.session_state["chat_hist"] = []
     for msg in st.session_state["chat_hist"][-20:]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+
     # ── Campo de mensagem (form limpa sozinho e não fecha o diálogo) ──
     with st.form("laranjinha_form", clear_on_submit=True):
         pergunta = st.text_input("Escreva sua mensagem...", label_visibility="collapsed")
@@ -1880,6 +1903,56 @@ if laranjinha_b64:
         0%, 100% {{ transform: translateY(0); }}
         50% {{ transform: translateY(-12px); }}
     }}
+    /* ═══ LARANJINHA — diálogo estilo balão flutuante no canto ═══ */
+    [data-testid="stDialog"] {{
+        position: fixed !important;
+        bottom: 175px !important;
+        right: 24px !important;
+        left: auto !important;
+        top: auto !important;
+        width: 420px !important;
+        max-width: calc(100vw - 48px) !important;
+        max-height: 65vh !important;
+        overflow-y: auto !important;
+        background: linear-gradient(165deg, rgba(35,22,10,0.97), rgba(18,12,6,0.98)) !important;
+        border: 1px solid rgba(249,115,22,0.35) !important;
+        border-radius: 20px !important;
+        box-shadow: 0 22px 70px rgba(249,115,22,0.28), 0 0 0 1px rgba(0,0,0,0.4) !important;
+        backdrop-filter: blur(16px) !important;
+        animation: ohPopIn 0.3s ease !important;
+        z-index: 10001 !important;
+    }}
+    /* Remove o fundo escuro atrás do diálogo */
+    [data-testid="stDialogBackdrop"], dialog::backdrop {{
+        background: transparent !important;
+        backdrop-filter: none !important;
+    }}
+    @keyframes ohPopIn {{
+        from {{ opacity: 0; transform: translateY(16px) scale(0.97); }}
+        to {{ opacity: 1; transform: none; }}
+    }}
+    /* Caixa de texto MAIOR (tamanho do quadrado laranja) */
+    [data-testid="stDialog"] .stTextInput input, [role="dialog"] .stTextInput input {{
+        min-height: 56px !important;
+        font-size: 1.05rem !important;
+        border-radius: 14px !important;
+        background: rgba(255,255,255,0.06) !important;
+        border: 1px solid rgba(249,115,22,0.4) !important;
+        color: #fff !important;
+        padding: 14px 16px !important;
+    }}
+    /* Mensagens do chat dentro do balão */
+    [data-testid="stDialog"] .stChatMessage, [role="dialog"] .stChatMessage {{
+        background: rgba(255,255,255,0.04) !important;
+        border-radius: 14px !important;
+        border: 1px solid rgba(255,255,255,0.06) !important;
+        margin-bottom: 8px !important;
+    }}
+    [data-testid="stDialog"] .stChatMessage[data-testid="stChatMessageAssistant"],
+    [role="dialog"] .stChatMessage[data-testid="stChatMessageAssistant"] {{
+        background: linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.03)) !important;
+        border: 1px solid rgba(249,115,22,0.22) !important;
+    }}
     </style>
     <script>
     (function() {{
@@ -1889,8 +1962,7 @@ if laranjinha_b64:
             var btns = document.querySelectorAll('button');
             var alvo = null;
             for (var i = 0; i < btns.length; i++) {{
-                var txt = (btns[i].textContent || '').trim();
-                if (txt === '🍊') {{
+                if ((btns[i].textContent || '').indexOf('🍊') !== -1) {{
                     alvo = btns[i];
                     break;
                 }}
