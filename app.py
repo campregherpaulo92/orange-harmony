@@ -1212,6 +1212,40 @@ st.markdown("""
         border: 1px solid rgba(34,197,94,0.3); border-radius: 12px; backdrop-filter: blur(8px);
     }
     [data-testid="stWarning"], [data-testid="stError"], [data-testid="stInfo"] { border-radius: 12px; backdrop-filter: blur(8px); }
+
+    /* ═══ FONTE GLOBAL — força Poppins/Inter em TODOS os elementos ═══ */
+    html, body, .stApp, .stApp * {
+        font-family: 'Inter', sans-serif !important;
+    }
+
+    /* Rótulos dos campos (Nota de referência, Calibração, Nome da gravação...) */
+    label, .stSelectbox label, .stRadio label, .stTextInput label,
+    .stNumberInput label, .stTextArea label, .stFileUploader label {
+        font-family: 'Poppins', sans-serif !important;
+    }
+
+    /* Texto dos botões (Analisar, Salvar gravação, Converter...) */
+    .stButton > button, .stDownloadButton > button {
+        font-family: 'Poppins', sans-serif !important;
+    }
+
+    /* Abas (Afinador, Gravador, Histórico...) */
+    .stTabs [data-baseweb="tab"] {
+        font-family: 'Poppins', sans-serif !important;
+    }
+
+    /* Upload (Subir arquivo) e Gravação (Gravar voz agora) */
+    [data-testid="stFileUploader"], [data-testid="stFileUploader"] *,
+    [data-testid="stAudioInput"], [data-testid="stAudioInput"] * {
+        font-family: 'Poppins', sans-serif !important;
+    }
+
+    /* Selectbox, radio e inputs */
+    .stSelectbox div[data-baseweb="select"] *,
+    .stRadio div[role="radiogroup"] *,
+    .stNumberInput input, .stTextInput input, .stTextArea textarea {
+        font-family: 'Inter', sans-serif !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 # ══════════════════ LOGO ══════════════════
