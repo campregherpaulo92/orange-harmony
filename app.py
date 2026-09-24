@@ -1382,10 +1382,22 @@ with tab_analise:
     c3, c4 = st.columns(2)
     if c3.button("▶ Tocar nota"):
         sr, sinal = gerar_tom_referencia(nota_ref, calibracao)
-        st.audio(sinal, sample_rate=sr)
+        wav = audio_para_bytes(sinal, sr)
+        b64 = base64.b64encode(wav).decode()
+        components.html(
+            f'<audio id="oh_tom" src="data:audio/wav;base64,{b64}"></audio>'
+            '<script>document.getElementById("oh_tom").play();</script>',
+            height=0
+        )
     if c4.button("🎵 Tocar escala maior"):
         sr, sinal = gerar_escala(nota_ref, calibracao)
-        st.audio(sinal, sample_rate=sr)
+        wav = audio_para_bytes(sinal, sr)
+        b64 = base64.b64encode(wav).decode()
+        components.html(
+            f'<audio id="oh_escala" src="data:audio/wav;base64,{b64}"></audio>'
+            '<script>document.getElementById("oh_escala").play();</script>',
+            height=0
+        )
     st.markdown("---")
     st.markdown(titulo_secao("🎤", "Análise de voz"), unsafe_allow_html=True)
     audio_in = st.file_uploader("📂 Subir mídia", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"])
