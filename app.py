@@ -1950,7 +1950,7 @@ if laranjinha_b64:
     </style>
     """, unsafe_allow_html=True)
     if laranjinha_b64:
-    st.markdown("""
+        st.markdown("""
     <style>
     .laranjinha-fab {
         position: fixed !important;
