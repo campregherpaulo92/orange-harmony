@@ -739,6 +739,39 @@ def _detectar_pitch_aubio(amostras, sr):
     if freq and 55 <= freq <= 1000:
         return float(freq)
     return None
+    def _detectar_pitch_autocorr(amostras, sr):
+    """Detecção de pitch por autocorrelação (FFT) — sem dependências externas."""
+    if len(amostras) < 256:
+        return None
+    x = amostras - np.mean(amostras)
+    n = len(x)
+    lag_min = max(2, int(sr / 1000))
+    lag_max = min(n // 2, int(sr / 55))
+    if lag_max <= lag_min:
+        return None
+    fft = np.fft.rfft(x, n=2 * n)
+    corr = np.fft.irfft(fft * np.conj(fft))[:n]
+    energia = np.sum(x ** 2)
+    if energia < 1e-6:
+        return None
+    corr_norm = corr / (energia + 1e-10)
+    janela = corr_norm[lag_min:lag_max]
+    if len(janela) == 0:
+        return None
+    pico = int(np.argmax(janela)) + lag_min
+    if corr_norm[pico] < 0.3:
+        return None
+    if 1 <= pico < len(corr_norm) - 1:
+        y0, y1, y2 = corr_norm[pico - 1], corr_norm[pico], corr_norm[pico + 1]
+        denom = y0 - 2 * y1 + y2
+        if abs(denom) > 1e-12:
+            pico += 0.5 * (y0 - y2) / denom
+    if pico <= 0:
+        return None
+    freq = sr / pico
+    if 55 <= freq <= 1000:
+        return float(freq)
+    return None
 def _freq_para_nota_cents(freq, calibracao=440.0):
     midi = 69 + 12 * np.log2(freq / calibracao)
     midi_arred = int(round(midi))
