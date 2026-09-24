@@ -8,7 +8,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
 import streamlit.components.v1 as components
-import aubio
+# ── aubio (pitch tempo real) — protegido: se o pacote faltar, o app não quebra ──
+try:
+    import aubio
+    TEM_AUBIO = True
+except Exception:
+    TEM_AUBIO = False
 # ── WebRTC (tempo real) — protegido: se o pacote faltar, o app não quebra ──
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode
@@ -691,7 +696,8 @@ def velocimetro_html(cents, nota):
 </svg></div>'''
 # ══════════════════ AFINADOR TEMPO REAL (WebRTC) ══════════════════
 def _detectar_pitch_aubio(amostras, sr):
-    """Detecta pitch com aubio (YIN) — mais rápido e preciso que a autocorrelação."""
+    if not TEM_AUBIO:
+        return _detectar_pitch_autocorr(amostras, sr)
     if len(amostras) < 512:
         return None
     det = estado_afinador.get("detector_aubio")
