@@ -9,3 +9,4 @@ av
 google-genai
 firebase-admin
 lameenc
+huggingface_hub
