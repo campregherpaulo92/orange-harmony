@@ -912,6 +912,14 @@ def carregar_composicao(doc_id):
         return "", "", ""
     dados = doc.to_dict()
     return dados.get("titulo", ""), dados.get("tom", ""), dados.get("letra", "")
+    def excluir_composicao_firestore(doc_id):
+    """Exclui uma composição do Firestore pelo ID do documento."""
+    if db is None:
+        return "⚠️ Firebase não conectado."
+    if not doc_id:
+        return "⚠️ Nenhuma composição selecionada para excluir."
+    db.collection(COL_COMPOSICOES).document(doc_id).delete()
+    return "✅ Composição excluída."
 def renderizar_composicao_html(letra):
     import html as html_mod
     letra_esc = html_mod.escape(letra)
@@ -1758,12 +1766,29 @@ with tab_composicoes:
     if comps:
         opcoes = {f"{t} — v{v}": doc_id for t, v, doc_id in comps}
         escolha = st.selectbox("Selecione para carregar", list(opcoes.keys()))
-        if st.button("📂 Carregar composição"):
+        c5, c6 = st.columns(2)
+        if c5.button("📂 Carregar composição"):
             titulo, tom, letra = carregar_composicao(opcoes[escolha])
             st.session_state["comp_titulo"] = titulo
             st.session_state["comp_tom"] = tom
             st.session_state["comp_letra"] = letra
             st.rerun()
+        if c6.button("🗑️ Excluir composição"):
+            st.session_state["comp_excluir"] = escolha
+        if st.session_state.get("comp_excluir") == escolha:
+            st.warning(f"Excluir **{escolha}**? Essa ação não pode ser desfeita.")
+            c7, c8 = st.columns(2)
+            if c7.button("✅ Sim, excluir", type="primary"):
+                msg = excluir_composicao_firestore(opcoes[escolha])
+                st.session_state.pop("comp_excluir", None)
+                st.session_state["comp_titulo"] = ""
+                st.session_state["comp_tom"] = ""
+                st.session_state["comp_letra"] = ""
+                st.success(msg)
+                st.rerun()
+            if c8.button("❌ Cancelar"):
+                st.session_state.pop("comp_excluir", None)
+                st.rerun()
     else:
         st.info("Nenhuma composição salva ainda.")
     letra_atual = st.session_state.get("comp_letra", "")
