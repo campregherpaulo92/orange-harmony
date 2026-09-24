@@ -1808,13 +1808,18 @@ def _encontrar_laranjinha():
             caminho = os.path.join(pasta, nome) if pasta else nome
             if os.path.exists(caminho):
                 return caminho
+    # Busca recursiva por PNG com nome parecido
     for raiz, _, arquivos in os.walk("."):
         if raiz.count(os.sep) > 2:
             continue
         for arq in arquivos:
             if arq.lower().endswith(".png") and any(
-                p in arq.lower() for p in ["laranj", "orange", "mascote"]):
+                p in arq.lower() for p in ["laranj", "orange", "mascote", "generated_image"]):
                 return os.path.join(raiz, arq)
+    # ÚLTIMO RECURSO: qualquer PNG na raiz
+    for arq in os.listdir("."):
+        if arq.lower().endswith(".png"):
+            return arq
     return None
 
 LARANJINHA_PATH = _encontrar_laranjinha()
@@ -1911,9 +1916,9 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha (link <a> com mascote via CSS — método que JÁ funcionou) ──
+# ── Botão flutuante da Laranjinha (SEMPRE visível) ──
 if laranjinha_b64:
-    css_fab = """
+    fab_html = """
     <style>
     @keyframes ohBounce {
         0%, 100% { transform: translateY(0); }
@@ -1935,13 +1940,40 @@ if laranjinha_b64:
         animation: ohBounce 2s ease-in-out infinite !important;
         display: block !important;
     }
-    .laranjinha-fab:hover {
-        transform: scale(1.08) !important;
-    }
+    .laranjinha-fab:hover { transform: scale(1.08) !important; }
     </style>
     <a class="laranjinha-fab" href="?laranjinha=1" aria-label="Abrir Laranjinha"></a>
     """
-    st.html(css_fab)
+else:
+    fab_html = """
+    <style>
+    @keyframes ohBounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-12px); }
+    }
+    .laranjinha-fab-emoji {
+        position: fixed !important;
+        bottom: 28px !important;
+        right: 24px !important;
+        width: 120px !important;
+        height: 120px !important;
+        border-radius: 50% !important;
+        background: rgba(249,115,22,0.9) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 60px !important;
+        color: #fff !important;
+        text-decoration: none !important;
+        z-index: 10002 !important;
+        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
+        animation: ohBounce 2s ease-in-out infinite !important;
+        cursor: pointer !important;
+    }
+    </style>
+    <a class="laranjinha-fab-emoji" href="?laranjinha=1" aria-label="Abrir Laranjinha">🍊</a>
+    """
+st.html(fab_html)
 
 # ── Abre o diálogo: pelo link OU mantém aberto pela sessão ──
 if st.query_params.get("laranjinha") == "1":
