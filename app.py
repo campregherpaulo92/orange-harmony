@@ -1911,58 +1911,61 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha (st.button + CSS puro, sem reload, sem JS) ──
-st.markdown('<div class="laranjinha-fab-wrap">', unsafe_allow_html=True)
+# ── Botão flutuante da Laranjinha ──
 if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
     st.session_state["laranjinha_aberta"] = True
-st.markdown('</div>', unsafe_allow_html=True)
 
 if st.session_state.get("laranjinha_aberta"):
     laranjinha_dialog()
 
-# CSS do botão flutuante + balão (fica no DOM, não some nos re-renders)
-st.html(f"""
+# ── CSS do botão com o mascote (concatenação, NÃO f-string → sem erro de chaves) ──
+if laranjinha_b64:
+    css_botao = """
+    <style>
+    @keyframes ohBounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-12px); }
+    }
+    button[title="Abrir Laranjinha"] {
+        position: fixed !important;
+        bottom: 28px !important;
+        right: 24px !important;
+        left: auto !important;
+        width: 120px !important;
+        height: 120px !important;
+        border-radius: 50% !important;
+        background: url("data:image/png;base64,""" + laranjinha_b64 + """) center/contain no-repeat !important;
+        background-color: transparent !important;
+        border: none !important;
+        outline: none !important;
+        cursor: pointer !important;
+        z-index: 10002 !important;
+        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
+        animation: ohBounce 2s ease-in-out infinite !important;
+        font-size: 0 !important;
+        color: transparent !important;
+        line-height: 0 !important;
+        text-indent: -9999px !important;
+        overflow: hidden !important;
+    }
+    button[title="Abrir Laranjinha"]:hover {
+        transform: scale(1.08) !important;
+    }
+    button[title="Abrir Laranjinha"] p,
+    button[title="Abrir Laranjinha"] span,
+    button[title="Abrir Laranjinha"] div {
+        font-size: 0 !important;
+        color: transparent !important;
+        opacity: 0 !important;
+    }
+    </style>
+    """
+    st.html(css_botao)
+
+# ── CSS do balão do diálogo (sem f-string → chaves normais) ──
+st.html("""
 <style>
-@keyframes ohBounce {{
-    0%, 100% {{ transform: translateY(0); }}
-    50% {{ transform: translateY(-12px); }}
-}}
-/* Botão flutuante com o mascote — mira pelo atributo title do help */
-button[title="Abrir Laranjinha"] {
-    position: fixed !important;
-    bottom: 28px !important;
-    right: 24px !important;
-    left: auto !important;
-    width: 120px !important;
-    height: 120px !important;
-    border-radius: 50% !important;
-    background: url("data:image/png;base64,{laranjinha_b64}") center/contain no-repeat !important;
-    background-color: transparent !important;
-    border: none !important;
-    outline: none !important;
-    cursor: pointer !important;
-    z-index: 10002 !important;
-    box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
-    animation: ohBounce 2s ease-in-out infinite !important;
-    font-size: 0 !important;
-    color: transparent !important;
-    line-height: 0 !important;
-    text-indent: -9999px !important;
-    overflow: hidden !important;
-}
-button[title="Abrir Laranjinha"]:hover {
-    transform: scale(1.08) !important;
-}
-/* Esconde o texto interno do botão (o emoji 🍊) */
-button[title="Abrir Laranjinha"] p,
-button[title="Abrir Laranjinha"] span,
-button[title="Abrir Laranjinha"] div {
-    font-size: 0 !important;
-    color: transparent !important;
-    opacity: 0 !important;
-}
-/* ═══ Balão da Laranjinha (flutuante no canto, sobreposto) ═══ */
-[data-testid="stDialog"] {{
+[data-testid="stDialog"] {
     position: fixed !important;
     bottom: 175px !important;
     right: 24px !important;
@@ -1979,16 +1982,16 @@ button[title="Abrir Laranjinha"] div {
     backdrop-filter: blur(16px) !important;
     animation: ohPopIn 0.3s ease !important;
     z-index: 10001 !important;
-}}
-[data-testid="stDialogBackdrop"], dialog::backdrop {{
+}
+[data-testid="stDialogBackdrop"], dialog::backdrop {
     background: transparent !important;
     backdrop-filter: none !important;
-}}
-@keyframes ohPopIn {{
-    from {{ opacity: 0; transform: translateY(16px) scale(0.97); }}
-    to {{ opacity: 1; transform: none; }}
-}}
-[data-testid="stDialog"] textarea {{
+}
+@keyframes ohPopIn {
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
+    to { opacity: 1; transform: none; }
+}
+[data-testid="stDialog"] textarea {
     min-height: 120px !important;
     font-size: 1.02rem !important;
     line-height: 1.5 !important;
@@ -1998,16 +2001,16 @@ button[title="Abrir Laranjinha"] div {
     color: #fff !important;
     padding: 14px 16px !important;
     resize: vertical !important;
-}}
-[data-testid="stDialog"] .stChatMessage {{
+}
+[data-testid="stDialog"] .stChatMessage {
     background: rgba(255,255,255,0.04) !important;
     border-radius: 14px !important;
     border: 1px solid rgba(255,255,255,0.06) !important;
     margin-bottom: 8px !important;
-}}
-[data-testid="stDialog"] .stChatMessage[data-testid="stChatMessageAssistant"] {{
+}
+[data-testid="stDialog"] .stChatMessage[data-testid="stChatMessageAssistant"] {
     background: linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.03)) !important;
     border: 1px solid rgba(249,115,22,0.22) !important;
-}}
+}
 </style>
 """)
