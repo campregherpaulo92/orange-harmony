@@ -1911,49 +1911,58 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha (mascote via st.html, sem iframe, sem JS) ──
-if laranjinha_b64:
-    st.html(f"""
-    <style>
-    @keyframes ohBounce {{
-        0%, 100% {{ transform: translateY(0); }}
-        50% {{ transform: translateY(-12px); }}
-    }}
-    .laranjinha-fab {{
-        position: fixed !important;
-        bottom: 28px !important;
-        right: 24px !important;
-        width: 120px !important;
-        height: 120px !important;
-        border-radius: 50% !important;
-        background: url("data:image/png;base64,{laranjinha_b64}") center/contain no-repeat !important;
-        background-color: transparent !important;
-        border: none !important;
-        cursor: pointer !important;
-        z-index: 10002 !important;
-        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
-        animation: ohBounce 2s ease-in-out infinite !important;
-        display: block !important;
-    }}
-    .laranjinha-fab:hover {{
-        transform: scale(1.08) !important;
-    }}
-    </style>
-    <a class="laranjinha-fab" href="?laranjinha=1" aria-label="Abrir Laranjinha"></a>
-    """)
+# ── Botão flutuante da Laranjinha (st.button + CSS puro, sem reload, sem JS) ──
+st.markdown('<div class="laranjinha-fab-wrap">', unsafe_allow_html=True)
+if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
+    st.session_state["laranjinha_aberta"] = True
+st.markdown('</div>', unsafe_allow_html=True)
 
-if st.query_params.get("laranjinha") == "1":
-    st.query_params.clear()
+if st.session_state.get("laranjinha_aberta"):
     laranjinha_dialog()
 
-# CSS do balão da Laranjinha (visual de balão flutuante)
-st.html("""
+# CSS do botão flutuante + balão (fica no DOM, não some nos re-renders)
+st.html(f"""
 <style>
-@keyframes ohBounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-12px); }
-}
-[data-testid="stDialog"] {
+@keyframes ohBounce {{
+    0%, 100% {{ transform: translateY(0); }}
+    50% {{ transform: translateY(-12px); }}
+}}
+/* Botão flutuante com o mascote (CSS puro, sem JS) */
+.laranjinha-fab-wrap:has(button) button {{
+    position: fixed !important;
+    bottom: 28px !important;
+    right: 24px !important;
+    left: auto !important;
+    width: 120px !important;
+    height: 120px !important;
+    border-radius: 50% !important;
+    background: url("data:image/png;base64,{laranjinha_b64}") center/contain no-repeat !important;
+    background-color: transparent !important;
+    border: none !important;
+    outline: none !important;
+    cursor: pointer !important;
+    z-index: 10002 !important;
+    box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
+    animation: ohBounce 2s ease-in-out infinite !important;
+    font-size: 0 !important;
+    color: transparent !important;
+    line-height: 0 !important;
+    text-indent: -9999px !important;
+    overflow: hidden !important;
+}}
+.laranjinha-fab-wrap:has(button) button:hover {{
+    transform: scale(1.08) !important;
+}}
+/* Esconde o texto interno do botão (o emoji 🍊) */
+.laranjinha-fab-wrap:has(button) button p,
+.laranjinha-fab-wrap:has(button) button span,
+.laranjinha-fab-wrap:has(button) button div {{
+    font-size: 0 !important;
+    color: transparent !important;
+    opacity: 0 !important;
+}}
+/* ═══ Balão da Laranjinha (flutuante no canto, sobreposto) ═══ */
+[data-testid="stDialog"] {{
     position: fixed !important;
     bottom: 175px !important;
     right: 24px !important;
@@ -1970,16 +1979,16 @@ st.html("""
     backdrop-filter: blur(16px) !important;
     animation: ohPopIn 0.3s ease !important;
     z-index: 10001 !important;
-}
-[data-testid="stDialogBackdrop"], dialog::backdrop {
+}}
+[data-testid="stDialogBackdrop"], dialog::backdrop {{
     background: transparent !important;
     backdrop-filter: none !important;
-}
-@keyframes ohPopIn {
-    from { opacity: 0; transform: translateY(16px) scale(0.97); }
-    to { opacity: 1; transform: none; }
-}
-[data-testid="stDialog"] textarea {
+}}
+@keyframes ohPopIn {{
+    from {{ opacity: 0; transform: translateY(16px) scale(0.97); }}
+    to {{ opacity: 1; transform: none; }}
+}}
+[data-testid="stDialog"] textarea {{
     min-height: 120px !important;
     font-size: 1.02rem !important;
     line-height: 1.5 !important;
@@ -1989,16 +1998,16 @@ st.html("""
     color: #fff !important;
     padding: 14px 16px !important;
     resize: vertical !important;
-}
-[data-testid="stDialog"] .stChatMessage {
+}}
+[data-testid="stDialog"] .stChatMessage {{
     background: rgba(255,255,255,0.04) !important;
     border-radius: 14px !important;
     border: 1px solid rgba(255,255,255,0.06) !important;
     margin-bottom: 8px !important;
-}
-[data-testid="stDialog"] .stChatMessage[data-testid="stChatMessageAssistant"] {
+}}
+[data-testid="stDialog"] .stChatMessage[data-testid="stChatMessageAssistant"] {{
     background: linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.03)) !important;
     border: 1px solid rgba(249,115,22,0.22) !important;
-}
+}}
 </style>
 """)
