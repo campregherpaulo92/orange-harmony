@@ -2222,7 +2222,7 @@ def gerar_musica_ia(prompt, duracao_segundos=20):
     token = st.secrets.get("HF_TOKEN", "")
     if not token:
         return None, "Configure o HF_TOKEN nos Secrets do Streamlit Cloud (Settings → Secrets)."
-    url = "https://api-inference.huggingface.co/models/facebook/musicgen-small"
+    url = "https://router.huggingface.co/hf-inference/models/facebook/musicgen-small"
     headers = {"Authorization": f"Bearer {token}"}
     payload = {"inputs": prompt, "parameters": {"max_new_tokens": int(duracao_segundos * 50)}}
     try:
