@@ -735,6 +735,12 @@ def mixar(audio, baixo, bateria, acordes=None):
     if pico_final > 1.0:
         total = total / pico_final
     return total.astype(np.float32)
+    
+def audio_para_bytes(audio, sr):
+    import soundfile as sf
+    buf = io.BytesIO()
+    sf.write(buf, audio, sr, format="WAV")
+    return buf.getvalue()
 # ══════════════════ COMPONENTES VISUAIS (glassmorphism) ══════════════════
 def card_html(conteudo, classe="oh-card"):
     return f'<div class="{classe}">{conteudo}</div>'
