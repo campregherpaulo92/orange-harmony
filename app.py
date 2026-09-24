@@ -1911,18 +1911,54 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha (ícone laranja fixo) ──
-if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
+# ── Botão flutuante da Laranjinha (mascote embutido direto no HTML, sem JS) ──
+import streamlit.components.v1 as components
+
+if laranjinha_b64:
+    components.html(
+        f"""
+        <style>
+        @keyframes ohBounce {{
+            0%, 100% {{ transform: translateY(0); }}
+            50% {{ transform: translateY(-12px); }}
+        }}
+        .laranjinha-fab {{
+            position: fixed;
+            bottom: 28px;
+            right: 24px;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: url("data:image/png;base64,{laranjinha_b64}") center/contain no-repeat;
+            border: none;
+            cursor: pointer;
+            z-index: 10002;
+            box-shadow: 0 8px 30px rgba(249,115,22,0.55);
+            animation: ohBounce 2s ease-in-out infinite;
+            background-color: transparent;
+        }}
+        .laranjinha-fab:hover {{
+            transform: scale(1.08);
+        }}
+        </style>
+        <button class="laranjinha-fab" onclick="window.parent.location.href='?laranjinha=1'"></button>
+        """,
+        height=0,
+    )
+
+if st.query_params.get("laranjinha") == "1":
+    st.query_params.clear()
     laranjinha_dialog()
 
-st.html(f"""
+# CSS do balão da Laranjinha (mantém o visual de balão flutuante)
+st.html("""
 <style>
-@keyframes ohBounce {{
-    0%, 100% {{ transform: translateY(0); }}
-    50% {{ transform: translateY(-12px); }}
-}}
+@keyframes ohBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+}
 /* ═══ LARANJINHA — balão flutuante MAIOR, sobreposto à tela ═══ */
-[data-testid="stDialog"] {{
+[data-testid="stDialog"] {
     position: fixed !important;
     bottom: 175px !important;
     right: 24px !important;
@@ -1939,16 +1975,16 @@ st.html(f"""
     backdrop-filter: blur(16px) !important;
     animation: ohPopIn 0.3s ease !important;
     z-index: 10001 !important;
-}}
-[data-testid="stDialogBackdrop"], dialog::backdrop {{
+}
+[data-testid="stDialogBackdrop"], dialog::backdrop {
     background: transparent !important;
     backdrop-filter: none !important;
-}}
-@keyframes ohPopIn {{
-    from {{ opacity: 0; transform: translateY(16px) scale(0.97); }}
-    to {{ opacity: 1; transform: none; }}
-}}
-[data-testid="stDialog"] textarea {{
+}
+@keyframes ohPopIn {
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
+    to { opacity: 1; transform: none; }
+}
+[data-testid="stDialog"] textarea {
     min-height: 120px !important;
     font-size: 1.02rem !important;
     line-height: 1.5 !important;
@@ -1958,67 +1994,16 @@ st.html(f"""
     color: #fff !important;
     padding: 14px 16px !important;
     resize: vertical !important;
-}}
-[data-testid="stDialog"] .stChatMessage {{
+}
+[data-testid="stDialog"] .stChatMessage {
     background: rgba(255,255,255,0.04) !important;
     border-radius: 14px !important;
     border: 1px solid rgba(255,255,255,0.06) !important;
     margin-bottom: 8px !important;
-}}
-[data-testid="stDialog"] .stChatMessage[data-testid="stChatMessageAssistant"] {{
+}
+[data-testid="stDialog"] .stChatMessage[data-testid="stChatMessageAssistant"] {
     background: linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.03)) !important;
     border: 1px solid rgba(249,115,22,0.22) !important;
-}}
+}
 </style>
-<script>
-(function() {{
-    var url = "data:image/png;base64,{laranjinha_b64}";
-    setInterval(function() {{
-        var btns = document.querySelectorAll('button');
-        for (var i = 0; i < btns.length; i++) {{
-            var b = btns[i];
-            if ((b.textContent || '').indexOf('🍊') !== -1) {{
-                b.style.backgroundImage = 'url("' + url + '")';
-                b.style.backgroundSize = 'contain';
-                b.style.backgroundPosition = 'center';
-                b.style.backgroundRepeat = 'no-repeat';
-                b.style.backgroundColor = 'transparent';
-                b.style.border = 'none';
-                b.style.outline = 'none';
-                b.style.padding = '0';
-                b.style.width = '120px';
-                b.style.height = '120px';
-                b.style.borderRadius = '50%';
-                b.style.position = 'fixed';
-                b.style.bottom = '28px';
-                b.style.right = '24px';
-                b.style.left = 'auto';
-                b.style.zIndex = '10002';
-                b.style.boxShadow = '0 8px 30px rgba(249,115,22,0.55)';
-                b.style.animation = 'ohBounce 2s ease-in-out infinite';
-                b.style.fontSize = '0';
-                b.style.color = 'transparent';
-                b.style.lineHeight = '0';
-                b.style.textIndent = '-9999px';
-                var filhos = b.querySelectorAll('*');
-                for (var j = 0; j < filhos.length; j++) {{
-                    filhos[j].style.fontSize = '0';
-                    filhos[j].style.color = 'transparent';
-                    filhos[j].style.lineHeight = '0';
-                    filhos[j].style.opacity = '0';
-                }}
-            }}
-        }}
-    }}, 700);
-    function autoGrow() {{
-        var areas = document.querySelectorAll('[data-testid="stDialog"] textarea');
-        for (var i = 0; i < areas.length; i++) {{
-            areas[i].style.height = 'auto';
-            areas[i].style.height = (areas[i].scrollHeight + 4) + 'px';
-        }}
-    }}
-    document.addEventListener('input', autoGrow);
-    setInterval(autoGrow, 600);
-}})();
-</script>
 """)
