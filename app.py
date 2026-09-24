@@ -19,8 +19,8 @@ except Exception as e:
     ERRO_WEBRTC = str(e)
 # ── Configuração da página (deve ser o primeiro comando do Streamlit) ──
 st.set_page_config(page_title="Orange Harmony", page_icon="🍊", layout="wide")
-# ── Fontes: Poppins (títulos/abas) + Inter (corpo) ──
-st.markdown('<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">', unsafe_allow_html=True)
+# ── Fontes: Poppins (títulos/abas) + Inter (corpo) + Montserrat (afinador) ──
+st.markdown('<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;600;700;800&family=Montserrat:wght@700;800&display=swap" rel="stylesheet">', unsafe_allow_html=True)
 # ── Gemini ──
 from google import genai
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -372,7 +372,7 @@ def classificar_vibrato_v4(taxa, extensao, deslize, periodicidade):
     if extensao <= 120:
         return "vibrato largo (expressivo)"
     return "vibrato muito largo"
-# ══════════════════ PRODUÇÃO (BPM, TOM, BAIXO, BATERIA E ACORDES) ══════════════════
+    # ══════════════════ PRODUÇÃO (BPM, TOM, BAIXO, BATERIA E ACORDES) ══════════════════
 ESTILOS_MUSICAIS = {
     "Pop": "Leve e dançante — acordes a cada compasso, clima pop radiofônico.",
     "Rock": "Energético — acordes firmes e bateria marcada nos tempos 2 e 4.",
@@ -629,7 +629,7 @@ def audio_para_bytes(audio, sr):
     buf = io.BytesIO()
     sf.write(buf, audio, sr, format="WAV")
     return buf.getvalue()
-    # ══════════════════ COMPONENTES VISUAIS (glassmorphism) ══════════════════
+# ══════════════════ COMPONENTES VISUAIS (glassmorphism) ══════════════════
 def card_html(conteudo, classe="oh-card"):
     return f'<div class="{classe}">{conteudo}</div>'
 def metricas_html(lista):
@@ -647,7 +647,7 @@ def titulo_secao(icone, texto):
             f'<span class="oh-title-icon">{icone}</span>'
             f'<span class="oh-title-text">{texto}</span>'
             f'<span class="oh-title-line"></span></div>')
-# ══════════════════ VELOCÍMETRO ══════════════════
+# ══════════════════ VELOCÍMETRO (arco mais fino + fonte Montserrat + ponteiro corrigido) ══════════════════
 def velocimetro_html(cents, nota):
     cents_c = max(-50.0, min(50.0, float(cents)))
     angulo = (cents_c / 50.0) * 90.0
@@ -661,7 +661,7 @@ def velocimetro_html(cents, nota):
         x2 = 110 + 84 * np.sin(rad); y2 = 110 - 84 * np.cos(rad)
         marcas += f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="#555" stroke-width="2"/>'
         lx = 110 + 96 * np.sin(rad); ly = 110 - 96 * np.cos(rad)
-        marcas += f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="middle" fill="#888" font-size="10" font-family="Inter">{rot}</text>'
+        marcas += f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="middle" fill="#888" font-size="10" font-family="Montserrat,Inter">{rot}</text>'
     return f'''<div style="display:flex;justify-content:center;">
 <svg viewBox="0 0 220 134" width="360" style="background:linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01));backdrop-filter:blur(12px);border-radius:20px;border:1px solid rgba(255,255,255,0.10);box-shadow:0 10px 40px rgba(0,0,0,0.45);">
   <defs>
@@ -677,16 +677,16 @@ def velocimetro_html(cents, nota):
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
-  <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="url(#gg)" stroke-width="16" stroke-linecap="round" opacity="0.9"/>
+  <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="url(#gg)" stroke-width="8" stroke-linecap="round" opacity="0.9"/>
   <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2" stroke-linecap="round"/>
   {marcas}
   <g transform="rotate({angulo:.1f} 110 110)" filter="url(#glow)">
-    <line x1="110" y1="110" x2="110" y2="36" stroke="{cor}" stroke-width="5" stroke-linecap="round"/>
+    <line x1="110" y1="110" x2="110" y2="40" stroke="{cor}" stroke-width="4" stroke-linecap="round"/>
   </g>
   <circle cx="110" cy="110" r="10" fill="{cor}" filter="url(#glow)"/>
   <circle cx="110" cy="110" r="4" fill="#fff"/>
-  <text x="110" y="88" text-anchor="middle" fill="#ffffff" font-size="30" font-weight="800" font-family="Poppins,Inter">{nota}</text>
-  <text x="110" y="120" text-anchor="middle" fill="#bbbbbb" font-size="13" font-family="Inter">{cents_c:+.0f} cents · {status}</text>
+  <text x="110" y="84" text-anchor="middle" fill="#ffffff" font-size="30" font-weight="800" font-family="Montserrat,Poppins,Inter">{nota}</text>
+  <text x="110" y="120" text-anchor="middle" fill="#bbbbbb" font-size="13" font-family="Montserrat,Inter">{cents_c:+.0f} cents · {status}</text>
 </svg></div>'''
 # ══════════════════ AFINADOR TEMPO REAL (WebRTC) ══════════════════
 def _detectar_pitch_autocorr(amostras, sr):
@@ -845,7 +845,7 @@ def renderizar_composicao_html(letra):
             linhas.append(f'<div style="color:#ffffff;">{linha}</div>')
     return (f'<div style="background:rgba(255,255,255,0.03);backdrop-filter:blur(10px);color:#ffffff;padding:20px;border-radius:16px;'
             f'font-family:monospace;line-height:1.7;border:1px solid rgba(255,255,255,0.08);box-shadow:0 8px 32px rgba(0,0,0,0.35);">{"".join(linhas)}</div>')
-# ══════════════════ AFINADOR ══════════════════
+    # ══════════════════ AFINADOR ══════════════════
 AFINACOES = {
     "Padrão (EADGBE)": ["E2", "A2", "D3", "G3", "B3", "E4"],
     "Drop D (DADGBE)": ["D2", "A2", "D3", "G3", "B3", "E4"],
@@ -980,10 +980,7 @@ def gerar_escala(nota, calibracao):
         trechos.append(silencio)
     return (sr, np.concatenate(trechos).astype(np.float32))
 # ══════════════════ CHAMADA GEMINI COM FALLBACK AUTOMÁTICO ══════════════════
-# Modelos que sabem ouvir áudio via generateContent (Flash são multimodais)
 MODELOS_COM_AUDIO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-3.8-flash"]
-
-# Frases que indicam que o modelo NÃO conseguiu ouvir o áudio (resposta inválida)
 FRASES_SEM_AUDIO = [
     "não consigo ouvir", "não consigo escutar", "não consigo acessar o áudio",
     "não recebi o áudio", "não tenho acesso ao áudio", "não consigo analisar o áudio",
@@ -993,15 +990,10 @@ FRASES_SEM_AUDIO = [
     "can't hear", "cannot hear", "cannot access the audio", "can't access the audio",
     "cannot process audio", "don't have access to the audio", "no audio file",
 ]
-
 def _resposta_sem_audio(texto):
     t = (texto or "").lower()
     return any(f in t for f in FRASES_SEM_AUDIO)
-
 def chamar_gemini_com_fallback(prompt, audio_anexo=None):
-    """Tenta os modelos em ordem até um responder de verdade.
-    Com áudio, só usa modelos que sabem ouvir e ignora respostas 'não consigo ouvir'.
-    Retorna (texto, modelo_usado) ou (None, ultimo_erro)."""
     if cliente is None:
         return None, "Gemini não configurado."
     if audio_anexo is not None:
@@ -1069,11 +1061,9 @@ Você é a assistente oficial do Orange Harmony e conhece TODO o aplicativo. Gui
 """
 # ══════════════════ ASSISTENTE VIRTUAL (Gemini, com áudio, memória e conhecimento do app) ══════════════════
 def assistente_resposta(prompt_usuario, chat_id=None, historico=None):
-    """Laranjinha — conhece o app, tem memória da conversa e avalia gravações pelo nome."""
     if cliente is None:
         return "A Laranjinha está indisponível (configure a chave Gemini)."
     sistema = CONHECIMENTO_APP
-    # ── Contexto da conversa (últimas mensagens) ──
     contexto = ""
     if historico:
         ultimas = historico[-8:]
@@ -1083,7 +1073,6 @@ def assistente_resposta(prompt_usuario, chat_id=None, historico=None):
             partes.append(f"{papel}: {m.get('content', '')}")
         if partes:
             contexto = "\n\nHistórico recente da conversa:\n" + "\n".join(partes)
-    # ── Detecta se o usuário pediu para avaliar uma gravação salva ──
     audio_anexo = None
     texto = prompt_usuario.lower()
     for nome in get_gravacoes():
@@ -1112,7 +1101,6 @@ def assistente_resposta(prompt_usuario, chat_id=None, historico=None):
     return f"Erro ao chamar o assistente: {modelo}"
 # ══════════════════ ANÁLISE DE COVER (gravação completa) ══════════════════
 def analisar_cover(audio, sr, calibracao=440.0):
-    """Analisa a gravação inteira (voz + instrumental) e verifica se está casando com o tom."""
     resultado = {"tom": "—", "bpm": 0.0, "pct_na_escala": 0.0, "notas_fora": [],
                  "notas_principais": [], "veredito": "—", "duracao_s": 0.0}
     if audio is None or len(audio) < int(sr * 0.5):
@@ -1154,7 +1142,6 @@ def analisar_cover(audio, sr, calibracao=440.0):
     return resultado
 # ══════════════════ CONVERSOR DE FORMATO ══════════════════
 def converter_audio(audio, sr, formato_destino):
-    """Converte um áudio (numpy) para bytes WAV ou MP3."""
     if formato_destino == "WAV":
         return audio_para_bytes(audio, sr), "audio/wav", "convertido.wav"
     import lameenc
@@ -1320,7 +1307,7 @@ st.markdown("""
         font-family: 'Inter', sans-serif !important;
     }
 
-        /* ═══ LARANJINHA — diálogo fixo, laranja e animado ═══ */
+    /* ═══ LARANJINHA — diálogo fixo, laranja e animado ═══ */
     [role="dialog"], [data-testid="stDialog"] {
         background: linear-gradient(165deg, rgba(35,22,10,0.97), rgba(18,12,6,0.98)) !important;
         border: 1px solid rgba(249,115,22,0.35) !important;
@@ -1369,13 +1356,14 @@ with col_sel:
         label_visibility="collapsed",
     )
     st.session_state["modelo_ia"] = modelo_escolhido
-    st.caption("auto")# ══════════════════ INTERFACE ══════════════════
+    st.caption("auto")
+# ══════════════════ INTERFACE ══════════════════
 tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao = st.tabs(
     ["🎵 Análise e Estudo", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção"]
 )
 # ── ABA ANÁLISE E ESTUDO ──
 with tab_analise:
-    st.markdown(titulo_secao("🎯", "1. Referência de tom — ouça a nota ou a escala antes de cantar."), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🎯", "Referência do tom"), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     nota_ref = c1.selectbox("Nota de referência", NOTAS_REFERENCIA, index=NOTAS_REFERENCIA.index("C4"))
     calibracao = c2.radio("Calibração A4 (Hz)", [440, 442], horizontal=True)
@@ -1387,13 +1375,13 @@ with tab_analise:
         sr, sinal = gerar_escala(nota_ref, calibracao)
         st.audio(sinal, sample_rate=sr)
     st.markdown("---")
-    st.markdown(titulo_secao("🎤", "2. Análise da voz — envie sua gravação e veja o diagnóstico completo."), unsafe_allow_html=True)
-    audio_in = st.file_uploader("📂 Subir arquivo de áudio", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"])
+    st.markdown(titulo_secao("🎤", "Análise de voz"), unsafe_allow_html=True)
+    audio_in = st.file_uploader("📂 Subir mídia", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"])
     st.markdown("**— ou —**")
-    audio_gravado = st.audio_input("🎤 Gravar voz agora")
+    audio_gravado = st.audio_input("🎤 Gravar")
     grav_salvas = get_gravacoes()
     opcoes_grav = ["—"] + grav_salvas
-    usar_grav = st.selectbox("🎙️ Ou usar uma gravação salva", opcoes_grav, key="usar_grav_analise")
+    usar_grav = st.selectbox("🎙️ Upload biblioteca", opcoes_grav, key="usar_grav_analise")
     modo = st.radio("Modo", ["Análise completa", "Afinador", "Análise de Cover"], horizontal=True)
     if st.button("Analisar", type="primary"):
         if usar_grav != "—":
@@ -1483,9 +1471,16 @@ with tab_analise:
             fig.tight_layout()
             st.pyplot(fig)
             st.markdown(titulo_secao("💬", "Devolutiva do Professor"), unsafe_allow_html=True)
-            st.markdown(card_html(devolutiva), unsafe_allow_html=True)
+st.markdown(
+    f'<div style="background:linear-gradient(135deg, rgba(16,185,129,0.20), rgba(16,185,129,0.05));'
+    f'border:1px solid rgba(16,185,129,0.45);border-radius:16px;padding:20px;'
+    f'backdrop-filter:blur(12px);box-shadow:0 8px 32px rgba(16,185,129,0.22);">'
+    f'<div style="font-family:Poppins;font-weight:700;color:#34d399;margin-bottom:8px;">✨ Professor IA (Gemini)</div>'
+    f'{devolutiva}</div>',
+    unsafe_allow_html=True
+)
             st.markdown("---")
-            st.markdown(titulo_secao("🎚️", "3. Vibrato — detecte a oscilação da sua nota sustentada."), unsafe_allow_html=True)
+            st.markdown(titulo_secao("🎚️", "Vibrato"), unsafe_allow_html=True)
             vibratos = detectar_vibrato_v4(f0_limpo, tempos, calibracao_a4=calibracao)
             if vibratos:
                 linhas = []
@@ -1503,7 +1498,7 @@ with tab_analise:
                 st.info("Nenhuma nota sustentada (>= 0.8s). Sustente uma nota firme por 3-4s.")
 # ── ABA AFINADOR ──
 with tab_afinador:
-    st.markdown(titulo_secao("🎸", "Afinador — violão ou voz. Escolha a afinação, toque/cante uma nota sustentada e veja o resultado."), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🎸", "Afinador"), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     afincao = c1.selectbox("Afinação", list(AFINACOES.keys()))
     calib_afinador = c2.radio("Calibração A4", [440, 442], horizontal=True)
@@ -1526,7 +1521,7 @@ with tab_afinador:
                 time.sleep(0.15)
     else:
         st.warning(f"Modo tempo real indisponível. Detalhe: {ERRO_WEBRTC}")
-    st.markdown(titulo_secao("🎤", "— ou — grave/subir uma nota:"), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🎤", "Subir uma nota"), unsafe_allow_html=True)
     audio_afinador = st.file_uploader("📂 Subir nota sustentada", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="afinador")
     st.markdown("**— ou —**")
     audio_afinador_grav = st.audio_input("🎤 Gravar nota agora", key="afinador_rec")
@@ -1541,7 +1536,7 @@ with tab_afinador:
             st.markdown(velocimetro_html(cents, nota), unsafe_allow_html=True)
 # ── ABA GRAVADOR (persistente no Firestore, com upload) ──
 with tab_gravador:
-    st.markdown(titulo_secao("🎙️", "Gravador — grave ou suba um áudio, salve e gerencie suas gravações (salvas na nuvem, Firestore)."), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🎙️", "Gravador"), unsafe_allow_html=True)
     grav_nome = st.text_input("Nome da gravação", placeholder="Ex: Cover Snuff - 23/09")
     grav_audio = st.audio_input("🎤 Gravar agora")
     st.markdown("**— ou —**")
@@ -1591,7 +1586,7 @@ with tab_gravador:
         st.caption("💡 As gravações aparecem na Análise, na Produção e a Laranjinha pode avaliá-las pelo nome.")
 # ── ABA HISTÓRICO ──
 with tab_historico:
-    st.markdown(titulo_secao("📊", "Evolução da sua performance — salva no Firebase."), unsafe_allow_html=True)
+    st.markdown(titulo_secao("📊", "Evolução da sua performance"), unsafe_allow_html=True)
     analises = carregar_historico_firestore()
     if not analises:
         st.info("Nenhuma análise salva ainda.")
@@ -1640,7 +1635,7 @@ with tab_historico:
                     st.error("Não foi possível excluir. Verifique o Firebase.")
 # ── ABA COMPOSIÇÕES ──
 with tab_composicoes:
-    st.markdown(titulo_secao("🎼", "Crie e salve suas composições — com cifras, seções e versionamento."), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🎼", "Crie e salve suas composições"), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     comp_titulo = c1.text_input("Título da música", placeholder="Ex: Minha canção",
                                 value=st.session_state.get("comp_titulo", ""))
@@ -1677,7 +1672,7 @@ with tab_composicoes:
         st.markdown(renderizar_composicao_html(letra_atual), unsafe_allow_html=True)
 # ── ABA EDIÇÃO VOCAL (IA) ──
 with tab_edicao:
-    st.markdown(titulo_secao("✨", "Peça para a IA ajustar sua voz. Ex: *'alinha minha voz no tom'*, *'limpa o ruído e deixa mais presente'*."), unsafe_allow_html=True)
+    st.markdown(titulo_secao("✨", "Peça para a IA ajustar sua voz"), unsafe_allow_html=True)
     edicao_in = st.file_uploader("Voz para editar (use o áudio isolado)", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="edicao")
     comando = st.text_input("Comando para a IA", placeholder="Ex: alinha minha voz no tom e limpa o ruído")
     if st.button("✨ Aplicar edição com IA", type="primary"):
@@ -1716,7 +1711,7 @@ with tab_edicao:
             st.success("Edição aplicada: " + ", ".join(acoes) + ".")
 # ── ABA CONVERSOR DE FORMATO ──
 with tab_conversor:
-    st.markdown(titulo_secao("🔄", "Conversor de formato — converta seus áudios entre WAV e MP3."), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🔄", "Conversor de formato"), unsafe_allow_html=True)
     conv_in = st.file_uploader("📂 Subir áudio para converter", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="conversor")
     conv_formato = st.radio("Converter para", ["WAV", "MP3"], horizontal=True)
     if st.button("🔄 Converter", type="primary"):
@@ -1739,8 +1734,8 @@ with tab_conversor:
                             st.error(f"Erro na conversão: {e}")
 # ── ABA PRODUÇÃO (backing track musical) ──
 with tab_producao:
-    st.markdown(titulo_secao("🎛️", "Estúdio de Produção — backing track musical no tom e BPM da sua gravação."), unsafe_allow_html=True)
-    st.markdown(titulo_secao("1️⃣", "Captura — suba o arquivo, grave direto ou use uma gravação salva."), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🎛️", "Estúdio de Produção"), unsafe_allow_html=True)
+    st.markdown(titulo_secao("1️⃣", "Captura"), unsafe_allow_html=True)
     prod_in = st.file_uploader("📂 Subir gravação (voz + violão)", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="producao")
     st.markdown("**— ou —**")
     prod_grav = st.audio_input("🎤 Gravar música agora")
@@ -1915,14 +1910,14 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha (st.button → abre o chat na hora) ──
+# ── Botão flutuante da Laranjinha (st.button → abre o chat na hora, sem reload) ──
 if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
     st.session_state["laranjinha_aberta"] = True
 
 if st.session_state.get("laranjinha_aberta"):
     laranjinha_dialog()
 
-# CSS: container externo fixo + PNG no botão interno
+# ── CSS do botão flutuante (posição fixa, PNG do mascote no próprio botão) ──
 if laranjinha_b64:
     st.markdown("""
     <style>
@@ -1949,42 +1944,8 @@ if laranjinha_b64:
     }
     </style>
     """, unsafe_allow_html=True)
-    if laranjinha_b64:
-        st.markdown("""
-    <style>
-    .laranjinha-fab {
-        position: fixed !important;
-        bottom: 28px !important;
-        right: 24px !important;
-        width: 120px !important;
-        height: 120px !important;
-        border-radius: 50% !important;
-        background: url("data:image/png;base64,""" + laranjinha_b64 + """) center/contain no-repeat !important;
-        background-color: transparent !important;
-        z-index: 10000 !important;
-        pointer-events: none !important;
-    }
-    button[title="Abrir Laranjinha"] {
-        position: fixed !important;
-        bottom: 28px !important;
-        right: 24px !important;
-        width: 120px !important;
-        height: 120px !important;
-        border-radius: 50% !important;
-        background: transparent !important;
-        border: none !important;
-        outline: none !important;
-        z-index: 10001 !important;
-        font-size: 0 !important;
-        color: transparent !important;
-        line-height: 0 !important;
-        text-indent: -9999px !important;
-        overflow: hidden !important;
-        cursor: pointer !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    # ── CSS do balão do diálogo (via st.markdown, para valer sem iframe) ──
+
+# ── CSS do balão do diálogo (via st.markdown, para valer sem iframe) ──
 st.markdown("""
 <style>
 [data-testid="stDialog"] {
