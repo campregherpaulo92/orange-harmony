@@ -25,14 +25,41 @@ from google import genai
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 cliente = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 # ── Modelos de IA disponíveis (seletor no app, sem editar código) ──
-MODELOS_DISPONIVEIS = [
-    "gemini-3-flash",      # nível Pro, rápido, no tier grátis (recomendado)
-    "gemini-3.5-flash",    # geração anterior Flash
-    "gemini-3.1-pro",      # top de qualidade (pode exigir tier pago)
-    "gemini-2.5-flash",    # estável e confiável
-]
+MODELOS_PADRAO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-3.1-pro"]
+
+def listar_modelos_ia():
+    """Descobre os modelos de texto realmente disponíveis na sua chave."""
+    if "modelos_cache" in st.session_state:
+        return st.session_state["modelos_cache"]
+    if cliente is None:
+        return MODELOS_PADRAO
+    try:
+        encontrados = []
+        for m in cliente.models.list():
+            nome = (getattr(m, "name", "") or "").replace("models/", "")
+            acoes = getattr(m, "supported_actions", None) or []
+            if acoes and "generateContent" not in acoes:
+                continue
+            if not ("flash" in nome or "pro" in nome):
+                continue
+            if any(x in nome for x in ["image", "tts", "embedding", "live", "veo", "lyria", "nano-banana"]):
+                continue
+            encontrados.append(nome)
+        if encontrados:
+            ordem = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3-flash",
+                     "gemini-3.1-pro", "gemini-2.5-flash", "gemini-2.5-pro"]
+            encontrados.sort(key=lambda n: ordem.index(n) if n in ordem else 99)
+            st.session_state["modelos_cache"] = encontrados
+            return encontrados
+    except Exception:
+        pass
+    return MODELOS_PADRAO
+
+MODELOS_DISPONIVEIS = listar_modelos_ia()
+
 def modelo_atual():
-    return st.session_state.get("modelo_ia", MODELOS_DISPONIVEIS[0])
+    padrao = MODELOS_DISPONIVEIS[0] if MODELOS_DISPONIVEIS else "gemini-3.5-flash"
+    return st.session_state.get("modelo_ia", padrao)
 # ── Firebase ──
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -912,7 +939,10 @@ def assistente_resposta(prompt_usuario):
             dados = get_gravacao_bytes(nome)
             if dados:
                 audio_anexo = (nome, dados)
-                break
+            else:
+                return (f"Achei a gravação '{nome}' na lista, mas não consegui carregar o áudio do banco. "
+                        f"Salve a gravação de novo na aba Gravador e tente outra vez.")
+            break
     try:
         modelo = modelo_atual()
         if audio_anexo is not None:
@@ -932,7 +962,7 @@ def assistente_resposta(prompt_usuario):
                     model=modelo,
                     contents=[
                         sistema + f"\n\nO usuário pediu: {prompt_usuario}\n\nOuça a gravação '{nome}' e faça uma avaliação completa do canto: afinação, notas, técnica, pontos fortes e pontos a melhorar. Seja específico e encorajador.",
-                        arquivo,
+                        types.Part.from_uri(file_uri=arquivo.uri, mime_type="audio/mpeg"),
                     ],
                 )
                 return resposta.text
@@ -1149,13 +1179,13 @@ with st.sidebar:
     modelo_escolhido = st.selectbox(
         "Modelo",
         MODELOS_DISPONIVEIS,
-        index=MODELOS_DISPONIVEIS.index(modelo_atual()),
+        index=MODELOS_DISPONIVEIS.index(modelo_atual()) if modelo_atual() in MODELOS_DISPONIVEIS else 0,
         key="sel_modelo",
     )
     st.session_state["modelo_ia"] = modelo_escolhido
     st.caption("Troque o modelo aqui — sem mexer no código.")
     st.markdown("---")
-    st.caption("💡 Gemini 3 Flash é o recomendado: nível Pro no preço de Flash.")
+    st.caption("💡 O app lista automaticamente os modelos liberados na sua chave.")
 # ══════════════════ INTERFACE ══════════════════
 tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao = st.tabs(
     ["🎵 Análise e Estudo", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção"]
@@ -1237,7 +1267,8 @@ with tab_analise:
             devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
             if cliente is not None:
                 ultimo_erro = ""
-                for modelo in [modelo_atual(), "gemini-3-flash", "gemini-3.5-flash", "gemini-2.5-flash"]:
+                modelos_tentar = [modelo_atual()] + [m for m in MODELOS_DISPONIVEIS if m != modelo_atual()]
+                for modelo in modelos_tentar:
                     try:
                         resposta = cliente.models.generate_content(model=modelo, contents=montar_prompt_professor(resultado))
                         devolutiva = resposta.text
