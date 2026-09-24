@@ -1915,15 +1915,30 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha (PNG visível + botão invisível por cima, sem reload) ──
+# ── Botão flutuante da Laranjinha (link com PNG via CSS → mostra o mascote e abre o chat) ──
 if laranjinha_b64:
-    st.markdown(
-        '<div class="laranjinha-fab" aria-label="Abrir Laranjinha"></div>',
-        unsafe_allow_html=True,
+    fab_html = (
+        '<a href="?laranjinha=1" target="_self" aria-label="Abrir Laranjinha" '
+        'style="position:fixed;bottom:28px;right:24px;width:120px;height:120px;'
+        'border-radius:50%;z-index:99999;display:block;cursor:pointer;'
+        'background:url(data:image/png;base64,' + laranjinha_b64 + ') center/contain no-repeat;'
+        'background-color:transparent;border:none;'
+        'box-shadow:0 8px 30px rgba(249,115,22,0.55);"></a>'
     )
+else:
+    fab_html = (
+        '<a href="?laranjinha=1" target="_self" aria-label="Abrir Laranjinha" '
+        'style="position:fixed;bottom:28px;right:24px;width:120px;height:120px;'
+        'border-radius:50%;z-index:99999;display:flex;align-items:center;justify-content:center;'
+        'background:rgba(249,115,22,0.9);font-size:60px;text-decoration:none;color:#fff;'
+        'box-shadow:0 8px 30px rgba(249,115,22,0.55);">🍊</a>'
+    )
+st.markdown(fab_html, unsafe_allow_html=True)
 
-st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha")
-
+# ── Abre o diálogo quando o link é clicado ──
+if st.query_params.get("laranjinha") == "1":
+    st.session_state["laranjinha_aberta"] = True
+    st.query_params.clear()
 if st.session_state.get("laranjinha_aberta"):
     laranjinha_dialog()
 
