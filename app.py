@@ -740,7 +740,7 @@ def _detectar_pitch_aubio(amostras, sr):
         return float(freq)
     return None
     def _detectar_pitch_autocorr(amostras, sr):
-    """Detecção de pitch por autocorrelação (FFT) — sem dependências externas."""
+   # """Detecção de pitch por autocorrelação (FFT) — sem dependências externas."""
     if len(amostras) < 256:
         return None
     x = amostras - np.mean(amostras)
