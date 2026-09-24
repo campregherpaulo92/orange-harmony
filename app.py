@@ -912,7 +912,7 @@ def carregar_composicao(doc_id):
         return "", "", ""
     dados = doc.to_dict()
     return dados.get("titulo", ""), dados.get("tom", ""), dados.get("letra", "")
-    def excluir_composicao_firestore(doc_id):
+def excluir_composicao_firestore(doc_id):
     """Exclui uma composição do Firestore pelo ID do documento."""
     if db is None:
         return "⚠️ Firebase não conectado."
