@@ -919,12 +919,37 @@ def gerar_escala(nota, calibracao):
         trechos.append(silencio)
     return (sr, np.concatenate(trechos).astype(np.float32))
 # ══════════════════ CHAMADA GEMINI COM FALLBACK AUTOMÁTICO ══════════════════
+# Modelos que sabem ouvir áudio via generateContent (Flash são multimodais)
+MODELOS_COM_AUDIO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-3.8-flash"]
+
+# Frases que indicam que o modelo NÃO conseguiu ouvir o áudio (resposta inválida)
+FRASES_SEM_AUDIO = [
+    "não consigo ouvir", "não consigo escutar", "não consigo acessar o áudio",
+    "não recebi o áudio", "não tenho acesso ao áudio", "não consigo analisar o áudio",
+    "não posso ouvir", "não consigo processar o áudio", "não consigo avaliar o áudio",
+    "não consigo ouvir a gravação", "não consigo escutar a gravação",
+    "não consigo avaliar a gravação", "não consigo analisar a gravação",
+    "can't hear", "cannot hear", "cannot access the audio", "can't access the audio",
+    "cannot process audio", "don't have access to the audio", "no audio file",
+]
+
+def _resposta_sem_audio(texto):
+    t = (texto or "").lower()
+    return any(f in t for f in FRASES_SEM_AUDIO)
+
 def chamar_gemini_com_fallback(prompt, audio_anexo=None):
     """Tenta os modelos em ordem até um responder de verdade.
+    Com áudio, só usa modelos que sabem ouvir e ignora respostas 'não consigo ouvir'.
     Retorna (texto, modelo_usado) ou (None, ultimo_erro)."""
     if cliente is None:
         return None, "Gemini não configurado."
-    modelos_tentar = [modelo_atual()] + [m for m in MODELOS_DISPONIVEIS if m != modelo_atual()]
+    if audio_anexo is not None:
+        # Só modelos com suporte a áudio, na ordem de prioridade
+        modelos_tentar = [m for m in MODELOS_COM_AUDIO if m in MODELOS_DISPONIVEIS]
+        if not modelos_tentar:
+            modelos_tentar = MODELOS_COM_AUDIO
+    else:
+        modelos_tentar = [modelo_atual()] + [m for m in MODELOS_DISPONIVEIS if m != modelo_atual()]
     arquivo = None
     if audio_anexo is not None:
         try:
@@ -954,6 +979,9 @@ def chamar_gemini_com_fallback(prompt, audio_anexo=None):
                 resposta = cliente.models.generate_content(model=modelo, contents=prompt)
             texto = resposta.text
             if texto and texto.strip():
+                if audio_anexo is not None and _resposta_sem_audio(texto):
+                    ultimo_erro = f"{modelo} não conseguiu ouvir o áudio"
+                    continue
                 return texto, modelo
             ultimo_erro = "Resposta vazia"
         except Exception as e:
