@@ -1799,10 +1799,23 @@ with tab_producao:
         st.info("💡 A separação de stems (voz/violão separados) exige GPU e roda no Colab — o link do notebook fica no README.")
 # ══════════════════ ASSISTENTE VIRTUAL (laranjinha com memória e chats) ══════════════════
 def _encontrar_laranjinha():
-    for caminho in ["laranjinha.png", "assets/laranjinha.png", "img/laranjinha.png",
-                    "static/laranjinha.png", "images/laranjinha.png"]:
-        if os.path.exists(caminho):
-            return caminho
+    import glob
+    nomes = ["laranjinha.png", "laranjinha.PNG", "Laranjinha.png",
+             "laranjinha_transparente.png", "laranjinha_transparente.PNG",
+             "mascote.png", "mascote.PNG", "orange.png", "orange.PNG"]
+    pastas = ["", "assets", "img", "images", "static", "media", "imagens", "logos", "logo"]
+    for pasta in pastas:
+        for nome in nomes:
+            caminho = os.path.join(pasta, nome) if pasta else nome
+            if os.path.exists(caminho):
+                return caminho
+    for raiz, _, arquivos in os.walk("."):
+        if raiz.count(os.sep) > 2:
+            continue
+        for arq in arquivos:
+            if arq.lower().endswith(".png") and any(
+                p in arq.lower() for p in ["laranj", "orange", "mascote"]):
+                return os.path.join(raiz, arq)
     return None
 
 LARANJINHA_PATH = _encontrar_laranjinha()
@@ -1810,7 +1823,9 @@ laranjinha_b64 = ""
 if LARANJINHA_PATH:
     with open(LARANJINHA_PATH, "rb") as f:
         laranjinha_b64 = base64.b64encode(f.read()).decode()
-
+    st.caption(f"✅ Mascote carregado: `{LARANJINHA_PATH}` ({len(laranjinha_b64)//1024} KB)")
+else:
+    st.caption("⚠️ Mascote não encontrado — confira o nome/pasta do PNG no repositório.")
 @st.dialog("🍊 Laranjinha", width="large")
 def laranjinha_dialog():
     # ── Garante um chat atual (cria "Chat geral" automaticamente se não houver) ──
