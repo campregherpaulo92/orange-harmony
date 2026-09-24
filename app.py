@@ -1799,7 +1799,6 @@ with tab_producao:
         st.info("💡 A separação de stems (voz/violão separados) exige GPU e roda no Colab — o link do notebook fica no README.")
 # ══════════════════ ASSISTENTE VIRTUAL (laranjinha com memória e chats) ══════════════════
 def _encontrar_laranjinha():
-    import glob
     nomes = ["laranjinha.png", "laranjinha.PNG", "Laranjinha.png",
              "laranjinha_transparente.png", "laranjinha_transparente.PNG",
              "mascote.png", "mascote.PNG", "orange.png", "orange.PNG"]
@@ -1823,12 +1822,9 @@ laranjinha_b64 = ""
 if LARANJINHA_PATH:
     with open(LARANJINHA_PATH, "rb") as f:
         laranjinha_b64 = base64.b64encode(f.read()).decode()
-    st.caption(f"✅ Mascote carregado: `{LARANJINHA_PATH}` ({len(laranjinha_b64)//1024} KB)")
-else:
-    st.caption("⚠️ Mascote não encontrado — confira o nome/pasta do PNG no repositório.")
+
 @st.dialog("🍊 Laranjinha", width="large")
 def laranjinha_dialog():
-    # ── Garante um chat atual (cria "Chat geral" automaticamente se não houver) ──
     if "chat_atual_id" not in st.session_state:
         chats = listar_chats_firestore()
         if chats:
@@ -1852,7 +1848,6 @@ def laranjinha_dialog():
             salvar_chat_firestore(chat_atual, [])
         st.session_state["chat_hist"] = []
 
-    # ── Seleção de chats (um por música) ──
     chats = listar_chats_firestore()
     opcoes_chat = {f"{nome}": cid for nome, cid in chats}
     chat_atual_id = st.session_state.get("chat_atual_id")
@@ -1872,7 +1867,6 @@ def laranjinha_dialog():
             st.session_state["chat_atual_nome"] = sel_nome
             st.session_state["chat_hist"] = carregar_chat_firestore(sel_id)
 
-    # ── Criar novo chat ──
     c_nome, c_cria = st.columns([3, 1])
     novo_nome = c_nome.text_input("Novo chat (ex: nome da música)", key="novo_chat_nome")
     if c_cria.button("➕", key="criar_chat_btn", help="Criar novo chat"):
@@ -1890,14 +1884,12 @@ def laranjinha_dialog():
 
     st.markdown("---")
 
-    # ── Histórico da conversa ──
     if "chat_hist" not in st.session_state:
         st.session_state["chat_hist"] = []
     for msg in st.session_state["chat_hist"][-20:]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # ── Campo de mensagem (cresce para baixo ao escrever, ideal para letras) ──
     with st.form("laranjinha_form", clear_on_submit=True):
         pergunta = st.text_area(
             "Escreva sua mensagem...",
@@ -1948,7 +1940,6 @@ st.html(f"""
     animation: ohPopIn 0.3s ease !important;
     z-index: 10001 !important;
 }}
-/* Remove o fundo escuro atrás do balão */
 [data-testid="stDialogBackdrop"], dialog::backdrop {{
     background: transparent !important;
     backdrop-filter: none !important;
@@ -1957,7 +1948,6 @@ st.html(f"""
     from {{ opacity: 0; transform: translateY(16px) scale(0.97); }}
     to {{ opacity: 1; transform: none; }}
 }}
-/* Caixa de texto que cresce + borda laranja */
 [data-testid="stDialog"] textarea {{
     min-height: 120px !important;
     font-size: 1.02rem !important;
@@ -1969,7 +1959,6 @@ st.html(f"""
     padding: 14px 16px !important;
     resize: vertical !important;
 }}
-/* Mensagens do chat dentro do balão */
 [data-testid="stDialog"] .stChatMessage {{
     background: rgba(255,255,255,0.04) !important;
     border-radius: 14px !important;
@@ -1982,14 +1971,13 @@ st.html(f"""
 }}
 </style>
 <script>
-(function() {
+(function() {{
     var url = "data:image/png;base64,{laranjinha_b64}";
-    // Aplica a imagem do mascote no botão flutuante em loop (sobrevive aos re-renders)
-    setInterval(function() {
+    setInterval(function() {{
         var btns = document.querySelectorAll('button');
-        for (var i = 0; i < btns.length; i++) {
+        for (var i = 0; i < btns.length; i++) {{
             var b = btns[i];
-            if ((b.textContent || '').indexOf('🍊') !== -1) {
+            if ((b.textContent || '').indexOf('🍊') !== -1) {{
                 b.style.backgroundImage = 'url("' + url + '")';
                 b.style.backgroundSize = 'contain';
                 b.style.backgroundPosition = 'center';
@@ -2008,31 +1996,29 @@ st.html(f"""
                 b.style.zIndex = '10002';
                 b.style.boxShadow = '0 8px 30px rgba(249,115,22,0.55)';
                 b.style.animation = 'ohBounce 2s ease-in-out infinite';
-                // Esconde o botão E todos os elementos internos (o emoji 🍊)
                 b.style.fontSize = '0';
                 b.style.color = 'transparent';
                 b.style.lineHeight = '0';
                 b.style.textIndent = '-9999px';
                 var filhos = b.querySelectorAll('*');
-                for (var j = 0; j < filhos.length; j++) {
+                for (var j = 0; j < filhos.length; j++) {{
                     filhos[j].style.fontSize = '0';
                     filhos[j].style.color = 'transparent';
                     filhos[j].style.lineHeight = '0';
                     filhos[j].style.opacity = '0';
-                }
-            }
-        }
-    }, 700);
-    // Auto-expande a caixa de texto para baixo ao digitar/colar
-    function autoGrow() {
+                }}
+            }}
+        }}
+    }}, 700);
+    function autoGrow() {{
         var areas = document.querySelectorAll('[data-testid="stDialog"] textarea');
-        for (var i = 0; i < areas.length; i++) {
+        for (var i = 0; i < areas.length; i++) {{
             areas[i].style.height = 'auto';
             areas[i].style.height = (areas[i].scrollHeight + 4) + 'px';
-        }
-    }
+        }}
+    }}
     document.addEventListener('input', autoGrow);
     setInterval(autoGrow, 600);
-})();
+}})();
 </script>
 """)
