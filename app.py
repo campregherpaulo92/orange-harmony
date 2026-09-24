@@ -1914,33 +1914,56 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha (st.markdown + estilo inline → SEM iframe) ──
-if laranjinha_b64:
-    fab_html = (
-        '<a href="?laranjinha=1" aria-label="Abrir Laranjinha" '
-        'style="position:fixed;bottom:28px;right:24px;width:120px;height:120px;'
-        'border-radius:50%;z-index:99999;display:block;cursor:pointer;'
-        'background:url(data:image/png;base64,' + laranjinha_b64 + ') center/contain no-repeat;'
-        'background-color:transparent;border:none;'
-        'box-shadow:0 8px 30px rgba(249,115,22,0.55);"></a>'
-    )
-else:
-    fab_html = (
-        '<a href="?laranjinha=1" aria-label="Abrir Laranjinha" '
-        'style="position:fixed;bottom:28px;right:24px;width:120px;height:120px;'
-        'border-radius:50%;z-index:99999;display:flex;align-items:center;justify-content:center;'
-        'background:rgba(249,115,22,0.9);font-size:60px;text-decoration:none;color:#fff;'
-        'box-shadow:0 8px 30px rgba(249,115,22,0.55);">🍊</a>'
-    )
-st.markdown(fab_html, unsafe_allow_html=True)
-
-# ── Abre o diálogo: pelo link OU mantém aberto pela sessão ──
-if st.query_params.get("laranjinha") == "1":
+# ── Botão flutuante da Laranjinha (st.button → abre na mesma página, sem navegação) ──
+if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
     st.session_state["laranjinha_aberta"] = True
-    st.query_params.clear()
+
 if st.session_state.get("laranjinha_aberta"):
     laranjinha_dialog()
 
+# ── CSS do botão com o mascote (mira o botão pelo data-testid do Streamlit) ──
+if laranjinha_b64:
+    css_fab = """
+    <style>
+    @keyframes ohBounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-12px); }
+    }
+    button[data-testid="baseButton-secondary"] {
+        position: fixed !important;
+        bottom: 28px !important;
+        right: 24px !important;
+        left: auto !important;
+        width: 120px !important;
+        height: 120px !important;
+        border-radius: 50% !important;
+        background: url("data:image/png;base64,""" + laranjinha_b64 + """) center/contain no-repeat !important;
+        background-color: transparent !important;
+        border: none !important;
+        outline: none !important;
+        cursor: pointer !important;
+        z-index: 99999 !important;
+        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
+        animation: ohBounce 2s ease-in-out infinite !important;
+        font-size: 0 !important;
+        color: transparent !important;
+        line-height: 0 !important;
+        text-indent: -9999px !important;
+        overflow: hidden !important;
+    }
+    button[data-testid="baseButton-secondary"]:hover {
+        transform: scale(1.08) !important;
+    }
+    button[data-testid="baseButton-secondary"] p,
+    button[data-testid="baseButton-secondary"] span,
+    button[data-testid="baseButton-secondary"] div {
+        font-size: 0 !important;
+        color: transparent !important;
+        opacity: 0 !important;
+    }
+    </style>
+    """
+    st.markdown(css_fab, unsafe_allow_html=True)
 # ── CSS do balão do diálogo (também via st.markdown, para valer sem iframe) ──
 st.markdown("""
 <style>
