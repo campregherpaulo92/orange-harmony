@@ -1235,7 +1235,7 @@ with tab_analise:
         else:
             resultado = analisar_afinacao(f0_limpo, tempos, calibracao, nota_ref=nota_ref)
             devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
-             if cliente is not None:
+            if cliente is not None:
                 ultimo_erro = ""
                 for modelo in [modelo_atual(), "gemini-3-flash", "gemini-3.5-flash", "gemini-2.5-flash"]:
                     try:
