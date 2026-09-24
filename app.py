@@ -1359,13 +1359,6 @@ st.markdown("""
     .stDataFrame { background: rgba(255,255,255,0.03); border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); }
     .stAudio { border-radius: 14px; overflow: hidden; }
 
-    [data-testid="stFileUploader"], [data-testid="stAudioInput"] {
-        background: rgba(255,255,255,0.04);
-        border: 1px dashed rgba(249,115,22,0.4);
-        border-radius: 14px; padding: 8px; backdrop-filter: blur(8px);
-    }
-    [data-testid="stFileUploader"]:hover, [data-testid="stAudioInput"]:hover { border-color: #f97316; }
-
     .stSpinner > div { border-top-color: #f97316 !important; }
     [data-testid="stSuccess"] {
         background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(255,255,255,0.03));
