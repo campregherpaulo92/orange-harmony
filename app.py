@@ -762,6 +762,12 @@ def _detectar_pitch_autocorr(amostras, sr):
     pico = int(np.argmax(janela)) + lag_min
     if corr_norm[pico] < 0.3:
         return None
+    # Correção de oitava: se o dobro/triplo do lag também tem correlação alta,
+    # a nota real é a mais grave (lag maior) — evita pegar harmônico da corda E.
+    for mult in (2, 3):
+        lag_mult = pico * mult
+        if lag_mult < lag_max and corr_norm[lag_mult] > 0.85 * corr_norm[pico]:
+            pico = lag_mult
     if 1 <= pico < len(corr_norm) - 1:
         y0, y1, y2 = corr_norm[pico - 1], corr_norm[pico], corr_norm[pico + 1]
         denom = y0 - 2 * y1 + y2
@@ -797,7 +803,8 @@ def _processar_frame_audio(frame):
         buf = buf[-max_len:]
     estado_afinador["buffer"] = buf
     if len(buf) >= 2048:
-        freq = _detectar_pitch_autocorr(buf[-2048:], frame.rate)
+        janela = buf[-4096:] if len(buf) >= 4096 else buf[-2048:]
+        freq = _detectar_pitch_autocorr(janela, frame.rate)
         if freq is not None:
             estado_afinador["contador_sem_sinal"] = 0
             hist = estado_afinador["hist_freq"]
