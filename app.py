@@ -1543,7 +1543,7 @@ with col_sel:
     st.session_state["modelo_ia"] = modelo_escolhido
     st.caption("auto")
 # ══════════════════ INTERFACE ══════════════════
-tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao = st.tabs(
+tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao, tab_ia_compositora = st.tabs(
     ["🎵 Análise e Estudo", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção"]
 )
 # ── ABA ANÁLISE E ESTUDO ──
@@ -2214,3 +2214,67 @@ st.markdown("""
 }
 </style>
 """, unsafe_allow_html=True)
+# ── ABA IA COMPOSITORA (geração de música por IA) ──
+def gerar_musica_ia(prompt, duracao_segundos=20):
+    """via MusicGen (Hugging Face)."""
+    import requests
+    from scipy.io import wavfile
+    token = st.secrets.get("HF_TOKEN", "")
+    if not token:
+        return None, "Configure o HF_TOKEN nos Secrets do Streamlit Cloud (Settings → Secrets)."
+    url = "https://api-inference.huggingface.co/models/facebook/musicgen-small"
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"inputs": prompt, "parameters": {"max_new_tokens": int(duracao_segundos * 50)}}
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=600)
+    except Exception as e:
+        return None, f"Erro de conexão: {e}"
+    if resp.status_code == 503:
+        return None, "O modelo está carregando (cold start da primeira vez). Tente de novo em ~1 minuto."
+    if resp.status_code == 429:
+        return None, "Limite de uso gratuito atingido por agora. Tente mais tarde."
+    if resp.status_code != 200:
+        return None, f"Erro da API ({resp.status_code}). Verifique o token nos Secrets."
+    try:
+        import soundfile as sf
+        audio_ia, sr_ia = sf.read(io.BytesIO(resp.content))
+        if audio_ia.ndim > 1:
+            audio_ia = audio_ia.mean(axis=1)
+        return (audio_ia.astype(np.float32), int(sr_ia)), None
+    except Exception:
+        return None, "Resposta inesperada da API."
+
+with tab_ia_compositora:
+    st.markdown(titulo_secao("🤖", "IA Compositora"), unsafe_allow_html=True)
+    st.caption("Descreva a música que você quer e a IA gera um trecho instrumental pronto. "
+               "Use estilo, instrumentos, clima e BPM (ex.: 'samba suave, violão e percussão, 80 BPM').")
+    prompt_ia = st.text_area(
+        "🎼 Descreva a música que você quer",
+        placeholder="Ex.: bossa nova calma com violão, piano suave e ritmo leve, 90 BPM",
+        key="prompt_ia",
+    )
+    c_ia1, c_ia2 = st.columns(2)
+    duracao_ia = c_ia1.slider("⏱️ Duração (segundos)", 10, 30, 20)
+    usar_contexto = c_ia2.checkbox("🎵 Usar tom/BPM da última análise", value=False)
+    if st.button("🤖 Gerar música com IA", type="primary"):
+        if not prompt_ia.strip():
+            st.warning("Escreva uma descrição da música primeiro.")
+            st.stop()
+        prompt_final = prompt_ia.strip()
+        if usar_contexto and "ultimo_bpm" in st.session_state and "ultimo_tom" in st.session_state:
+            prompt_final += f", {st.session_state.ultimo_bpm:.0f} BPM, key of {st.session_state.ultimo_tom}"
+        with st.spinner("🤖 A IA está compondo... (pode levar 1-2 minutos na primeira vez)"):
+            resultado, erro = gerar_musica_ia(prompt_final, duracao_ia)
+        if erro:
+            st.error(erro)
+            st.stop()
+        audio_ia, sr_ia = resultado
+        st.markdown(titulo_secao("🎧", "Sua música gerada:"), unsafe_allow_html=True)
+        st.audio(audio_ia, sample_rate=sr_ia)
+        st.download_button(
+            "⬇️ Baixar música (WAV)",
+            data=audio_para_bytes(audio_ia, sr_ia),
+            file_name="musica_ia_orange_harmony.wav",
+            mime="audio/wav",
+        )
+        st.info("💡 Dica: quanto mais específico o prompt (estilo, instrumentos, clima, BPM), melhor o resultado.")
