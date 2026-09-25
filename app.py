@@ -2209,7 +2209,7 @@ def laranjinha_dialog():
         idx = nomes_opcoes.index(chat_atual_nome) if chat_atual_nome in nomes_opcoes else 0
     else:
         idx = 0
-    sel_nome = st.selectbox("Chat (um por música)", nomes_opcoes, index=idx, key="sel_chat")
+    sel_nome = st.selectbox("Qual o chat?", nomes_opcoes, index=idx, key="sel_chat")
     if sel_nome:
         sel_id = opcoes_chat[sel_nome]
         if sel_id != chat_atual_id:
@@ -2261,9 +2261,36 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha (abre o chat só quando clicar no botão) ──
-if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
+# ── Botão flutuante da Laranjinha (mascote PNG, abre o chat ao clicar) ──
+if st.button("", key="abrir_laranjinha", help="Abrir Laranjinha"):
     laranjinha_dialog()
+
+if laranjinha_b64:
+    st.markdown(f"""
+    <style>
+    div[data-testid="stButton"]:has(button[data-testid="baseButton-secondary"]:has(span:empty)) {{
+        position: fixed !important;
+        bottom: 28px !important;
+        right: 24px !important;
+        width: 120px !important;
+        height: 120px !important;
+        z-index: 10000 !important;
+    }}
+    div[data-testid="stButton"] button {{
+        width: 120px !important;
+        height: 120px !important;
+        border-radius: 50% !important;
+        background: url("data:image/png;base64,{laranjinha_b64}") center/contain no-repeat !important;
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
+        overflow: hidden !important;
+    }}
+    div[data-testid="stButton"] button:hover {{
+        transform: scale(1.06) !important;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
 
 # ── CSS do botão flutuante (posição fixa, PNG do mascote no próprio botão) ──
 if laranjinha_b64:
@@ -2302,7 +2329,7 @@ st.markdown("""
     right: 24px !important;
     left: auto !important;
     top: auto !important;
-    width: 820px !important;
+    width: 900px !important;
     max-width: calc(100vw - 32px) !important;
     max-height: 88vh !important;
     overflow-y: auto !important;
