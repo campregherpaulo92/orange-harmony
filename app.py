@@ -1649,7 +1649,7 @@ if os.path.exists(LOGO_PATH):
 else:
     col_logo.markdown("# 🍊 Orange Harmony")
 # ══════════════════ SUBTÍTULO (seletor de modelo removido — IA automática) ══════════════════
-st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Coach e Analista de Evolução.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
+st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Coach e Analista de Evolução</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
 
 # Modelo definido automaticamente (sem seletor exposto)
 if "modelo_ia" not in st.session_state:
@@ -1657,11 +1657,11 @@ if "modelo_ia" not in st.session_state:
     
 # ══════════════════ INTERFACE ══════════════════
 tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao, tab_ia_compositora = st.tabs(
-    ["🎵 Análise e Estudo", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção", "🤖 IA Compositora"]
+    ["🎵 Análise e Estudo", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção", "🤖 IA Songwriter"]
 )
 # ── ABA ANÁLISE E ESTUDO ──
 with tab_analise:
-    st.markdown(titulo_secao("🎯", "Referência do tom"), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🎯", "Tom de Referência"), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     nota_ref = c1.selectbox("Nota de referência", NOTAS_REFERENCIA, index=NOTAS_REFERENCIA.index("C4"))
     calibracao = c2.radio("Calibração A4 (Hz)", [440, 442], horizontal=True)
@@ -1685,9 +1685,9 @@ with tab_analise:
             height=0
         )
     st.markdown("---")
-    st.markdown(titulo_secao("🎤", "Análise de voz"), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🎤", "Análise Vocal"), unsafe_allow_html=True)
     audio_in = st.file_uploader("📂 Subir mídia", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"])
-    st.markdown("**— ou —**")
+    st.markdown("****")
     audio_gravado = st.audio_input("🎤 Gravar")
     grav_salvas = get_gravacoes()
     opcoes_grav = ["—"] + grav_salvas
@@ -1814,7 +1814,7 @@ with tab_afinador:
     calib_afinador = c2.radio("Calibração A4", [440, 442], horizontal=True)
     st.markdown(DESCRICOES_AFINACOES.get(afincao, ""))
     if TEM_WEBRTC:
-        st.markdown(titulo_secao("⚡", "Modo tempo real — agulha contínua:"), unsafe_allow_html=True)
+        st.markdown(titulo_secao("⚡", "Modo agulha"), unsafe_allow_html=True)
         estado_afinador["calibracao"] = calib_afinador
         webrtc_ctx = webrtc_streamer(
             key="afinador_tempo_real",
@@ -1834,12 +1834,12 @@ with tab_afinador:
                 if time.time() - inicio > 60:
                     break
         else:
-            st.info("Clique em 'Iniciar' para ativar o microfone e ver a agulha em tempo real.")
+            st.info("Clique em 'Iniciar' para ativar")
     else:
         st.warning(f"Modo tempo real indisponível. Detalhe: {ERRO_WEBRTC}")
     st.markdown(titulo_secao("🎤", "Subir uma nota"), unsafe_allow_html=True)
     audio_afinador = st.file_uploader("📂 Subir nota sustentada", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="afinador")
-    st.markdown("**— ou —**")
+    st.markdown("****")
     audio_afinador_grav = st.audio_input("🎤 Gravar nota agora", key="afinador_rec")
     fonte_afinador = audio_afinador if audio_afinador is not None else audio_afinador_grav
     if fonte_afinador is not None:
@@ -1854,9 +1854,9 @@ with tab_afinador:
 with tab_gravador:
     st.markdown(titulo_secao("🎙️", "Gravador"), unsafe_allow_html=True)
     grav_nome = st.text_input("Nome da gravação", placeholder="Ex: Cover Snuff - 23/09")
-    grav_audio = st.audio_input("🎤 Gravar agora")
-    st.markdown("**— ou —**")
-    grav_upload = st.file_uploader("📂 Subir arquivo de áudio para salvar", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="grav_upload")
+    grav_audio = st.audio_input("Gravar")
+    st.markdown("****")
+    grav_upload = st.file_uploader("📂 Upload na nuvem", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="grav_upload")
     if st.button("💾 Salvar gravação", type="primary"):
         fonte_grav = grav_audio if grav_audio is not None else grav_upload
         if fonte_grav is None:
@@ -1902,7 +1902,7 @@ with tab_gravador:
         st.caption("💡 As gravações aparecem na Análise, na Produção e a Laranjinha pode avaliá-las pelo nome.")
 # ── ABA HISTÓRICO ──
 with tab_historico:
-    st.markdown(titulo_secao("📊", "Evolução da sua performance"), unsafe_allow_html=True)
+    st.markdown(titulo_secao("📊", "Tabela de Evolução/Performance"), unsafe_allow_html=True)
     analises = carregar_historico_firestore()
     if not analises:
         st.info("Nenhuma análise salva ainda.")
@@ -1936,7 +1936,7 @@ with tab_historico:
             ax1.set_title("Evolução da performance")
             fig.tight_layout()
             st.pyplot(fig)
-        st.markdown(titulo_secao("🗑️", "Excluir análises"), unsafe_allow_html=True)
+        st.markdown(titulo_secao("🗑️", "Excluir Análises"), unsafe_allow_html=True)
         for doc_id, a in analises:
             data_curta = a.get("data", "")[5:16]
             nota_a = a.get("nota_predominante", "—")
@@ -2005,7 +2005,7 @@ with tab_composicoes:
         st.markdown(renderizar_composicao_html(letra_atual), unsafe_allow_html=True)
 # ── ABA EDIÇÃO VOCAL (IA) ──
 with tab_edicao:
-    st.markdown(titulo_secao("✨", "Peça para a IA ajustar sua voz"), unsafe_allow_html=True)
+    st.markdown(titulo_secao("✨", "Ajuste de Voz via IA"), unsafe_allow_html=True)
     edicao_in = st.file_uploader("Voz para editar (use o áudio isolado)", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="edicao")
     comando = st.text_input("Comando para a IA", placeholder="Ex: alinha minha voz no tom e limpa o ruído")
     if st.button("✨ Aplicar edição com IA", type="primary"):
@@ -2045,7 +2045,7 @@ with tab_edicao:
 # ── ABA CONVERSOR DE FORMATO ──
 with tab_conversor:
     st.markdown(titulo_secao("🔄", "Conversor de formato"), unsafe_allow_html=True)
-    conv_in = st.file_uploader("📂 Subir áudio para converter", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="conversor")
+    conv_in = st.file_uploader("📂 Subir mídia", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="conversor")
     conv_formato = st.radio("Converter para", ["WAV", "MP3"], horizontal=True)
     if st.button("🔄 Converter", type="primary"):
         if conv_in is None:
@@ -2070,7 +2070,7 @@ with tab_producao:
     st.markdown(titulo_secao("🎛️", "Estúdio de Produção"), unsafe_allow_html=True)
     st.markdown(titulo_secao("1️⃣", "Captura"), unsafe_allow_html=True)
     prod_in = st.file_uploader("📂 Subir gravação (voz + violão)", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="producao")
-    st.markdown("**— ou —**")
+    st.markdown("****")
     prod_grav = st.audio_input("🎤 Gravar música agora")
     grav_salvas_prod = get_gravacoes()
     opcoes_grav_prod = ["—"] + grav_salvas_prod
@@ -2449,7 +2449,7 @@ def gerar_musica_ia(prompt, duracao_segundos=20, letra=None):
         return None, f"Resposta inesperada da IA: {str(e)[:300]}"
         
 with tab_ia_compositora:
-    st.markdown(titulo_secao("🤖", "IA Compositora"), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🤖", "IA Songwriter"), unsafe_allow_html=True)
     st.caption("Descreva a música que você quer e a IA gera um trecho instrumental pronto. "
                "Use estilo, instrumentos, clima e BPM (ex.: 'samba suave, violão e percussão, 80 BPM').")
     prompt_ia = st.text_area(
