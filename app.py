@@ -2262,13 +2262,15 @@ def laranjinha_dialog():
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
 # ── Botão flutuante da Laranjinha (mascote PNG, abre o chat ao clicar) ──
+st.markdown('<div id="fab-laranjinha"></div>', unsafe_allow_html=True)
 if st.button("", key="abrir_laranjinha", help="Abrir Laranjinha"):
     laranjinha_dialog()
 
 if laranjinha_b64:
     st.markdown(f"""
     <style>
-    div[data-testid="stButton"]:has(button[data-testid="baseButton-secondary"]:has(span:empty)) {{
+    #fab-laranjinha {{ display: none; }}
+    div[data-testid="stVerticalBlock"] > div:has(#fab-laranjinha) + div[data-testid="stButton"] {{
         position: fixed !important;
         bottom: 28px !important;
         right: 24px !important;
@@ -2276,7 +2278,7 @@ if laranjinha_b64:
         height: 120px !important;
         z-index: 10000 !important;
     }}
-    div[data-testid="stButton"] button {{
+    div[data-testid="stVerticalBlock"] > div:has(#fab-laranjinha) + div[data-testid="stButton"] button {{
         width: 120px !important;
         height: 120px !important;
         border-radius: 50% !important;
@@ -2286,7 +2288,7 @@ if laranjinha_b64:
         box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
         overflow: hidden !important;
     }}
-    div[data-testid="stButton"] button:hover {{
+    div[data-testid="stVerticalBlock"] > div:has(#fab-laranjinha) + div[data-testid="stButton"] button:hover {{
         transform: scale(1.06) !important;
     }}
     </style>
