@@ -2263,34 +2263,38 @@ def laranjinha_dialog():
 
 # ── Botão flutuante da Laranjinha (mascote PNG, abre o chat ao clicar) ──
 st.markdown('<div id="fab-laranjinha"></div>', unsafe_allow_html=True)
-if st.button("", key="abrir_laranjinha", help="Abrir Laranjinha"):
+if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
     laranjinha_dialog()
 
 if laranjinha_b64:
-    st.markdown(f"""
+    st.markdown("""
     <style>
-    #fab-laranjinha {{ display: none; }}
-    div[data-testid="stVerticalBlock"] > div:has(#fab-laranjinha) + div[data-testid="stButton"] {{
+    #fab-laranjinha { display: none; }
+    div[data-testid="stElementContainer"]:has(#fab-laranjinha) + div[data-testid="stElementContainer"] > div[data-testid="stButton"] {
         position: fixed !important;
         bottom: 28px !important;
         right: 24px !important;
         width: 120px !important;
         height: 120px !important;
         z-index: 10000 !important;
-    }}
-    div[data-testid="stVerticalBlock"] > div:has(#fab-laranjinha) + div[data-testid="stButton"] button {{
+    }
+    div[data-testid="stElementContainer"]:has(#fab-laranjinha) + div[data-testid="stElementContainer"] > div[data-testid="stButton"] button {
         width: 120px !important;
         height: 120px !important;
         border-radius: 50% !important;
-        background: url("data:image/png;base64,{laranjinha_b64}") center/contain no-repeat !important;
+        background-image: url("data:image/png;base64,""" + laranjinha_b64 + """) !important;
+        background-size: contain !important;
+        background-position: center !important;
+        background-repeat: no-repeat !important;
         background-color: transparent !important;
         border: none !important;
         box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+        color: transparent !important;
+        text-indent: -9999px !important;
         overflow: hidden !important;
-    }}
-    div[data-testid="stVerticalBlock"] > div:has(#fab-laranjinha) + div[data-testid="stButton"] button:hover {{
-        transform: scale(1.06) !important;
-    }}
+    }
     </style>
     """, unsafe_allow_html=True)
 
