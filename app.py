@@ -2386,10 +2386,14 @@ def laranjinha_dialog():
         if dados_voz and st.session_state.get("ultimo_audio_voz") != assinatura:
             st.session_state["ultimo_audio_voz"] = assinatura
             with st.spinner("Transcrevendo sua mensagem de voz..."):
-                transcricao, _ = chamar_gemini_com_fallback(
-                    "Transcreva fielmente a mensagem de voz em português. Responda APENAS com o texto transcrito, sem comentários e sem aspas.",
-                    ("mensagem_voz.wav", dados_voz),
-                )
+                transcricao, modelo_usado = None, "?"
+                for tentativa in range(2):
+                    transcricao, modelo_usado = chamar_gemini_com_fallback(
+                        "Transcreva fielmente a mensagem de voz em português. Responda APENAS com o texto transcrito, sem comentários e sem aspas.",
+                        ("mensagem_voz.wav", dados_voz),
+                    )
+                    if transcricao and transcricao.strip():
+                        break
             if transcricao and transcricao.strip():
                 st.session_state["chat_hist"].append({"role": "user", "content": "🎙️ " + transcricao.strip()})
                 with st.chat_message("user"):
@@ -2403,7 +2407,7 @@ def laranjinha_dialog():
                 if chat_atual:
                     salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
             else:
-                st.warning("Não consegui transcrever o áudio agora. Tente gravar de novo em instantes.")
+                st.warning(f"Não consegui transcrever o áudio (modelo: {modelo_usado}). Tente gravar de novo em instantes.")
 # ── Botão flutuante da Laranjinha (PNG por cima do botão real) ──
 st.markdown('<div id="fab-laranjinha"></div>', unsafe_allow_html=True)
 if st.button("", key="abrir_laranjinha", help="Abrir Laranjinha"):
