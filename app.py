@@ -2331,9 +2331,12 @@ if laranjinha_b64:
     </style>
     """, unsafe_allow_html=True)
     
-    # ── Toolbar do Streamlit Cloud: só aparece quando o mouse chega perto ──
+# ── Toolbar do Streamlit Cloud: só aparece quando o mouse chega perto ──
 st.markdown("""
 <style>
+header[data-testid="stHeader"] {
+    background: transparent !important;
+}
 header[data-testid="stHeader"] div[data-testid="stToolbar"] {
     opacity: 0 !important;
     transition: opacity 0.25s ease !important;
