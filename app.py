@@ -2216,40 +2216,51 @@ st.markdown("""
 """, unsafe_allow_html=True)
 # ── ABA IA COMPOSITORA (geração de música por IA) ──
 def gerar_musica_ia(prompt, duracao_segundos=20):
-    """Gera música instrumental via MusicGen (Hugging Face, biblioteca oficial)."""
+    """Gera música instrumental via estúdio oficial do MusicGen (Meta)."""
     try:
-        from huggingface_hub import InferenceClient
+        from gradio_client import Client
     except ImportError:
-        return None, "Biblioteca ausente. Adicione 'huggingface_hub' ao requirements.txt."
+        return None, "Biblioteca ausente. Adicione 'gradio_client' ao requirements.txt."
     token = st.secrets.get("HF_TOKEN", "")
-    if not token:
-        return None, "Configure o HF_TOKEN nos Secrets do Streamlit Cloud (Settings → Secrets)."
     try:
-        client = InferenceClient(token=token)
-        # o nome do método varia conforme a versão da biblioteca
-        if hasattr(client, "audio_generation"):
-            audio_bytes = client.audio_generation(prompt, model="facebook/musicgen-small")
-        elif hasattr(client, "text_to_audio"):
-            audio_bytes = client.text_to_audio(prompt, model="facebook/musicgen-small")
-        else:
-            return None, "Sua versão da biblioteca não suporta geração de áudio. Atualize o 'huggingface_hub' no requirements.txt."
+        try:
+            client = Client("facebook/MusicGen", hf_token=token or None)
+        except TypeError:
+            client = Client("facebook/MusicGen")
     except Exception as e:
-        msg = str(e)
-        if "503" in msg or "loading" in msg.lower():
-            return None, "O modelo está carregando (cold start da primeira vez). Tente de novo em ~1 minuto."
-        if "429" in msg:
-            return None, "Limite de uso gratuito atingido por agora. Tente mais tarde."
-        if "not supported" in msg.lower() or "404" in msg:
-            return None, "Este modelo não está mais disponível no serviço gratuito da Hugging Face. Me avise no chat que eu te passo a alternativa."
-        return None, f"Erro da API: {msg[:300]}"
+        return None, f"Não consegui conectar ao estúdio da IA: {str(e)[:300]}"
+    try:
+        resultado = client.predict(
+            "facebook/musicgen-medium",  # modelo
+            prompt,                      # descrição da música
+            None,                        # melodia de referência (opcional)
+            duracao_segundos,            # duração
+            250,                         # topk
+            0,                           # topp
+            1.0,                         # temperatura
+            3.0,                         # orientação ao texto
+            api_name="/predict_full",
+        )
+    except Exception as e:
+        try:
+            import json
+            info = client.view_api(return_format="dict")
+            return None, f"Erro na geração: {str(e)[:200]} | Endpoints reais: {json.dumps(info, default=str)[:800]}"
+        except Exception:
+            return None, f"Erro na geração: {str(e)[:300]}"
     try:
         import soundfile as sf
-        audio_ia, sr_ia = sf.read(io.BytesIO(audio_bytes))
+        caminho = resultado
+        if isinstance(caminho, (list, tuple)):
+            caminho = caminho[0]
+        if isinstance(caminho, dict):
+            caminho = caminho.get("path") or caminho.get("value") or list(caminho.values())[0]
+        audio_ia, sr_ia = sf.read(caminho)
         if audio_ia.ndim > 1:
             audio_ia = audio_ia.mean(axis=1)
         return (audio_ia.astype(np.float32), int(sr_ia)), None
-    except Exception:
-        return None, "Resposta inesperada da API."
+    except Exception as e:
+        return None, f"Resposta inesperada da IA: {str(e)[:300]}"
         
 with tab_ia_compositora:
     st.markdown(titulo_secao("🤖", "IA Compositora"), unsafe_allow_html=True)
