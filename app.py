@@ -1216,38 +1216,39 @@ def carregar_audio(uploaded):
         except Exception:
             return None, None
     return audio.astype(np.float32), int(sr)
+    def _sinal_piano(freq, duracao, sr=22050):
+    """Gera um sinal com timbre de piano: harmônicos ricos que decaem + ataque de martelo."""
+    t = np.linspace(0, duracao, int(sr * duracao), endpoint=False)
+    amplitudes = [1.0, 0.45, 0.22, 0.10, 0.05]
+    sinal = np.zeros_like(t)
+    for i, amp in enumerate(amplitudes):
+        h = i + 1
+        if freq * h < sr / 2:
+            sinal += amp * np.exp(-t * (1.5 + 1.2 * i)) * np.sin(2 * np.pi * freq * h * t)
+    ataque = int(sr * 0.008)
+    sinal[:ataque] *= np.linspace(0, 1, ataque)
+    pico = np.max(np.abs(sinal))
+    if pico > 0:
+        sinal = sinal / pico * 0.8
+    return sinal.astype(np.float32)
 def gerar_tom_referencia(nota, calibracao):
     nome, oitava = nota[:-1], int(nota[-1])
     midi = 12 * (oitava + 1) + NOMES_NOTAS.index(nome)
     freq = calibracao * 2 ** ((midi - 69) / 12)
-    sr = 22050
-    duracao = 1.5
-    t = np.linspace(0, duracao, int(sr * duracao), endpoint=False)
-    sinal = (np.sin(2 * np.pi * freq * t) + 0.3 * np.sin(2 * np.pi * 2 * freq * t) + 0.1 * np.sin(2 * np.pi * 3 * freq * t))
-    ataque, release = int(sr * 0.05), int(sr * 0.2)
-    env = np.ones_like(sinal)
-    env[:ataque] = np.linspace(0, 1, ataque)
-    env[-release:] = np.linspace(1, 0, release)
-    return (sr, (sinal * env).astype(np.float32))
+    return (22050, _sinal_piano(freq, 1.5))
 def gerar_escala(nota, calibracao):
     nome, oitava = nota[:-1], int(nota[-1])
     midi_raiz = 12 * (oitava + 1) + NOMES_NOTAS.index(nome)
     sr = 22050
     duracao_nota, pausa = 0.8, 0.15
-    silencio = np.zeros(int(sr * pausa))
+    silencio = np.zeros(int(sr * pausa), dtype=np.float32)
     trechos = []
     for intervalo in ESCALA_MAIOR:
         midi = midi_raiz + intervalo
         freq = calibracao * 2 ** ((midi - 69) / 12)
-        t = np.linspace(0, duracao_nota, int(sr * duracao_nota), endpoint=False)
-        sinal = (np.sin(2 * np.pi * freq * t) + 0.3 * np.sin(2 * np.pi * 2 * freq * t) + 0.1 * np.sin(2 * np.pi * 3 * freq * t))
-        ataque, release = int(sr * 0.03), int(sr * 0.1)
-        env = np.ones_like(sinal)
-        env[:ataque] = np.linspace(0, 1, ataque)
-        env[-release:] = np.linspace(1, 0, release)
-        trechos.append(sinal * env)
+        trechos.append(_sinal_piano(freq, duracao_nota, sr))
         trechos.append(silencio)
-    return (sr, np.concatenate(trechos).astype(np.float32))
+    return (sr, np.concatenate(trechos))
 # ══════════════════ CHAMADA GEMINI COM FALLBACK AUTOMÁTICO ══════════════════
 MODELOS_COM_AUDIO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-3.8-flash"]
 FRASES_SEM_AUDIO = [
