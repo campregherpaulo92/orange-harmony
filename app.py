@@ -2357,9 +2357,13 @@ def laranjinha_dialog():
     with st.container():
         st.markdown('<div id="laranjinha-entrada"></div>', unsafe_allow_html=True)
         try:
-            audio_gravado = st.audio_input("🎙️ Mensagem por voz (grave e solte)", key="audio_msg_laranjinha")
+            from audiorecorder import audiorecorder
+            audio_gravado = audiorecorder("🎙️", "⏹️ Parar", key="audio_msg_laranjinha")
         except Exception:
-            audio_gravado = None
+            try:
+                audio_gravado = st.audio_input("🎙️ Mensagem por voz", key="audio_msg_laranjinha")
+            except Exception:
+                audio_gravado = None
         with st.form("laranjinha_form", clear_on_submit=True):
             pergunta = st.text_area(
                 "Escreva sua mensagem...",
@@ -2381,7 +2385,13 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
     elif audio_gravado is not None:
-        dados_voz = audio_gravado.getvalue()
+        if hasattr(audio_gravado, "export"):
+            import io
+            buffer = io.BytesIO()
+            audio_gravado.export(buffer, format="wav")
+            dados_voz = buffer.getvalue()
+        else:
+            dados_voz = audio_gravado.getvalue()
         assinatura = f"{len(dados_voz)}_{hash(dados_voz[:2048]) if dados_voz else 0}"
         if dados_voz and st.session_state.get("ultimo_audio_voz") != assinatura:
             st.session_state["ultimo_audio_voz"] = assinatura
