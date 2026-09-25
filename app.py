@@ -2335,7 +2335,7 @@ st.markdown("""
     right: 24px !important;
     left: auto !important;
     top: auto !important;
-    width: 1300px !important;
+    width: 1500px !important;
     max-width: calc(100vw - 32px) !important;
     max-height: 88vh !important;
     overflow-y: auto !important;
