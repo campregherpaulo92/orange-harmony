@@ -1329,25 +1329,34 @@ def conversar_laranjinha(mensagem, historico):
     )
     conteudos = converter_historico(historico)
     conteudos.append(types.Content(role="user", parts=[types.Part(text=mensagem)]))
-    for _ in range(5):  # até 5 rodadas de leitura de dados
-        try:
-            resposta = cliente.models.generate_content(
-                model=modelo_atual(), contents=conteudos, config=config,
-            )
-        except Exception as e:
-            return f"Erro na conversa: {str(e)[:300]}"
-        chamadas = resposta.function_calls or []
-        if not chamadas:
-            return resposta.text or "Não consegui gerar uma resposta."
-        conteudos.append(resposta.candidates[0].content)
-        for fc in chamadas:
-            resultado = executar_ferramenta(fc.name, dict(fc.args or {}))
-            conteudos.append(types.Content(
-                role="user",
-                parts=[types.Part(function_response=types.FunctionResponse(
-                    name=fc.name, response={"resultado": resultado}))],
-            ))
-    return "Não consegui concluir a análise dos dados."
+    # Fallback: tenta o modelo atual e depois os outros disponíveis
+    modelos_tentar = [modelo_atual()] + [m for m in MODELOS_DISPONIVEIS if m != modelo_atual()]
+    ultimo_erro = ""
+    for modelo in modelos_tentar:
+        for _ in range(5):  # até 5 rodadas de leitura de dados
+            try:
+                resposta = cliente.models.generate_content(
+                    model=modelo, contents=conteudos, config=config,
+                )
+            except Exception as e:
+                ultimo_erro = str(e)
+                break  # modelo falhou → tenta o próximo
+            chamadas = resposta.function_calls or []
+            if not chamadas:
+                return resposta.text or "Não consegui gerar uma resposta."
+            conteudos.append(resposta.candidates[0].content)
+            for fc in chamadas:
+                resultado = executar_ferramenta(fc.name, dict(fc.args or {}))
+                conteudos.append(types.Content(
+                    role="user",
+                    parts=[types.Part(function_response=types.FunctionResponse(
+                        name=fc.name, response={"resultado": resultado}))],
+                ))
+        else:
+            continue
+        # se saiu do loop por erro, tenta o próximo modelo
+        continue
+    return f"Erro ao chamar o assistente: {ultimo_erro[:200]}"
 # ══════════════════ CONHECIMENTO DO APP (memória da Laranjinha) ══════════════════
 CONHECIMENTO_APP = """
 Você é a assistente oficial do Orange Harmony e conhece TODO o aplicativo. Guia completo:
