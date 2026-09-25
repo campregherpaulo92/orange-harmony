@@ -2261,7 +2261,7 @@ def laranjinha_dialog():
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
 
-# ── Botão flutuante da Laranjinha (mascote PNG, abre o chat ao clicar) ──
+# ── Botão flutuante da Laranjinha (PNG dentro do círculo, via fundo) ──
 st.markdown('<div id="fab-laranjinha"></div>', unsafe_allow_html=True)
 if st.button("", key="abrir_laranjinha", help="Abrir Laranjinha"):
     laranjinha_dialog()
@@ -2283,21 +2283,15 @@ if laranjinha_b64:
         height: 120px !important;
         border-radius: 50% !important;
         background-image: url("data:image/png;base64,""" + laranjinha_b64 + """) !important;
-        background-size: contain !important;
+        background-size: 88% !important;
         background-position: center !important;
         background-repeat: no-repeat !important;
         background-color: transparent !important;
         border: none !important;
         box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
-        font-size: 0 !important;
-        line-height: 0 !important;
-        color: transparent !important;
-        text-indent: -9999px !important;
-        overflow: hidden !important;
     }
     </style>
     """, unsafe_allow_html=True)
-
 # ── CSS do botão flutuante (posição fixa, PNG do mascote no próprio botão) ──
 if laranjinha_b64:
     st.markdown("""
