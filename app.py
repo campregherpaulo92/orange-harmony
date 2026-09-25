@@ -1662,22 +1662,26 @@ with col_sel:
             label_visibility="collapsed",
         )
     st.session_state["modelo_ia"] = modelo_escolhido
-    # CSS de acabamento do popover (botão "IA" pequeno e discreto)
+    # CSS de acabamento do popover (botão "IA" limpo, sem seta, sem animação)
 st.markdown("""
 <style>
 div[data-testid="stPopover"] > button {
     width: auto !important;
-    min-width: 0 !important;
-    padding: 0.15rem 0.6rem !important;
-    font-size: 0.75rem !important;
+    padding: 0.2rem 0.7rem !important;
+    font-size: 0.78rem !important;
     opacity: 0.6 !important;
+    gap: 0 !important;
 }
 div[data-testid="stPopover"] > button:hover {
     opacity: 1 !important;
 }
-div[data-testid="stPopover"] > button span[data-testid="stIconMaterial"],
-div[data-testid="stPopover"] > button span[class*="Icon"] {
+div[data-testid="stPopover"] > button span {
     display: none !important;
+}
+div[data-testid="stPopoverBody"] {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
