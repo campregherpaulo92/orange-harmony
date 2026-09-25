@@ -1648,21 +1648,21 @@ if os.path.exists(LOGO_PATH):
     col_logo.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="height:70px;width:auto;border-radius:12px;box-shadow:0 8px 28px rgba(249,115,22,0.3);">', unsafe_allow_html=True)
 else:
     col_logo.markdown("# 🍊 Orange Harmony")
-# ══════════════════ SUBTÍTULO + SELETOR DE MODELO (sutil, botão 🤖) ══════════════════
+# ══════════════════ SUBTÍTULO + SELETOR DE MODELO (popover sutil) ══════════════════
 col_sub, col_sel = st.columns([4, 1])
 with col_sub:
     st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Seu professor de canto com IA — analise sua voz, afine e evolua.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
 with col_sel:
-    st.markdown("🤖 Modelo")
-    modelo_escolhido = st.selectbox(
-        "Modelo de IA",
-        MODELOS_DISPONIVEIS,
-        index=MODELOS_DISPONIVEIS.index(modelo_atual()) if modelo_atual() in MODELOS_DISPONIVEIS else 0,
-        key="sel_modelo",
-        label_visibility="collapsed",
-    )
+    with st.popover("IA", use_container_width=True):
+        modelo_escolhido = st.radio(
+            "Modelo de IA",
+            MODELOS_DISPONIVEIS,
+            index=MODELOS_DISPONIVEIS.index(modelo_atual()) if modelo_atual() in MODELOS_DISPONIVEIS else 0,
+            key="sel_modelo_pop",
+            label_visibility="collapsed",
+        )
     st.session_state["modelo_ia"] = modelo_escolhido
-    st.caption("auto")
+    
 # ══════════════════ INTERFACE ══════════════════
 tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao, tab_ia_compositora = st.tabs(
     ["🎵 Análise e Estudo", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção", "🤖 IA Compositora"]
