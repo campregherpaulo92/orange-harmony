@@ -1647,7 +1647,7 @@ if os.path.exists(LOGO_PATH):
     st.markdown(f'''
     <div style="text-align:center;padding:12px 0 6px 0;">
         <img src="data:image/png;base64,{logo_b64}"
-             style="height:250px;width:auto;max-width:92%;object-fit:contain;
+             style="height:200px;width:auto;max-width:92%;object-fit:contain;
                     border-radius:16px;box-shadow:0 10px 40px rgba(249,115,22,0.35);">
     </div>
     ''', unsafe_allow_html=True)
