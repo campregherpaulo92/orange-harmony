@@ -2374,16 +2374,13 @@ def laranjinha_dialog():
             enviar = st.form_submit_button("Enviar", type="primary")
     if enviar and pergunta.strip():
         st.session_state["chat_hist"].append({"role": "user", "content": pergunta.strip()})
-        with st.chat_message("user"):
-            st.markdown(pergunta.strip())
-        with st.chat_message("assistant"):
-            with st.spinner("Pensando..."):
-                resp = assistente_resposta(pergunta.strip(), chat_id=st.session_state.get("chat_atual_id"), historico=st.session_state["chat_hist"])
-            st.markdown(resp)
+        with st.spinner("Pensando..."):
+            resp = assistente_resposta(pergunta.strip(), chat_id=st.session_state.get("chat_atual_id"), historico=st.session_state["chat_hist"])
         st.session_state["chat_hist"].append({"role": "assistant", "content": resp})
         chat_atual = st.session_state.get("chat_atual_id")
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
+        st.rerun()
     elif audio_gravado is not None:
         if hasattr(audio_gravado, "export"):
             import io
@@ -2406,16 +2403,13 @@ def laranjinha_dialog():
                         break
             if transcricao and transcricao.strip():
                 st.session_state["chat_hist"].append({"role": "user", "content": "🎙️ " + transcricao.strip()})
-                with st.chat_message("user"):
-                    st.markdown("🎙️ " + transcricao.strip())
-                with st.chat_message("assistant"):
-                    with st.spinner("Pensando..."):
-                        resp = assistente_resposta(transcricao.strip(), chat_id=st.session_state.get("chat_atual_id"), historico=st.session_state["chat_hist"])
-                    st.markdown(resp)
+                with st.spinner("Pensando..."):
+                    resp = assistente_resposta(transcricao.strip(), chat_id=st.session_state.get("chat_atual_id"), historico=st.session_state["chat_hist"])
                 st.session_state["chat_hist"].append({"role": "assistant", "content": resp})
                 chat_atual = st.session_state.get("chat_atual_id")
                 if chat_atual:
                     salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
+                st.rerun()
             else:
                 st.warning(f"Não consegui transcrever o áudio (modelo: {modelo_usado}). Tente gravar de novo em instantes.")
 # ── Botão flutuante da Laranjinha (PNG por cima do botão real) ──
