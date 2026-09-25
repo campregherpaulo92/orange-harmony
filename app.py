@@ -2180,14 +2180,24 @@ def laranjinha_dialog():
                 st.session_state["chat_atual_nome"] = "Chat geral"
         st.session_state["chat_hist"] = carregar_chat_firestore(st.session_state.get("chat_atual_id")) if st.session_state.get("chat_atual_id") else []
 
-    col_t, col_l = st.columns([3, 1])
-    col_t.markdown("**🍊 Laranjinha — Assistente do Orange Harmony**")
-    if col_l.button("🗑️", key="limpar_chat_btn", help="Limpar conversa atual"):
+    col_img, col_t, col_li, col_x = st.columns([1, 4, 1, 1])
+    if laranjinha_b64:
+        col_img.markdown(
+            f'<img src="data:image/png;base64,{laranjinha_b64}" '
+            'style="width:56px;height:56px;border-radius:50%;'
+            'box-shadow:0 4px 14px rgba(249,115,22,0.45);" />',
+            unsafe_allow_html=True,
+        )
+    else:
+        col_img.markdown("🍊")
+    col_t.markdown("**Laranjinha — Assistente do Orange Harmony**")
+    if col_li.button("🗑️", key="limpar_chat_btn", help="Limpar conversa atual"):
         chat_atual = st.session_state.get("chat_atual_id")
         if chat_atual:
             salvar_chat_firestore(chat_atual, [])
         st.session_state["chat_hist"] = []
-
+    if col_x.button("✕", key="fechar_chat_btn", help="Fechar chat"):
+        return  # fecha o dialog sem apagar nada do histórico
     chats = listar_chats_firestore()
     opcoes_chat = {f"{nome}": cid for nome, cid in chats}
     chat_atual_id = st.session_state.get("chat_atual_id")
@@ -2292,9 +2302,9 @@ st.markdown("""
     right: 24px !important;
     left: auto !important;
     top: auto !important;
-    width: 620px !important;
+    width: 820px !important;
     max-width: calc(100vw - 32px) !important;
-    max-height: 72vh !important;
+    max-height: 88vh !important;
     overflow-y: auto !important;
     background: linear-gradient(165deg, rgba(35,22,10,0.97), rgba(18,12,6,0.98)) !important;
     border: 1px solid rgba(249,115,22,0.35) !important;
