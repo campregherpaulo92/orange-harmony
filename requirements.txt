@@ -10,3 +10,4 @@ google-genai
 firebase-admin
 lameenc
 huggingface_hub
+gradio_client
