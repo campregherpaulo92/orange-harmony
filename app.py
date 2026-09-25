@@ -1216,8 +1216,8 @@ def carregar_audio(uploaded):
         except Exception:
             return None, None
     return audio.astype(np.float32), int(sr)
-    def _sinal_piano(freq, duracao, sr=22050):
-        """Gera um sinal com timbre de piano: harmônicos ricos que decaem + ataque de martelo."""
+def _sinal_piano(freq, duracao, sr=22050):
+    """Gera um sinal com timbre de piano: harmônicos ricos que decaem + ataque de martelo."""
     t = np.linspace(0, duracao, int(sr * duracao), endpoint=False)
     amplitudes = [1.0, 0.45, 0.22, 0.10, 0.05]
     sinal = np.zeros_like(t)
