@@ -331,6 +331,24 @@ def segmentar_notas(f0, tempos, duracao_min=0.4):
         fins = np.concatenate((fins, [len(mascara)]))
     dt = tempos[1] - tempos[0] if len(tempos) > 1 else 0.01
     return [f0[i:f] for i, f in zip(inicios, fins) if (f - i) * dt >= duracao_min]
+def extrair_sequencia_notas(f0, tempos, min_dur=0.15):
+    """Detecta a sequência de notas sustentadas na performance (melodia cantada)."""
+    notas = []
+    atual, inicio = None, None
+    for t, f in zip(tempos, f0):
+        if f <= 0:
+            if atual is not None and (t - inicio) >= min_dur:
+                notas.append((atual, round(t - inicio, 2)))
+            atual, inicio = None, None
+            continue
+        n = librosa.hz_to_note(f)
+        if n != atual:
+            if atual is not None and (t - inicio) >= min_dur:
+                notas.append((atual, round(t - inicio, 2)))
+            atual, inicio = n, t
+    if atual is not None and (tempos[-1] - inicio) >= min_dur:
+        notas.append((atual, round(tempos[-1] - inicio, 2)))
+    return notas    
 def analisar_afinacao(f0_limpo, tempos, calibracao=440.0, nota_ref=None):
     mascara = f0_limpo > 0
     vazio = {"nota_predominante": "—", "desvio_medio_cents": 0.0, "tendencia": "—",
@@ -1026,9 +1044,16 @@ def _processar_frame_audio(frame):
 # ══════════════════ PROFESSOR (Gemini) ══════════════════
 def montar_prompt_professor(resultado):
     return (
-        "Você é um professor de canto experiente e acolhedor. Analise os dados técnicos "
-        "de uma gravação vocal e dê um parecer em 3 seções: PONTOS FORTES, PONTOS A MELHORAR "
-        "e UM EXERCÍCIO PRÁTICO. Seja específico e encorajador.\n\n"
+        "Você é um professor de canto experiente, com mentalidade de produtor musical. "
+        "Domina afinação, tessitura, respiração, ressonância, interpretação e produção vocal, "
+        "e conhece os conceitos deste aplicativo (desvio em cents, % afinado ±50c, frases "
+        "sustentadas, pausas respiratórias, vibrato).\n\n"
+        "ESTILO: encorajador, mas exigente. Reconheça com sinceridade o que foi bom e aponte "
+        "com clareza o que ficou ruim (oscilação entre notas, desafinação, emissão fraca, falta "
+        "de apoio respiratório), sem amenizar. Elogie apenas o que realmente foi bom. Cada "
+        "apontamento deve citar um dado da análise — nunca seja genérico.\n\n"
+        "FORMATO: parecer em 3 seções — PONTOS FORTES, PONTOS A MELHORAR e UM EXERCÍCIO PRÁTICO — "
+        "terminando com 1 desafio concreto para a próxima gravação.\n\n"
         f"Dados da análise:\n"
         f"- Nota predominante: {resultado['nota_predominante']}\n"
         f"- Desvio médio absoluto: {resultado['desvio_medio_cents']:.1f} cents\n"
@@ -1062,6 +1087,23 @@ def registrar_analise_firestore(resultado, modo="Análise completa", tom_ref=Non
            "num_pausas": resultado.get("num_pausas", 0), "tom_ref": tom_ref or ""}
     db.collection(COL_ANALISES).add(doc)
     return doc
+def resumo_evolucao_firestore(max_analises=5):
+    """Retorna um resumo textual das últimas análises para o professor comparar a evolução."""
+    if db is None:
+        return ""
+    try:
+        docs = db.collection(COL_ANALISES).order_by("data", direction=firestore.Query.DESCENDING).limit(max_analises).stream()
+        linhas = []
+        for d in docs:
+            a = d.to_dict()
+            linhas.append(
+                f"- {a.get('data_brasil') or a.get('data', '')[:10]}: nota {a.get('nota_predominante', '—')}, "
+                f"desvio {a.get('desvio_medio_cents', 0)} cents, {a.get('pct_afinado', 0)}% afinado, "
+                f"tendência {a.get('tendencia', '—')}"
+            )
+        return "\n".join(linhas)
+    except Exception:
+        return ""    
 def carregar_historico_firestore():
     if db is None:
         return []
@@ -1761,6 +1803,11 @@ with tab_analise:
         ["Nota detectada (voz natural)", "Nota de referência"],
         horizontal=True,
     )    
+    base_devolutiva = st.radio(
+        "🎯 Base da devolutiva",
+        ["Nota detectada (voz natural)", "Nota de referência"],
+        horizontal=True,
+    )    
     if st.button("Analisar", type="primary"):
         if usar_grav != "—":
             fonte = io.BytesIO(get_gravacao_bytes(usar_grav))
@@ -1828,6 +1875,9 @@ with tab_analise:
             st.pyplot(fig)
         else:
             resultado = analisar_afinacao(f0_limpo, tempos, calibracao, nota_ref=nota_ref)
+            seq_notas = extrair_sequencia_notas(f0_limpo, tempos)
+            notas_unicas = sorted({n for n, _ in seq_notas})
+            historico_recente = resumo_evolucao_firestore()            
             devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
             if cliente is not None:
                 prompt_prof = montar_prompt_professor(resultado)
@@ -1843,6 +1893,22 @@ with tab_analise:
                         f"\n\nIMPORTANTE: o cantor tentou seguir a nota de referência ({nota_ref}). "
                         "Compare a nota detectada com a referência e dê orientações práticas de ajuste para chegar nela."
                     )
+                if seq_notas:
+                    prompt_prof += (
+                        f"\n\nSEQUÊNCIA MELÓDICA DETECTADA ({len(seq_notas)} notas sustentadas): "
+                        + " → ".join(f"{n} ({d}s)" for n, d in seq_notas[:15])
+                        + f". Notas distintas: {', '.join(notas_unicas)}. "
+                        "Analise a oscilação entre essas notas: as transições foram limpas ou arrastadas? "
+                        "Houve notas fora da linha melódica esperada? Comente o percurso melódico cantado."
+                    )
+                if historico_recente:
+                    prompt_prof += (
+                        "\n\nHISTÓRICO RECENTE DO ALUNO (últimas análises, mais recente primeiro):\n"
+                        + historico_recente
+                        + "\nCompare o desempenho atual com esse histórico. Se um problema persiste "
+                        "(mesma tendência, desvio alto repetido), cobre diretamente: 'a gente já trabalhou "
+                        "isso e não houve melhora — treine X'. Se houve melhora, reconheça o avanço citando os números."
+                    )                    
                 texto_resp, modelo = chamar_gemini_com_fallback(prompt_prof)
                 if texto_resp:
                     devolutiva = (f"🎯 Afinação detectada: nota {resultado['nota_predominante']} — "
