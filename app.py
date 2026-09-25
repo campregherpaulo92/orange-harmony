@@ -2218,7 +2218,7 @@ def laranjinha_dialog():
             st.session_state["chat_hist"] = carregar_chat_firestore(sel_id)
 
     c_nome, c_cria = st.columns([3, 1])
-    novo_nome = c_nome.text_input("Novo chat (ex: nome da música)", key="novo_chat_nome")
+    novo_nome = c_nome.text_input("Novo chat/música", key="novo_chat_nome")
     if c_cria.button("➕", key="criar_chat_btn", help="Criar novo chat"):
         nome_final = novo_nome.strip() or f"Chat {datetime.now().strftime('%d/%m %H:%M')}"
         novo_id = criar_chat_firestore(nome_final)
@@ -2330,6 +2330,19 @@ if laranjinha_b64:
     }
     </style>
     """, unsafe_allow_html=True)
+    
+    # ── Toolbar do Streamlit Cloud: só aparece quando o mouse chega perto ──
+st.markdown("""
+<style>
+header[data-testid="stHeader"] div[data-testid="stToolbar"] {
+    opacity: 0 !important;
+    transition: opacity 0.25s ease !important;
+}
+header[data-testid="stHeader"]:hover div[data-testid="stToolbar"] {
+    opacity: 1 !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ── CSS do balão do diálogo (via st.markdown, para valer sem iframe) ──
 st.markdown("""
