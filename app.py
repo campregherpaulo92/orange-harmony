@@ -1797,12 +1797,7 @@ with tab_analise:
     grav_salvas = get_gravacoes()
     opcoes_grav = ["—"] + grav_salvas
     usar_grav = st.selectbox("🎙️ Upload biblioteca", opcoes_grav, key="usar_grav_analise")
-    modo = st.radio("Modo", ["Análise completa", "Análise de Cover"], horizontal=True)
-    base_devolutiva = st.radio(
-        "🎯 Base da devolutiva",
-        ["Nota detectada (voz natural)", "Nota de referência"],
-        horizontal=True,
-    )    
+    modo = st.radio("Modo", ["Análise completa", "Análise de Cover"], horizontal=True) 
     base_devolutiva = st.radio(
         "🎯 Base da devolutiva",
         ["Nota detectada (voz natural)", "Nota de referência"],
