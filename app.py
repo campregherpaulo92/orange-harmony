@@ -2231,23 +2231,12 @@ def gerar_musica_ia(prompt, duracao_segundos=20):
         return None, f"Não consegui conectar ao estúdio da IA: {str(e)[:300]}"
     try:
         resultado = client.predict(
-            "facebook/musicgen-medium",  # modelo
-            prompt,                      # descrição da música
-            None,                        # melodia de referência (opcional)
-            duracao_segundos,            # duração
-            250,                         # topk
-            0,                           # topp
-            1.0,                         # temperatura
-            3.0,                         # orientação ao texto
-            api_name="/predict_full",
+            prompt,   # descrição da música
+            None,     # melodia de referência (opcional)
+            api_name="/predict_batched",
         )
     except Exception as e:
-        try:
-            import json
-            info = client.view_api(return_format="dict")
-            return None, f"Erro na geração: {str(e)[:200]} | Endpoints reais: {json.dumps(info, default=str)[:800]}"
-        except Exception:
-            return None, f"Erro na geração: {str(e)[:300]}"
+        return None, f"Erro na geração: {str(e)[:300]}"
     try:
         import soundfile as sf
         caminho = resultado
