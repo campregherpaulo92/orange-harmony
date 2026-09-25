@@ -1159,7 +1159,20 @@ def carregar_perfil_firestore():
             return docs[0].to_dict()
         return None
     except Exception:
-        return None        
+        return None
+def perfil_para_laranjinha():
+    """Retorna o perfil vocal do aluno em texto para o contexto da Laranjinha."""
+    p = carregar_perfil_firestore()
+    if not p:
+        return ""
+    return (
+        f"PERFIL VOCAL DO USUÁRIO (da avaliação inicial): voz {p.get('voz_tipo', '—')}, "
+        f"classificação {p.get('classificacao', '—')}, extensão {p.get('nota_grave', '—')} a "
+        f"{p.get('nota_aguda', '—')} ({p.get('extensao_semitons', '—')} semitons), "
+        f"tessitura confortável {p.get('tessitura', '—')}. "
+        "Use esses dados ao comentar gravações e covers: respeite a extensão nas sugestões "
+        "e considere a classificação vocal ao falar da região da voz."
+    )        
 def carregar_historico_firestore():
     if db is None:
         return []
@@ -1474,14 +1487,18 @@ def conversar_laranjinha(mensagem, historico):
             description="Lê os dados atuais da aba ativa (afinador, cifra, edição vocal etc.).",
         ),
     ]
+    instrucao_sistema = (
+        "Você é a Laranjinha, assistente do Orange Harmony. "
+        "Você PODE ler os dados do usuário (gravações, análises, aba ativa) "
+        "usando as ferramentas quando precisar. Responda sempre em português, "
+        "com base nos dados reais, não em suposições."
+    )
+    perfil_txt = perfil_para_laranjinha()
+    if perfil_txt:
+        instrucao_sistema += "\n\n" + perfil_txt    
     config = types.GenerateContentConfig(
         tools=[types.Tool(function_declarations=declaracoes)],
-        system_instruction=(
-            "Você é a Laranjinha, assistente do Orange Harmony. "
-            "Você PODE ler os dados do usuário (gravações, análises, aba ativa) "
-            "usando as ferramentas quando precisar. Responda sempre em português, "
-            "com base nos dados reais, não em suposições."
-        ),
+                system_instruction=instrucao_sistema,
     )
     conteudos = converter_historico(historico)
     conteudos.append(types.Content(role="user", parts=[types.Part(text=mensagem)]))
@@ -1518,7 +1535,7 @@ CONHECIMENTO_APP = """
 Você é a assistente oficial do Orange Harmony e conhece TODO o aplicativo. Guia completo:
 
 ## Abas do aplicativo
-1. **🎵 Análise e Estudo**: Referência de tom (tocar nota ou escala maior antes de cantar), análise da voz (upload de áudio, gravação direta ou gravação salva). Modos: Análise completa (nota predominante, desvio em cents, tendência, % afinado, frases, pausas, curva de pitch e devolutiva do professor), Afinador (nota e cents) e Análise de Cover (tom, BPM, % de notas na escala, veredito). Também detecta vibrato.
+1. **🎵 Análise e Estudo**: Referência de tom (tocar nota ou escala maior antes de cantar), análise da voz (upload de áudio, gravação direta ou gravação salva). Modos: Análise completa (nota predominante, desvio em cents, tendência, % afinado, frases, pausas, curva de pitch e devolutiva do professor) e Análise de Cover (tom, BPM, % de notas na escala, veredito e devolutiva do professor)
 2. **🎸 Afinador**: Afinador de violão/guitarra/voz com várias afinações (padrão, Drop D, Drop C, Drop B, meio tom abaixo, Open G, DADGAD, Open D, Open C, 7 cordas, ukulele), calibração A4 (440/442) e modo tempo real.
 3. **🎙️ Gravador**: Grava ou sobe um áudio, nomeia e salva na nuvem (Firestore). As gravações aparecem na Análise, na Produção e você pode pedir para a Laranjinha avaliá-las pelo nome.
 4. **📊 Histórico**: Evolução da performance salva no Firebase, com tabela e gráfico de desvio médio e % afinado ao longo do tempo. Dá para excluir análises.
