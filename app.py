@@ -1038,10 +1038,21 @@ def montar_prompt_professor(resultado):
         f"- Pausas respiratórias: {resultado['num_pausas']} (média {resultado['pausa_media']:.2f} s)"
     )
 # ══════════════════ HISTÓRICO (Firestore) ══════════════════
-def registrar_analise_firestore(resultado, modo="Análise completa", tom_ref=None):
+def registrar_analise_firestore(resultado, modo="Análise completa", tom_ref=None, devolutiva=None):
     if db is None:
         return None
-    doc = {"data": datetime.now().isoformat(), "modo": modo,
+    from zoneinfo import ZoneInfo
+    data_brasil = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y")
+    try:
+        existentes = db.collection(COL_ANALISES).where("data_brasil", "==", data_brasil).stream()
+        num_dia = len(list(existentes)) + 1
+    except Exception:
+        num_dia = 1
+    doc = {"data": datetime.now().isoformat(),
+           "data_brasil": data_brasil,
+           "nome": f"{data_brasil} — Análise {num_dia}",
+           "modo": modo,
+           "devolutiva": devolutiva or "",
            "nota_predominante": resultado.get("nota_predominante", ""),
            "desvio_medio_cents": round(resultado.get("desvio_medio_cents", 0), 1),
            "tendencia": resultado.get("tendencia", ""),
@@ -1061,6 +1072,15 @@ def excluir_analise_firestore(doc_id):
         return False
     try:
         db.collection(COL_ANALISES).document(doc_id).delete()
+        return True
+    except Exception:
+        return False
+
+def renomear_analise_firestore(doc_id, novo_nome):
+    if db is None:
+        return False
+    try:
+        db.collection(COL_ANALISES).document(doc_id).update({"nome": novo_nome})
         return True
     except Exception:
         return False
@@ -1796,7 +1816,7 @@ with tab_analise:
                 else:
                     devolutiva = f"[!] Professor indisponível. Detalhe do erro: {modelo}"
             try:
-                registrar_analise_firestore(resultado, modo)
+                registrar_analise_firestore(resultado, modo, devolutiva=devolutiva)
             except Exception as e:
                 st.warning(f"Não foi possível salvar no Firestore: {e}")
             st.markdown(titulo_secao("📊", "Diagnóstico da sua voz"), unsafe_allow_html=True)
@@ -1939,38 +1959,86 @@ with tab_gravador:
 with tab_historico:
     st.markdown(titulo_secao("📊", "Tabela de Evolução/Performance"), unsafe_allow_html=True)
     analises = carregar_historico_firestore()
+
+    def _data_curta(a):
+        return a.get("data_brasil") or a.get("data", "")[5:16]
+
+    def _rotulo(a):
+        return a.get("nome") or _data_curta(a)
+
     if not analises:
         st.info("Nenhuma análise salva ainda.")
     else:
-        linhas = [{
-            "Data": a.get("data", "")[5:16], "Nota": a.get("nota_predominante", ""),
-            "Desvio (cents)": a.get("desvio_medio_cents", 0), "Tendência": a.get("tendencia", ""),
-            "% Afinado": a.get("pct_afinado", 0), "Frases": a.get("num_frases", 0),
-            "Sustentação (s)": a.get("sustentacao_media", 0), "Tom ref.": a.get("tom_ref", "—") or "—",
-        } for _, a in analises]
-        st.dataframe(linhas, use_container_width=True)
-        if len(analises) >= 2:
-            rev = list(reversed(analises))
-            datas = [a.get("data", "")[5:16] for _, a in rev]
-            desvios = [a.get("desvio_medio_cents", 0) for _, a in rev]
-            pcts = [a.get("pct_afinado", 0) for _, a in rev]
-            fig, ax1 = plt.subplots(figsize=(10, 4))
-            ax1.set_facecolor("#0d0d0d")
-            fig.patch.set_facecolor("#0d0d0d")
-            ax1.plot(datas, desvios, marker="o", color="#f97316", label="Desvio médio (cents)")
-            ax1.set_ylabel("Desvio médio (cents)")
-            ax1.tick_params(axis="x", rotation=45, colors="#ccc")
-            ax1.xaxis.label.set_color("#ccc")
-            ax1.yaxis.label.set_color("#ccc")
-            ax1.title.set_color("#f97316")
-            ax2 = ax1.twinx()
-            ax2.plot(datas, pcts, marker="s", color="#22c55e", label="% afinado")
-            ax2.set_ylabel("% afinado")
-            ax2.tick_params(colors="#ccc")
-            ax2.yaxis.label.set_color("#ccc")
-            ax1.set_title("Evolução da performance")
-            fig.tight_layout()
-            st.pyplot(fig)
+        datas_disp = ["Todas"] + sorted({_data_curta(a) for _, a in analises}, reverse=True)
+        filtro_data = st.selectbox("📅 Filtrar por data", datas_disp)
+        filtradas = [(i, a) for i, a in analises if filtro_data == "Todas" or _data_curta(a) == filtro_data]
+        if not filtradas:
+            st.info("Nenhuma análise nessa data.")
+        else:
+            linhas = [{
+                "Análise": _rotulo(a), "Data": _data_curta(a), "Nota": a.get("nota_predominante", ""),
+                "Desvio (cents)": a.get("desvio_medio_cents", 0), "Tendência": a.get("tendencia", ""),
+                "% Afinado": a.get("pct_afinado", 0), "Frases": a.get("num_frases", 0),
+                "Sustentação (s)": a.get("sustentacao_media", 0), "Tom ref.": a.get("tom_ref", "—") or "—",
+            } for _, a in filtradas]
+            st.dataframe(linhas, use_container_width=True)
+            if len(filtradas) >= 2:
+                rev = list(reversed(filtradas))
+                datas = [_data_curta(a) for _, a in rev]
+                desvios = [a.get("desvio_medio_cents", 0) for _, a in rev]
+                pcts = [a.get("pct_afinado", 0) for _, a in rev]
+                fig, ax1 = plt.subplots(figsize=(10, 4))
+                ax1.set_facecolor("#0d0d0d")
+                fig.patch.set_facecolor("#0d0d0d")
+                ax1.plot(datas, desvios, marker="o", color="#f97316", label="Desvio médio (cents)")
+                ax1.set_ylabel("Desvio médio (cents)")
+                ax1.tick_params(axis="x", rotation=45, colors="#ccc")
+                ax1.xaxis.label.set_color("#ccc")
+                ax1.yaxis.label.set_color("#ccc")
+                ax1.title.set_color("#f97316")
+                ax2 = ax1.twinx()
+                ax2.plot(datas, pcts, marker="s", color="#22c55e", label="% afinado")
+                ax2.set_ylabel("% afinado")
+                ax2.tick_params(colors="#ccc")
+                ax2.yaxis.label.set_color("#ccc")
+                ax1.set_title("Evolução da performance")
+                fig.tight_layout()
+                st.pyplot(fig)
+            st.markdown(titulo_secao("📄", "Relatório Detalhado"), unsafe_allow_html=True)
+            opcoes = [_rotulo(a) for _, a in filtradas]
+            idx_det = st.selectbox("Escolha a análise", range(len(filtradas)), format_func=lambda i: opcoes[i], key="det_sel")
+            det_id, det = filtradas[idx_det]
+            st.markdown(metricas_html([
+                ("Análise", det.get("modo", "Análise completa"), _data_curta(det)),
+                ("Nota predominante", det.get("nota_predominante", "—"), "nota mais cantada"),
+                ("Desvio médio", f"{det.get('desvio_medio_cents', 0):.1f} cents", "quanto sai do tom"),
+                ("Tendência", det.get("tendencia", "—"), "aguda / grave / neutra"),
+                ("Afinado (±50c)", f"{det.get('pct_afinado', 0):.1f}%", "das notas no tom"),
+                ("Frases", str(det.get("num_frases", 0)), f"média {det.get('sustentacao_media', 0):.2f}s"),
+                ("Pausas", str(det.get("num_pausas", 0)), "respirações detectadas"),
+                ("Tom ref.", det.get("tom_ref", "—") or "—", "referência usada"),
+            ]), unsafe_allow_html=True)
+            dev = det.get("devolutiva") or ""
+            if dev:
+                st.markdown(
+                    f'<div style="background:linear-gradient(135deg, rgba(16,185,129,0.20), rgba(16,185,129,0.05));'
+                    f'border:1px solid rgba(16,185,129,0.45);border-radius:16px;padding:20px;'
+                    f'backdrop-filter:blur(12px);box-shadow:0 8px 32px rgba(16,185,129,0.22);">'
+                    f'<div style="font-family:Poppins;font-weight:700;color:#34d399;margin-bottom:8px;">✨ Devolutiva do Professor IA</div>'
+                    f'{dev}</div>',
+                    unsafe_allow_html=True
+                )
+            else:
+                st.info("Devolutiva não salva nesta análise (as análises novas já gravam o texto do professor).")
+            st.markdown(titulo_secao("✏️", "Renomear Análise"), unsafe_allow_html=True)
+            idx_ren = st.selectbox("Análise", range(len(filtradas)), format_func=lambda i: opcoes[i], key="ren_sel")
+            novo_nome = st.text_input("Novo nome", value=opcoes[idx_ren], key="ren_nome")
+            if st.button("✏️ Salvar novo nome"):
+                if renomear_analise_firestore(filtradas[idx_ren][0], novo_nome.strip()):
+                    st.success("Renomeada com sucesso!")
+                    st.rerun()
+                else:
+                    st.error("Não foi possível renomear.")
         st.markdown(titulo_secao("🗑️", "Excluir Análises"), unsafe_allow_html=True)
         with st.container(height=380):
             for doc_id, a in analises:
