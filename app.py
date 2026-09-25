@@ -2380,6 +2380,7 @@ def laranjinha_dialog():
         chat_atual = st.session_state.get("chat_atual_id")
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
+        st.session_state["reabrir_laranjinha"] = True
         st.rerun()
     elif audio_gravado is not None:
         if hasattr(audio_gravado, "export"):
@@ -2409,6 +2410,7 @@ def laranjinha_dialog():
                 chat_atual = st.session_state.get("chat_atual_id")
                 if chat_atual:
                     salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
+                st.session_state["reabrir_laranjinha"] = True
                 st.rerun()
             else:
                 st.warning(f"Não consegui transcrever o áudio (modelo: {modelo_usado}). Tente gravar de novo em instantes.")
@@ -2416,6 +2418,9 @@ def laranjinha_dialog():
 st.markdown('<div id="fab-laranjinha"></div>', unsafe_allow_html=True)
 if st.button("", key="abrir_laranjinha", help="Abrir Laranjinha"):
     laranjinha_dialog()
+if st.session_state.get("reabrir_laranjinha"):
+    st.session_state["reabrir_laranjinha"] = False
+    laranjinha_dialog()    
 
 if laranjinha_b64:
     st.markdown("""
