@@ -1755,7 +1755,7 @@ with tab_analise:
     grav_salvas = get_gravacoes()
     opcoes_grav = ["—"] + grav_salvas
     usar_grav = st.selectbox("🎙️ Upload biblioteca", opcoes_grav, key="usar_grav_analise")
-    modo = st.radio("Modo", ["Análise completa", "Afinador", "Análise de Cover"], horizontal=True)
+    modo = st.radio("Modo", ["Análise completa", "Análise de Cover"], horizontal=True)
     if st.button("Analisar", type="primary"):
         if usar_grav != "—":
             fonte = io.BytesIO(get_gravacao_bytes(usar_grav))
@@ -1770,11 +1770,7 @@ with tab_analise:
             st.stop()
         tempos, f0 = extrair_pitch(audio, sr_audio)
         f0_limpo = np.where((f0 >= 80) & (f0 <= 1000), f0, 0.0)
-        if modo == "Afinador":
-            nota, cents, status = analisar_afinador(audio, sr_audio, calibracao)
-            st.success(f"Nota detectada: **{nota}** — {cents:+.1f} cents — {status}")
-            st.markdown(afinador_simples_html(cents, nota), unsafe_allow_html=True)
-        elif modo == "Análise de Cover":
+        if modo == "Análise de Cover":
             with st.spinner("Analisando a gravação completa (voz + instrumental)..."):
                 cover = analisar_cover(audio, sr_audio, calibracao)
             st.markdown(titulo_secao("🎧", "Análise de Cover — a gravação inteira"), unsafe_allow_html=True)
@@ -1791,6 +1787,25 @@ with tab_analise:
                 st.markdown(f"⚠️ **Notas fora da escala de {cover['tom']}:** {', '.join(cover['notas_fora'])}")
             else:
                 st.markdown(f"✅ Todas as notas detectadas estão dentro da escala de {cover['tom']}.")
+            if cliente is not None:
+                prompt_cover = (
+                    "Você é um professor de canto. Dê uma devolutiva curta e prática em português sobre esta performance de cover. "
+                    f"Dados: tom {cover['tom']}, BPM {cover['bpm']:.1f}, {cover['pct_na_escala']:.1f}% das notas dentro da escala. "
+                    f"Notas mais presentes: {', '.join(cover['notas_principais']) or '—'}. "
+                    f"Notas fora da escala: {', '.join(cover['notas_fora']) or 'nenhuma'}. "
+                    "Comente se a voz está casando com o tom, destaque pontos fortes e dê 2 dicas práticas."
+                )
+                with st.spinner("Professor analisando o cover..."):
+                    texto_cover, modelo_cover = chamar_gemini_com_fallback(prompt_cover)
+                if texto_cover:
+                    st.markdown(
+                        f'<div style="background:linear-gradient(135deg, rgba(16,185,129,0.20), rgba(16,185,129,0.05));'
+                        f'border:1px solid rgba(16,185,129,0.45);border-radius:16px;padding:20px;'
+                        f'backdrop-filter:blur(12px);box-shadow:0 8px 32px rgba(16,185,129,0.22);">'
+                        f'<div style="font-family:Poppins;font-weight:700;color:#34d399;margin-bottom:8px;">✨ Devolutiva do Professor IA</div>'
+                        f'{texto_cover}</div>',
+                        unsafe_allow_html=True
+                    )                
             mascara_voz = f0_limpo > 0
             fig, ax = plt.subplots(figsize=(10, 4))
             ax.plot(tempos[mascara_voz], f0_limpo[mascara_voz], linewidth=1.5, color="#f97316")
@@ -1812,7 +1827,8 @@ with tab_analise:
             if cliente is not None:
                 texto_resp, modelo = chamar_gemini_com_fallback(montar_prompt_professor(resultado))
                 if texto_resp:
-                    devolutiva = texto_resp
+                    devolutiva = (f"🎯 Afinação detectada: nota {resultado['nota_predominante']} — "
+                                  f"{resultado['desvio_sinal_cents']:+.1f} cents ({resultado['tendencia']}).\n\n" + texto_resp)
                 else:
                     devolutiva = f"[!] Professor indisponível. Detalhe do erro: {modelo}"
             try:
