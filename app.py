@@ -1648,43 +1648,12 @@ if os.path.exists(LOGO_PATH):
     col_logo.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="height:70px;width:auto;border-radius:12px;box-shadow:0 8px 28px rgba(249,115,22,0.3);">', unsafe_allow_html=True)
 else:
     col_logo.markdown("# 🍊 Orange Harmony")
-# ══════════════════ SUBTÍTULO + SELETOR DE MODELO (popover sutil) ══════════════════
-col_sub, col_sel = st.columns([4, 1])
-with col_sub:
-    st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Seu professor de canto com IA — analise sua voz, afine e evolua.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
-with col_sel:
-    with st.popover("IA"):
-        modelo_escolhido = st.radio(
-            "Modelo de IA",
-            MODELOS_DISPONIVEIS,
-            index=MODELOS_DISPONIVEIS.index(modelo_atual()) if modelo_atual() in MODELOS_DISPONIVEIS else 0,
-            key="sel_modelo_pop",
-            label_visibility="collapsed",
-        )
-    st.session_state["modelo_ia"] = modelo_escolhido
-    # CSS de acabamento do popover (botão "IA" limpo, sem seta, sem animação)
-st.markdown("""
-<style>
-div[data-testid="stPopover"] > button {
-    width: auto !important;
-    padding: 0.2rem 0.7rem !important;
-    font-size: 0.78rem !important;
-    opacity: 0.6 !important;
-    gap: 0 !important;
-}
-div[data-testid="stPopover"] > button:hover {
-    opacity: 1 !important;
-}
-div[data-testid="stPopover"] > button span {
-    display: none !important;
-}
-div[data-testid="stPopoverBody"] {
-    animation: none !important;
-    transition: none !important;
-    transform: none !important;
-}
-</style>
-""", unsafe_allow_html=True)
+# ══════════════════ SUBTÍTULO (seletor de modelo removido — IA automática) ══════════════════
+st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Seu professor de canto com IA — analise sua voz, afine e evolua.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
+
+# Modelo definido automaticamente (sem seletor exposto)
+if "modelo_ia" not in st.session_state:
+    st.session_state["modelo_ia"] = MODELOS_DISPONIVEIS[0]
     
 # ══════════════════ INTERFACE ══════════════════
 tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao, tab_ia_compositora = st.tabs(
