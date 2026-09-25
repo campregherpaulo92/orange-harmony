@@ -2219,42 +2219,7 @@ def laranjinha_dialog():
                 st.session_state["chat_atual_id"] = None
                 st.session_state["chat_atual_nome"] = "Chat geral"
         st.session_state["chat_hist"] = carregar_chat_firestore(st.session_state.get("chat_atual_id")) if st.session_state.get("chat_atual_id") else []
-
-    # ── processa áudio pendente ANTES de desenhar a caixa de mensagens ──
-    audio_pendente = st.session_state.get("audio_msg_laranjinha")
-    if audio_pendente is not None:
-        try:
-            if hasattr(audio_pendente, "export"):
-                import io
-                buffer = io.BytesIO()
-                audio_pendente.export(buffer, format="wav")
-                dados_voz = buffer.getvalue()
-            else:
-                dados_voz = audio_pendente.getvalue()
-        except Exception:
-            dados_voz = None
-        if dados_voz and st.session_state.get("ultimo_audio_voz") != f"{len(dados_voz)}":
-            st.session_state["ultimo_audio_voz"] = f"{len(dados_voz)}"
-            with st.spinner("Transcrevendo sua mensagem de voz..."):
-                transcricao, modelo_usado = None, "?"
-                for tentativa in range(2):
-                    transcricao, modelo_usado = chamar_gemini_com_fallback(
-                        "Transcreva fielmente a mensagem de voz em português. Responda APENAS com o texto transcrito, sem comentários e sem aspas.",
-                        ("mensagem_voz.wav", dados_voz),
-                    )
-                    if transcricao and transcricao.strip():
-                        break
-            if transcricao and transcricao.strip():
-                st.session_state["chat_hist"].append({"role": "user", "content": "🎙️ " + transcricao.strip()})
-                with st.spinner("Pensando..."):
-                    resp = assistente_resposta(transcricao.strip(), chat_id=st.session_state.get("chat_atual_id"), historico=st.session_state["chat_hist"])
-                st.session_state["chat_hist"].append({"role": "assistant", "content": resp})
-                chat_atual = st.session_state.get("chat_atual_id")
-                if chat_atual:
-                    salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
-            else:
-                st.warning(f"Não consegui transcrever o áudio (modelo: {modelo_usado}). Tente gravar de novo em instantes.")    
-
+        
     # ── CSS: cabeçalho e entrada fixos quando o modal precisar rolar ──
     st.markdown("""
     <style>
@@ -2403,14 +2368,7 @@ def laranjinha_dialog():
     # ── ENTRADA FIXA: voz + texto ──
     with st.container():
         st.markdown('<div id="laranjinha-entrada"></div>', unsafe_allow_html=True)
-        try:
-            from audiorecorder import audiorecorder
-            audio_gravado = audiorecorder("🎙️", "⏹️ Parar", key="audio_msg_laranjinha")
-        except Exception:
-            try:
-                audio_gravado = st.audio_input("🎙️ Mensagem por voz", key="audio_msg_laranjinha")
-            except Exception:
-                audio_gravado = None
+
     with st.form("laranjinha_form", clear_on_submit=True):
         pergunta = st.text_area(
             "Escreva sua mensagem...",
