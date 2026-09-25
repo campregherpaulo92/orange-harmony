@@ -1653,7 +1653,7 @@ col_sub, col_sel = st.columns([4, 1])
 with col_sub:
     st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Seu professor de canto com IA — analise sua voz, afine e evolua.</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
 with col_sel:
-    with st.popover("IA", use_container_width=True):
+    with st.popover("IA"):
         modelo_escolhido = st.radio(
             "Modelo de IA",
             MODELOS_DISPONIVEIS,
@@ -1662,6 +1662,25 @@ with col_sel:
             label_visibility="collapsed",
         )
     st.session_state["modelo_ia"] = modelo_escolhido
+    # CSS de acabamento do popover (botão "IA" pequeno e discreto)
+st.markdown("""
+<style>
+div[data-testid="stPopover"] > button {
+    width: auto !important;
+    min-width: 0 !important;
+    padding: 0.15rem 0.6rem !important;
+    font-size: 0.75rem !important;
+    opacity: 0.6 !important;
+}
+div[data-testid="stPopover"] > button:hover {
+    opacity: 1 !important;
+}
+div[data-testid="stPopover"] > button span[data-testid="stIconMaterial"],
+div[data-testid="stPopover"] > button span[class*="Icon"] {
+    display: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
     
 # ══════════════════ INTERFACE ══════════════════
 tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao, tab_ia_compositora = st.tabs(
