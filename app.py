@@ -1756,6 +1756,11 @@ with tab_analise:
     opcoes_grav = ["—"] + grav_salvas
     usar_grav = st.selectbox("🎙️ Upload biblioteca", opcoes_grav, key="usar_grav_analise")
     modo = st.radio("Modo", ["Análise completa", "Análise de Cover"], horizontal=True)
+    base_devolutiva = st.radio(
+        "🎯 Base da devolutiva",
+        ["Nota detectada (voz natural)", "Nota de referência"],
+        horizontal=True,
+    )    
     if st.button("Analisar", type="primary"):
         if usar_grav != "—":
             fonte = io.BytesIO(get_gravacao_bytes(usar_grav))
@@ -1825,7 +1830,20 @@ with tab_analise:
             resultado = analisar_afinacao(f0_limpo, tempos, calibracao, nota_ref=nota_ref)
             devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
             if cliente is not None:
-                texto_resp, modelo = chamar_gemini_com_fallback(montar_prompt_professor(resultado))
+                prompt_prof = montar_prompt_professor(resultado)
+                if base_devolutiva == "Nota detectada (voz natural)":
+                    prompt_prof += (
+                        f"\n\nIMPORTANTE: o cantor cantou com a voz natural, sem seguir a nota de referência "
+                        f"({nota_ref}). Baseie a devolutiva na nota detectada ({resultado['nota_predominante']}): "
+                        "avalie a estabilidade e a afinação em relação à própria nota cantada, comente a região da voz "
+                        "(tessitura aparente) e NÃO trate a diferença para a nota de referência como erro."
+                    )
+                else:
+                    prompt_prof += (
+                        f"\n\nIMPORTANTE: o cantor tentou seguir a nota de referência ({nota_ref}). "
+                        "Compare a nota detectada com a referência e dê orientações práticas de ajuste para chegar nela."
+                    )
+                texto_resp, modelo = chamar_gemini_com_fallback(prompt_prof)
                 if texto_resp:
                     devolutiva = (f"🎯 Afinação detectada: nota {resultado['nota_predominante']} — "
                                   f"{resultado['desvio_sinal_cents']:+.1f} cents ({resultado['tendencia']}).\n\n" + texto_resp)
