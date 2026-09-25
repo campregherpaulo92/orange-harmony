@@ -943,6 +943,23 @@ estado_afinador = {"nota": "—", "cents": 0.0, "ativo": False,
                    "calibracao": 440.0, "buffer": np.zeros(0, dtype=np.float32),
                    "hist_freq": [], "nota_estavel": "", "contador_estavel": 0,
                    "cents_suavizado": 0.0, "contador_sem_sinal": 0}
+_FLAT_PARA_SHARP = {"Eb": "D#", "Ab": "G#", "Db": "C#", "Gb": "A#", "Bb": "A#"}
+
+def _freq_para_nota_cents_afinacao(freq, calibracao, afinacao):
+    """Compara a frequência detectada contra as notas-alvo da afinação selecionada."""
+    melhor = None
+    for nota_alvo in AFINACOES.get(afinacao, AFINACOES["Padrão (EADGBE)"]):
+        nome = _FLAT_PARA_SHARP.get(nota_alvo[:-1], nota_alvo[:-1])
+        try:
+            f_alvo = nota_para_freq(nome + nota_alvo[-1], calibracao)
+        except KeyError:
+            continue
+        cents = 1200 * np.log2(freq / f_alvo)
+        if melhor is None or abs(cents) < abs(melhor[1]):
+            melhor = (nota_alvo, cents)
+    if melhor is None:
+        return _freq_para_nota_cents(freq, calibracao)
+    return melhor
 def _processar_frame_audio(frame):
     arr = frame.to_ndarray()
     if arr.ndim == 2:
@@ -966,7 +983,8 @@ def _processar_frame_audio(frame):
             if len(hist) > 12:
                 hist.pop(0)
             freq_suave = float(np.median(hist))
-            nota, cents = _freq_para_nota_cents(freq_suave, estado_afinador["calibracao"])
+            afinacao_ativa = estado_afinador.get("afinacao", "Padrão (EADGBE)")
+            nota, cents = _freq_para_nota_cents_afinacao(freq_suave, estado_afinador["calibracao"], afinacao_ativa)
             if nota == estado_afinador["nota_estavel"]:
                 estado_afinador["contador_estavel"] += 1
             else:
@@ -1842,19 +1860,7 @@ with tab_afinador:
             st.info("Clique em 'Iniciar' para ativar")
     else:
         st.warning(f"Modo tempo real indisponível. Detalhe: {ERRO_WEBRTC}")
-    st.markdown(titulo_secao("🎤", "Subir uma nota"), unsafe_allow_html=True)
-    audio_afinador = st.file_uploader("📂 Subir nota sustentada", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="afinador")
-    st.markdown("****")
-    audio_afinador_grav = st.audio_input("🎤 Gravar nota agora", key="afinador_rec")
-    fonte_afinador = audio_afinador if audio_afinador is not None else audio_afinador_grav
-    if fonte_afinador is not None:
-        audio, sr = carregar_audio(fonte_afinador)
-        if audio is None:
-            st.error("Não foi possível ler o áudio. Tente outro formato (WAV ou MP3).")
-        else:
-            nota, cents, status = analisar_afinador(audio, sr, calib_afinador)
-            st.success(f"Nota alvo: **{nota}** — {cents:+.1f} cents — {status}")
-            st.markdown(afinador_simples_html(cents, nota), unsafe_allow_html=True)
+
 # ── ABA GRAVADOR (persistente no Firestore, com upload) ──
 with tab_gravador:
     st.markdown(titulo_secao("🎙️", "Gravador"), unsafe_allow_html=True)
