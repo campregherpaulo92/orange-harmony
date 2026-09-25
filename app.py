@@ -2263,7 +2263,7 @@ def laranjinha_dialog():
 
 # ── Botão flutuante da Laranjinha (mascote PNG, abre o chat ao clicar) ──
 st.markdown('<div id="fab-laranjinha"></div>', unsafe_allow_html=True)
-if st.button("🍊", key="abrir_laranjinha", help="Abrir Laranjinha"):
+if st.button("", key="abrir_laranjinha", help="Abrir Laranjinha"):
     laranjinha_dialog()
 
 if laranjinha_b64:
