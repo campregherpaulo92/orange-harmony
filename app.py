@@ -2215,8 +2215,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 # ── ABA IA COMPOSITORA (geração de música por IA) ──
-def gerar_musica_ia(prompt, duracao_segundos=20):
-    """Gera música instrumental via estúdio oficial do MusicGen (Meta)."""
+def gerar_musica_ia(prompt, duracao_segundos=20, letra=None):
+    """Gera música completa (com voz e letra) via estúdio YuE2-3B (Hugging Face)."""
     try:
         from gradio_client import Client
     except ImportError:
@@ -2224,27 +2224,47 @@ def gerar_musica_ia(prompt, duracao_segundos=20):
     token = st.secrets.get("HF_TOKEN", "")
     try:
         try:
-            client = Client("facebook/MusicGen", hf_token=token or None)
+            client = Client("mrfakename/yue2-3b", hf_token=token or None)
         except TypeError:
-            client = Client("facebook/MusicGen")
+            client = Client("mrfakename/yue2-3b")
     except Exception as e:
         return None, f"Não consegui conectar ao estúdio da IA: {str(e)[:300]}"
+    # 1) Letra: usa a que você escreveu ou cria uma automaticamente
+    if not letra or not letra.strip():
+        try:
+            letra = client.predict(
+                prompt,      # ideia da música
+                prompt,      # estilo
+                "Spanish",   # idioma mais próximo do português disponível no criador automático
+                "Verse – Chorus – Verse – Chorus – Bridge – Chorus – Outro",
+                42,
+                api_name="/write_lyrics",
+            )
+        except Exception as e:
+            return None, f"Erro ao criar a letra: {str(e)[:300]}"
+    # 2) Gera a música completa cantada
     try:
         resultado = client.predict(
-            prompt,   # descrição da música
-            None,     # melodia de referência (opcional)
-            api_name="/predict_batched",
+            prompt,    # estilo
+            letra,     # letra
+            "full",    # planejamento melódico completo
+            16,        # qualidade (16 = rápido, 32 = melhor mas mais lento)
+            42,        # seed
+            api_name="/generate_song",
         )
     except Exception as e:
         return None, f"Erro na geração: {str(e)[:300]}"
     try:
-        import soundfile as sf
         caminho = resultado
         if isinstance(caminho, (list, tuple)):
             caminho = caminho[0]
         if isinstance(caminho, dict):
             caminho = caminho.get("path") or caminho.get("value") or list(caminho.values())[0]
-        audio_ia, sr_ia = sf.read(caminho)
+        try:
+            import soundfile as sf
+            audio_ia, sr_ia = sf.read(caminho)
+        except Exception:
+            audio_ia, sr_ia = librosa.load(caminho, sr=None)
         if audio_ia.ndim > 1:
             audio_ia = audio_ia.mean(axis=1)
         return (audio_ia.astype(np.float32), int(sr_ia)), None
@@ -2257,21 +2277,22 @@ with tab_ia_compositora:
                "Use estilo, instrumentos, clima e BPM (ex.: 'samba suave, violão e percussão, 80 BPM').")
     prompt_ia = st.text_area(
         "🎼 Descreva a música que você quer",
-        placeholder="Ex.: bossa nova calma com violão, piano suave e ritmo leve, 90 BPM",
+        placeholder="Ex.: Acústico no violão, piano suave e ritmo leve, 90 BPM",
         key="prompt_ia",
     )
+    letra_ia = st.text_area("📝 Letra (opcional — )", key="letra_ia", placeholder="Escreva sua letra aqui...")
     c_ia1, c_ia2 = st.columns(2)
     duracao_ia = c_ia1.slider("⏱️ Duração (segundos)", 10, 30, 20)
     usar_contexto = c_ia2.checkbox("🎵 Usar tom/BPM da última análise", value=False)
     if st.button("🤖 Gerar música com IA", type="primary"):
         if not prompt_ia.strip():
-            st.warning("Escreva uma descrição da música primeiro.")
+            st.warning("Descrição da música.")
             st.stop()
         prompt_final = prompt_ia.strip()
         if usar_contexto and "ultimo_bpm" in st.session_state and "ultimo_tom" in st.session_state:
             prompt_final += f", {st.session_state.ultimo_bpm:.0f} BPM, key of {st.session_state.ultimo_tom}"
         with st.spinner("🤖 A IA está compondo... (pode levar 1-2 minutos na primeira vez)"):
-            resultado, erro = gerar_musica_ia(prompt_final, duracao_ia)
+            resultado, erro = gerar_musica_ia(prompt_final, duracao_ia, letra_ia)
         if erro:
             st.error(erro)
             st.stop()
