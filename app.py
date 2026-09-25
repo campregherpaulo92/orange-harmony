@@ -945,21 +945,25 @@ estado_afinador = {"nota": "—", "cents": 0.0, "ativo": False,
                    "cents_suavizado": 0.0, "contador_sem_sinal": 0}
 _FLAT_PARA_SHARP = {"Eb": "D#", "Ab": "G#", "Db": "C#", "Gb": "A#", "Bb": "A#"}
 
-def _freq_para_nota_cents_afinacao(freq, calibracao, afinacao):
-    """Compara a frequência detectada contra as notas-alvo da afinação selecionada."""
+def _julgar_afinacao(freq, calibracao, afinacao, nota_detectada):
+    """Verifica se a nota detectada pertence à afinação selecionada.
+    Retorna (nota_alvo_mais_próxima, cents_até_ela, pertence)."""
+    notas_afinacao = AFINACOES.get(afinacao, AFINACOES["Padrão (EADGBE)"])
+    notas_norm = {_FLAT_PARA_SHARP.get(n[:-1], n[:-1]) + n[-1] for n in notas_afinacao}
+    if nota_detectada in notas_norm:
+        return nota_detectada, 0.0, True
     melhor = None
-    for nota_alvo in AFINACOES.get(afinacao, AFINACOES["Padrão (EADGBE)"]):
-        nome = _FLAT_PARA_SHARP.get(nota_alvo[:-1], nota_alvo[:-1])
+    for nota_alvo in notas_norm:
         try:
-            f_alvo = nota_para_freq(nome + nota_alvo[-1], calibracao)
+            f_alvo = nota_para_freq(nota_alvo, calibracao)
         except KeyError:
             continue
         cents = 1200 * np.log2(freq / f_alvo)
         if melhor is None or abs(cents) < abs(melhor[1]):
             melhor = (nota_alvo, cents)
     if melhor is None:
-        return _freq_para_nota_cents(freq, calibracao)
-    return melhor
+        return nota_detectada, 0.0, True
+    return melhor[0], melhor[1], False
 def _processar_frame_audio(frame):
     arr = frame.to_ndarray()
     if arr.ndim == 2:
@@ -983,8 +987,11 @@ def _processar_frame_audio(frame):
             if len(hist) > 12:
                 hist.pop(0)
             freq_suave = float(np.median(hist))
+            nota, cents = _freq_para_nota_cents(freq_suave, estado_afinador["calibracao"])
             afinacao_ativa = estado_afinador.get("afinacao", "Padrão (EADGBE)")
-            nota, cents = _freq_para_nota_cents_afinacao(freq_suave, estado_afinador["calibracao"], afinacao_ativa)
+            alvo_af, _, na_afinacao = _julgar_afinacao(freq_suave, estado_afinador["calibracao"], afinacao_ativa, nota)
+            estado_afinador["alvo_afinacao"] = alvo_af
+            estado_afinador["na_afinacao"] = na_afinacao
             if nota == estado_afinador["nota_estavel"]:
                 estado_afinador["contador_estavel"] += 1
             else:
@@ -1852,7 +1859,11 @@ with tab_afinador:
             while webrtc_ctx.state.playing:
                 nota_v = estado_afinador["nota"] if estado_afinador["ativo"] else "—"
                 cents_v = estado_afinador["cents"] if estado_afinador["ativo"] else 0.0
-                placeholder.markdown(afinador_simples_html(cents_v, nota_v), unsafe_allow_html=True)
+                html_afinador = afinador_simples_html(cents_v, nota_v)
+                if estado_afinador.get("ativo") and not estado_afinador.get("na_afinacao", True):
+                    html_afinador += (f'<div style="text-align:center;color:#f59e0b;font-weight:600;'
+                                      f'margin-top:6px;">🎯 Fora da afinação «{afincao}» — alvo mais próximo: {estado_afinador.get("alvo_afinacao", "—")}</div>')
+                placeholder.markdown(html_afinador, unsafe_allow_html=True)
                 time.sleep(0.15)
                 if time.time() - inicio > 60:
                     break
