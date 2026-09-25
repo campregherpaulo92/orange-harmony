@@ -1654,7 +1654,7 @@ if os.path.exists(LOGO_PATH):
 else:
     st.markdown('<h1 style="text-align:center;">🍊 Orange Harmony</h1>', unsafe_allow_html=True)
 # ══════════════════ SUBTÍTULO (seletor de modelo removido — IA automática) ══════════════════
-st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Coach e Analista de Evolução</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
+st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Coach Vitual e Analista de Evolução Musical</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
 
 # Modelo definido automaticamente (sem seletor exposto)
 if "modelo_ia" not in st.session_state:
