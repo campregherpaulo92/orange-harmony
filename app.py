@@ -1641,13 +1641,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 # ══════════════════ LOGO ══════════════════
 LOGO_PATH = "logo_orange_harmony_transparente.png"
-col_logo, _ = st.columns([1, 3])
 if os.path.exists(LOGO_PATH):
     with open(LOGO_PATH, "rb") as f:
         logo_b64 = base64.b64encode(f.read()).decode()
-    col_logo.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="height:70px;width:auto;border-radius:12px;box-shadow:0 8px 28px rgba(249,115,22,0.3);">', unsafe_allow_html=True)
+    st.markdown(f'''
+    <div style="text-align:center;padding:12px 0 6px 0;">
+        <img src="data:image/png;base64,{logo_b64}"
+             style="height:180px;width:auto;max-width:92%;object-fit:contain;
+                    border-radius:16px;box-shadow:0 10px 40px rgba(249,115,22,0.35);">
+    </div>
+    ''', unsafe_allow_html=True)
 else:
-    col_logo.markdown("# 🍊 Orange Harmony")
+    st.markdown('<h1 style="text-align:center;">🍊 Orange Harmony</h1>', unsafe_allow_html=True)
 # ══════════════════ SUBTÍTULO (seletor de modelo removido — IA automática) ══════════════════
 st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text">Coach e Analista de Evolução</span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
 
