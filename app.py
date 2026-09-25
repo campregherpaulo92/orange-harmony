@@ -1959,18 +1959,19 @@ with tab_historico:
             fig.tight_layout()
             st.pyplot(fig)
         st.markdown(titulo_secao("🗑️", "Excluir Análises"), unsafe_allow_html=True)
-        for doc_id, a in analises:
-            data_curta = a.get("data", "")[5:16]
-            nota_a = a.get("nota_predominante", "—")
-            pct_a = a.get("pct_afinado", 0)
-            c1, c2 = st.columns([5, 1])
-            c1.markdown(f"**{data_curta}** — {nota_a} — **{pct_a:.0f}%** afinado", unsafe_allow_html=True)
-            if c2.button("🗑️ Excluir", key=f"del_{doc_id}"):
-                if excluir_analise_firestore(doc_id):
-                    st.success("✅ Análise excluída do histórico e da curva.")
-                    st.rerun()
-                else:
-                    st.error("Não foi possível excluir. Verifique o Firebase.")
+        with st.container(height=380):
+            for doc_id, a in analises:
+                data_curta = a.get("data", "")[5:16]
+                nota_a = a.get("nota_predominante", "—")
+                pct_a = a.get("pct_afinado", 0)
+                c1, c2 = st.columns([5, 1])
+                c1.markdown(f"**{data_curta}** — {nota_a} — **{pct_a:.0f}%** afinado", unsafe_allow_html=True)
+                if c2.button("🗑️ Excluir", key=f"del_{doc_id}"):
+                    if excluir_analise_firestore(doc_id):
+                        st.success("✅ Análise excluída do histórico e da curva.")
+                        st.rerun()
+                    else:
+                        st.error("Não foi possível excluir. Verifique o Firebase.")
 # ── ABA COMPOSIÇÕES ──
 with tab_composicoes:
     st.markdown(titulo_secao("🎼", "Crie e salve suas composições"), unsafe_allow_html=True)
