@@ -231,6 +231,18 @@ def salvar_chat_firestore(chat_id, mensagens):
         return True
     except Exception:
         return False
+        
+def renomear_chat_firestore(chat_id, novo_nome):
+    """Renomeia um chat existente."""
+    if db is None or not chat_id:
+        return False
+    try:
+        db.collection(COL_CHATS).document(chat_id).update({
+            "nome": (novo_nome or "Chat").strip()[:80],
+        })
+        return True
+    except Exception:
+        return False
 
 def excluir_chat_firestore(chat_id):
     if db is None or not chat_id:
@@ -2196,74 +2208,166 @@ def laranjinha_dialog():
                 st.session_state["chat_atual_nome"] = "Chat geral"
         st.session_state["chat_hist"] = carregar_chat_firestore(st.session_state.get("chat_atual_id")) if st.session_state.get("chat_atual_id") else []
 
-    col_img, col_t, col_li, col_x = st.columns([1, 4, 1, 1])
-    if laranjinha_b64:
-        col_img.markdown(
-            f'<img src="data:image/png;base64,{laranjinha_b64}" '
-            'style="width:56px;height:56px;border-radius:50%;'
-            'box-shadow:0 4px 14px rgba(249,115,22,0.45);" />',
-            unsafe_allow_html=True,
-        )
-    else:
-        col_img.markdown("🍊")
-    col_t.markdown("**Laranjinha — Assistente do Orange Harmony**")
-    if col_li.button("🗑️", key="limpar_chat_btn", help="Limpar conversa atual"):
-        chat_atual = st.session_state.get("chat_atual_id")
-        if chat_atual:
-            salvar_chat_firestore(chat_atual, [])
-        st.session_state["chat_hist"] = []
-    if col_x.button("✕", key="fechar_chat_btn", help="Fechar chat"):
-        return  # fecha o dialog sem apagar nada do histórico
-    chats = listar_chats_firestore()
-    opcoes_chat = {f"{nome}": cid for nome, cid in chats}
-    chat_atual_id = st.session_state.get("chat_atual_id")
-    chat_atual_nome = st.session_state.get("chat_atual_nome", "")
-    if chat_atual_id and chat_atual_id not in opcoes_chat.values():
-        opcoes_chat[chat_atual_nome or "Chat atual"] = chat_atual_id
-    nomes_opcoes = list(opcoes_chat.keys())
-    if chat_atual_id:
-        idx = nomes_opcoes.index(chat_atual_nome) if chat_atual_nome in nomes_opcoes else 0
-    else:
-        idx = 0
-    sel_nome = st.selectbox("Qual o chat?", nomes_opcoes, index=idx, key="sel_chat")
-    if sel_nome:
-        sel_id = opcoes_chat[sel_nome]
-        if sel_id != chat_atual_id:
-            st.session_state["chat_atual_id"] = sel_id
-            st.session_state["chat_atual_nome"] = sel_nome
-            st.session_state["chat_hist"] = carregar_chat_firestore(sel_id)
+    # ── CSS: cabeçalho e entrada fixos quando o modal precisar rolar ──
+    st.markdown("""
+    <style>
+    div[data-testid="stDialog"] div[data-testid="stElementContainer"]:has(div#laranjinha-topo) {
+        position: sticky !important; top: 0 !important; z-index: 999 !important;
+        background: #0d0d0d !important;
+    }
+    div[data-testid="stDialog"] div[data-testid="stElementContainer"]:has(div#laranjinha-entrada) {
+        position: sticky !important; bottom: 0 !important; z-index: 999 !important;
+        background: #0d0d0d !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    c_nome, c_cria = st.columns([3, 1])
-    novo_nome = c_nome.text_input("Novo chat/música", key="novo_chat_nome")
-    if c_cria.button("➕", key="criar_chat_btn", help="Criar novo chat"):
-        nome_final = novo_nome.strip() or f"Chat {datetime.now().strftime('%d/%m %H:%M')}"
-        novo_id = criar_chat_firestore(nome_final)
-        if novo_id:
-            st.session_state["chat_atual_id"] = novo_id
-            st.session_state["chat_atual_nome"] = nome_final
-            st.session_state["chat_hist"] = []
+    # ── CABEÇALHO FIXO (sem botão ✕ — feche pelo X nativo do modal) ──
+    with st.container():
+        st.markdown('<div id="laranjinha-topo"></div>', unsafe_allow_html=True)
+        col_img, col_t, col_li = st.columns([1, 5, 1])
+        if laranjinha_b64:
+            col_img.markdown(
+                f'<img src="data:image/png;base64,{laranjinha_b64}" '
+                'style="width:44px;height:44px;border-radius:50%;'
+                'box-shadow:0 4px 14px rgba(249,115,22,0.45);" />',
+                unsafe_allow_html=True,
+            )
         else:
-            st.warning("Não foi possível criar o chat no Firebase — usando sessão temporária.")
-            st.session_state["chat_atual_id"] = None
-            st.session_state["chat_atual_nome"] = nome_final
+            col_img.markdown("🍊")
+        col_t.markdown("**Laranjinha — Assistente do Orange Harmony**")
+        if col_li.button("🗑️", key="limpar_chat_btn", help="Limpar conversa atual (mantém o chat)"):
+            chat_atual = st.session_state.get("chat_atual_id")
+            if chat_atual:
+                salvar_chat_firestore(chat_atual, [])
             st.session_state["chat_hist"] = []
 
-    st.markdown("---")
+        chats = listar_chats_firestore()
+        opcoes_chat = {f"{nome}": cid for nome, cid in chats}
+        chat_atual_id = st.session_state.get("chat_atual_id")
+        chat_atual_nome = st.session_state.get("chat_atual_nome", "")
+        if chat_atual_id and chat_atual_id not in opcoes_chat.values():
+            opcoes_chat[chat_atual_nome or "Chat atual"] = chat_atual_id
+        nomes_opcoes = list(opcoes_chat.keys())
+        if chat_atual_id:
+            idx = nomes_opcoes.index(chat_atual_nome) if chat_atual_nome in nomes_opcoes else 0
+        else:
+            idx = 0
+        sel_nome = st.selectbox("Qual o chat?", nomes_opcoes, index=idx, key="sel_chat")
+        if sel_nome and sel_nome in opcoes_chat:
+            sel_id = opcoes_chat[sel_nome]
+            if sel_id != chat_atual_id:
+                st.session_state["chat_atual_id"] = sel_id
+                st.session_state["chat_atual_nome"] = sel_nome
+                st.session_state["chat_hist"] = carregar_chat_firestore(sel_id)
 
+        c_ren, c_del = st.columns(2)
+        if c_ren.button("✏️ Renomear", key="renomear_chat_btn"):
+            st.session_state["renomeando"] = not st.session_state.get("renomeando", False)
+            st.session_state["confirmando_exclusao"] = False
+        if c_del.button("🗑️ Excluir chat", key="excluir_chat_btn"):
+            st.session_state["confirmando_exclusao"] = not st.session_state.get("confirmando_exclusao", False)
+            st.session_state["renomeando"] = False
+
+        if st.session_state.get("renomeando"):
+            nome_para_salvar = st.text_input("Novo nome do chat", value=chat_atual_nome, key="renomear_nome_input")
+            if st.button("💾 Salvar novo nome", key="salvar_nome_btn"):
+                nome_limpo = (nome_para_salvar or "").strip()[:80]
+                if not chat_atual_id:
+                    st.warning("Este chat é temporário (Firebase off) — não pode ser renomeado.")
+                elif nome_limpo and renomear_chat_firestore(chat_atual_id, nome_limpo):
+                    st.session_state["chat_atual_nome"] = nome_limpo
+                    st.session_state["renomeando"] = False
+                else:
+                    st.error("Não foi possível renomear no Firebase.")
+
+        if st.session_state.get("confirmando_exclusao"):
+            st.warning(f"Excluir o chat «{chat_atual_nome}» e todas as mensagens dele? Não tem volta.")
+            c_sim, c_nao = st.columns(2)
+            if c_sim.button("Sim, excluir", key="confirmar_exclusao_btn", type="primary"):
+                if not chat_atual_id:
+                    st.warning("Este chat é temporário — ele desaparece ao fechar o app.")
+                    st.session_state["confirmando_exclusao"] = False
+                elif excluir_chat_firestore(chat_atual_id):
+                    restantes = [(n, cid) for n, cid in listar_chats_firestore() if cid != chat_atual_id]
+                    if restantes:
+                        st.session_state["chat_atual_id"] = restantes[0][1]
+                        st.session_state["chat_atual_nome"] = restantes[0][0]
+                    else:
+                        novo_id = criar_chat_firestore("Chat geral")
+                        if novo_id:
+                            st.session_state["chat_atual_id"] = novo_id
+                            st.session_state["chat_atual_nome"] = "Chat geral"
+                        else:
+                            st.session_state["chat_atual_id"] = None
+                            st.session_state["chat_atual_nome"] = "Chat geral"
+                    st.session_state["chat_hist"] = carregar_chat_firestore(st.session_state.get("chat_atual_id")) if st.session_state.get("chat_atual_id") else []
+                    st.session_state["confirmando_exclusao"] = False
+                else:
+                    st.error("Não foi possível excluir no Firebase.")
+            if c_nao.button("Cancelar", key="cancelar_exclusao_btn"):
+                st.session_state["confirmando_exclusao"] = False
+
+        c_nome, c_cria = st.columns([3, 1])
+        novo_nome = c_nome.text_input("Novo chat/música", key="novo_chat_nome")
+        if c_cria.button("➕", key="criar_chat_btn", help="Criar novo chat"):
+            nome_final = novo_nome.strip() or f"Chat {datetime.now().strftime('%d/%m %H:%M')}"
+            novo_id = criar_chat_firestore(nome_final)
+            if novo_id:
+                st.session_state["chat_atual_id"] = novo_id
+                st.session_state["chat_atual_nome"] = nome_final
+                st.session_state["chat_hist"] = []
+            else:
+                st.warning("Não foi possível criar o chat no Firebase — usando sessão temporária.")
+                st.session_state["chat_atual_id"] = None
+                st.session_state["chat_atual_nome"] = nome_final
+                st.session_state["chat_hist"] = []
+        st.markdown("---")
+
+    # ── MENSAGENS (caixa rolável no meio) ──
     if "chat_hist" not in st.session_state:
         st.session_state["chat_hist"] = []
-    for msg in st.session_state["chat_hist"][-20:]:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    with st.container(height=300):
+        if not st.session_state["chat_hist"]:
+            st.info("Comece a conversa aí embaixo! 🍊")
+        for msg in st.session_state["chat_hist"]:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+        st.markdown('<div id="laranjinha-fim"></div>', unsafe_allow_html=True)
 
-    with st.form("laranjinha_form", clear_on_submit=True):
-        pergunta = st.text_area(
-            "Escreva sua mensagem...",
-            height=120,
-            label_visibility="collapsed",
-            placeholder="Escreva sua mensagem ou cole a letra da música aqui...",
-        )
-        enviar = st.form_submit_button("Enviar", type="primary")
+    # rolagem automática até a última mensagem (se atrapalhar, apague este bloco)
+    from streamlit.components.v1 import html as componente_html
+    componente_html("""
+    <script>
+    (function(){
+      try {
+        var fim = window.parent.document.getElementById('laranjinha-fim');
+        if (!fim) return;
+        var el = fim.parentElement;
+        while (el) {
+          if (el.scrollHeight > el.clientHeight + 10) { el.scrollTop = el.scrollHeight; break; }
+          el = el.parentElement;
+        }
+      } catch (e) {}
+    })();
+    </script>
+    """, height=0)
+
+    # ── ENTRADA FIXA: voz + texto ──
+    with st.container():
+        st.markdown('<div id="laranjinha-entrada"></div>', unsafe_allow_html=True)
+        try:
+            audio_gravado = st.audio_input("🎙️ Mensagem por voz (grave e solte)", key="audio_msg_laranjinha")
+        except Exception:
+            audio_gravado = None
+        with st.form("laranjinha_form", clear_on_submit=True):
+            pergunta = st.text_area(
+                "Escreva sua mensagem...",
+                height=120,
+                label_visibility="collapsed",
+                placeholder="Escreva sua mensagem ou cole a letra da música aqui...",
+            )
+            enviar = st.form_submit_button("Enviar", type="primary")
     if enviar and pergunta.strip():
         st.session_state["chat_hist"].append({"role": "user", "content": pergunta.strip()})
         with st.chat_message("user"):
@@ -2276,7 +2380,30 @@ def laranjinha_dialog():
         chat_atual = st.session_state.get("chat_atual_id")
         if chat_atual:
             salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
-
+    elif audio_gravado is not None:
+        dados_voz = audio_gravado.getvalue()
+        assinatura = f"{len(dados_voz)}_{hash(dados_voz[:2048]) if dados_voz else 0}"
+        if dados_voz and st.session_state.get("ultimo_audio_voz") != assinatura:
+            st.session_state["ultimo_audio_voz"] = assinatura
+            with st.spinner("Transcrevendo sua mensagem de voz..."):
+                transcricao, _ = chamar_gemini_com_fallback(
+                    "Transcreva fielmente a mensagem de voz em português. Responda APENAS com o texto transcrito, sem comentários e sem aspas.",
+                    ("mensagem_voz.wav", dados_voz),
+                )
+            if transcricao and transcricao.strip():
+                st.session_state["chat_hist"].append({"role": "user", "content": "🎙️ " + transcricao.strip()})
+                with st.chat_message("user"):
+                    st.markdown("🎙️ " + transcricao.strip())
+                with st.chat_message("assistant"):
+                    with st.spinner("Pensando..."):
+                        resp = assistente_resposta(transcricao.strip(), chat_id=st.session_state.get("chat_atual_id"), historico=st.session_state["chat_hist"])
+                    st.markdown(resp)
+                st.session_state["chat_hist"].append({"role": "assistant", "content": resp})
+                chat_atual = st.session_state.get("chat_atual_id")
+                if chat_atual:
+                    salvar_chat_firestore(chat_atual, st.session_state["chat_hist"])
+            else:
+                st.warning("Não consegui transcrever o áudio agora. Tente gravar de novo em instantes.")
 # ── Botão flutuante da Laranjinha (PNG por cima do botão real) ──
 st.markdown('<div id="fab-laranjinha"></div>', unsafe_allow_html=True)
 if st.button("", key="abrir_laranjinha", help="Abrir Laranjinha"):
