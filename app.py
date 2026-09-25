@@ -240,6 +240,54 @@ def excluir_chat_firestore(chat_id):
         return True
     except Exception:
         return False
+        
+        # ── LARANJINHA: acesso a dados de leitura (Firestore + session_state) ──
+def ler_gravacoes_firestore(limite=20):
+    """Lê os chats/históricos salvos no Firestore (coleção orange_harmony_chats)."""
+    if db is None:
+        return []
+    resultados = []
+    try:
+        docs = db.collection(COL_CHATS).order_by("data", direction=firestore.Query.DESCENDING).limit(limite).stream()
+        for d in docs:
+            dados = d.to_dict()
+            resultados.append({
+                "id": d.id,
+                "nome": dados.get("nome", ""),
+                "data": dados.get("data", ""),
+                "num_mensagens": len(dados.get("mensagens", [])),
+            })
+    except Exception:
+        pass
+    return resultados
+
+def ler_ultima_analise():
+    """Pega os dados da última análise completa do session_state."""
+    for chave in ("ultima_analise", "analise", "ultima_analise_completa", "resultado_analise"):
+        if chave in st.session_state and st.session_state[chave]:
+            return st.session_state[chave]
+    return None
+
+def ler_aba_ativa():
+    """Lê os dados atuais da aba ativa de forma genérica."""
+    dados = {}
+    for chave in ("tom", "bpm", "cifra", "acordes", "notas", "afinacao",
+                  "parametro_edicao", "edicao_vocal", "ultimo_tom", "ultimo_bpm",
+                  "ultima_cifra", "gravacao_atual", "audio_atual"):
+        if chave in st.session_state:
+            dados[chave] = st.session_state[chave]
+    return dados
+
+# ── Ferramentas (Function Calling) que a Laranjinha pode usar ──
+def executar_ferramenta(nome, argumentos):
+    """Executa a ferramenta pedida pela IA e devolve o resultado."""
+    if nome == "ler_gravacoes":
+        return ler_gravacoes_firestore(limite=argumentos.get("limite", 20))
+    if nome == "ler_ultima_analise":
+        return ler_ultima_analise()
+    if nome == "ler_aba_ativa":
+        return ler_aba_ativa()
+    return {"erro": f"Ferramenta desconhecida: {nome}"}
 # ── Constantes musicais ──
 NOMES_NOTAS = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 NOTAS_REFERENCIA = [f"{n}{o}" for o in range(2, 6) for n in NOMES_NOTAS]
@@ -1236,6 +1284,70 @@ def chamar_gemini_com_fallback(prompt, audio_anexo=None):
             ultimo_erro = str(e)
             continue
     return None, ultimo_erro
+    
+    # ── LARANJINHA: conversa com Function Calling (lê dados do app) ──
+def converter_historico(mensagens):
+    """Converte as mensagens salvas no Firestore pro formato da Gemini."""
+    from google.genai import types
+    conteudos = []
+    for m in mensagens:
+        papel = m.get("role") or m.get("papel") or m.get("autor") or "user"
+        papel = "model" if papel in ("model", "assistant", "laranjinha", "ia") else "user"
+        texto = m.get("content") or m.get("texto") or m.get("mensagem") or ""
+        if texto:
+            conteudos.append(types.Content(role=papel, parts=[types.Part(text=texto)]))
+    return conteudos
+
+def conversar_laranjinha(mensagem, historico):
+    """Envia a mensagem pro Gemini e resolve Function Calling automaticamente."""
+    if cliente is None:
+        return "Gemini não configurado."
+    from google.genai import types
+    declaracoes = [
+        types.FunctionDeclaration(
+            name="ler_gravacoes",
+            description="Lê a lista de chats e históricos salvos do usuário no Firestore.",
+            parameters={"type": "object", "properties": {"limite": {"type": "integer"}}, "required": []},
+        ),
+        types.FunctionDeclaration(
+            name="ler_ultima_analise",
+            description="Lê os dados estruturados da última Análise Completa ou do Histórico.",
+        ),
+        types.FunctionDeclaration(
+            name="ler_aba_ativa",
+            description="Lê os dados atuais da aba ativa (afinador, cifra, edição vocal etc.).",
+        ),
+    ]
+    config = types.GenerateContentConfig(
+        tools=[types.Tool(function_declarations=declaracoes)],
+        system_instruction=(
+            "Você é a Laranjinha, assistente do Orange Harmony. "
+            "Você PODE ler os dados do usuário (gravações, análises, aba ativa) "
+            "usando as ferramentas quando precisar. Responda sempre em português, "
+            "com base nos dados reais, não em suposições."
+        ),
+    )
+    conteudos = converter_historico(historico)
+    conteudos.append(types.Content(role="user", parts=[types.Part(text=mensagem)]))
+    for _ in range(5):  # até 5 rodadas de leitura de dados
+        try:
+            resposta = cliente.models.generate_content(
+                model=modelo_atual(), contents=conteudos, config=config,
+            )
+        except Exception as e:
+            return f"Erro na conversa: {str(e)[:300]}"
+        chamadas = resposta.function_calls or []
+        if not chamadas:
+            return resposta.text or "Não consegui gerar uma resposta."
+        conteudos.append(resposta.candidates[0].content)
+        for fc in chamadas:
+            resultado = executar_ferramenta(fc.name, dict(fc.args or {}))
+            conteudos.append(types.Content(
+                role="user",
+                parts=[types.Part(function_response=types.FunctionResponse(
+                    name=fc.name, response={"resultado": resultado}))],
+            ))
+    return "Não consegui concluir a análise dos dados."
 # ══════════════════ CONHECIMENTO DO APP (memória da Laranjinha) ══════════════════
 CONHECIMENTO_APP = """
 Você é a assistente oficial do Orange Harmony e conhece TODO o aplicativo. Guia completo:
@@ -1291,10 +1403,10 @@ def assistente_resposta(prompt_usuario, chat_id=None, historico=None):
         return (f"Consegui achar a gravação '{nome}', mas nenhum modelo conseguiu analisá-la agora "
                 f"({modelo}). Tente novamente em instantes.")
     prompt = sistema + contexto + "\n\nPergunta: " + prompt_usuario
-    texto_resp, modelo = chamar_gemini_com_fallback(prompt)
+    texto_resp = conversar_laranjinha(prompt, st.session_state["chat_hist"])
     if texto_resp:
         return texto_resp
-    return f"Erro ao chamar o assistente: {modelo}"
+    return "Erro ao chamar o assistente."
 # ══════════════════ ANÁLISE DE COVER (gravação completa) ══════════════════
 def analisar_cover(audio, sr, calibracao=440.0):
     resultado = {"tom": "—", "bpm": 0.0, "pct_na_escala": 0.0, "notas_fora": [],
