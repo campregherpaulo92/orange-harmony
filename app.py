@@ -2226,13 +2226,21 @@ def gerar_musica_ia(prompt, duracao_segundos=20):
         return None, "Configure o HF_TOKEN nos Secrets do Streamlit Cloud (Settings → Secrets)."
     try:
         client = InferenceClient(token=token)
-        audio_bytes = client.text_to_audio(prompt, model="facebook/musicgen-small")
+        # o nome do método varia conforme a versão da biblioteca
+        if hasattr(client, "audio_generation"):
+            audio_bytes = client.audio_generation(prompt, model="facebook/musicgen-small")
+        elif hasattr(client, "text_to_audio"):
+            audio_bytes = client.text_to_audio(prompt, model="facebook/musicgen-small")
+        else:
+            return None, "Sua versão da biblioteca não suporta geração de áudio. Atualize o 'huggingface_hub' no requirements.txt."
     except Exception as e:
         msg = str(e)
         if "503" in msg or "loading" in msg.lower():
             return None, "O modelo está carregando (cold start da primeira vez). Tente de novo em ~1 minuto."
         if "429" in msg:
             return None, "Limite de uso gratuito atingido por agora. Tente mais tarde."
+        if "not supported" in msg.lower() or "404" in msg:
+            return None, "Este modelo não está mais disponível no serviço gratuito da Hugging Face. Me avise no chat que eu te passo a alternativa."
         return None, f"Erro da API: {msg[:300]}"
     try:
         import soundfile as sf
