@@ -83,6 +83,7 @@ if not firebase_admin._apps:
         st.warning(f"Firebase não conectado: {e}")
 db = firestore.client() if firebase_admin._apps else None
 COL_ANALISES = "orange_harmony_analises"
+COL_PERFIL = "perfis_vocais"
 COL_COMPOSICOES = "orange_harmony_composicoes"
 COL_GRAVACOES = "orange_harmony_gravacoes"
 # ══════════════════ GRAVAÇÕES NO FIRESTORE (comprimidas em MP3, sem Storage) ══════════════════
@@ -331,6 +332,37 @@ def segmentar_notas(f0, tempos, duracao_min=0.4):
         fins = np.concatenate((fins, [len(mascara)]))
     dt = tempos[1] - tempos[0] if len(tempos) > 1 else 0.01
     return [f0[i:f] for i, f in zip(inicios, fins) if (f - i) * dt >= duracao_min]
+def classificar_voz(f_min_hz, voz_tipo):
+    """Classifica a voz pela nota mais grave (aproximação prática)."""
+    midi = int(round(librosa.hz_to_midi(f_min_hz)))
+    if voz_tipo == "Masculina":
+        if midi <= 41:
+            return "Baixo"
+        if midi <= 47:
+            return "Barítono"
+        return "Tenor"
+    else:
+        if midi <= 55:
+            return "Contralto"
+        if midi <= 59:
+            return "Mezzo-soprano"
+        return "Soprano"
+
+def analisar_exercicio_avaliacao(grav, calibracao):
+    """Analisa um exercício da avaliação e retorna as frequências captadas."""
+    audio, sr = carregar_audio(grav)
+    if audio is None:
+        return None
+    tempos, f0 = extrair_pitch(audio, sr)
+    f0_limpo = np.where((f0 >= 70) & (f0 <= 1200), f0, 0.0)
+    voz = f0_limpo[f0_limpo > 0]
+    if len(voz) < 10:
+        return None
+    return {
+        "f_min": float(np.percentile(voz, 5)),
+        "f_max": float(np.percentile(voz, 95)),
+        "f_med": float(np.median(voz)),
+    }    
 def extrair_sequencia_notas(f0, tempos, min_dur=0.15):
     """Detecta a sequência de notas sustentadas na performance (melodia cantada)."""
     notas = []
@@ -1103,7 +1135,31 @@ def resumo_evolucao_firestore(max_analises=5):
             )
         return "\n".join(linhas)
     except Exception:
-        return ""    
+        return ""
+def salvar_perfil_firestore(perfil):
+    if db is None:
+        return False
+    try:
+        docs = list(db.collection(COL_PERFIL).limit(1).stream())
+        perfil["data"] = datetime.now().isoformat()
+        if docs:
+            db.collection(COL_PERFIL).document(docs[0].id).set(perfil)
+        else:
+            db.collection(COL_PERFIL).add(perfil)
+        return True
+    except Exception:
+        return False
+
+def carregar_perfil_firestore():
+    if db is None:
+        return None
+    try:
+        docs = list(db.collection(COL_PERFIL).limit(1).stream())
+        if docs:
+            return docs[0].to_dict()
+        return None
+    except Exception:
+        return None        
 def carregar_historico_firestore():
     if db is None:
         return []
@@ -1761,8 +1817,8 @@ if "modelo_ia" not in st.session_state:
     st.session_state["modelo_ia"] = MODELOS_DISPONIVEIS[0]
     
 # ══════════════════ INTERFACE ══════════════════
-tab_analise, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao, tab_ia_compositora = st.tabs(
-    ["🎵 Análise e Estudo", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção", "🤖 IA Songwriter"]
+tab_analise, tab_avaliacao, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao, tab_ia_compositora = st.tabs(
+    ["🎵 Análise e Estudo", "📋 Avaliação", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção", "🤖 IA Songwriter"]
 )
 # ── ABA ANÁLISE E ESTUDO ──
 with tab_analise:
@@ -1872,7 +1928,8 @@ with tab_analise:
             resultado = analisar_afinacao(f0_limpo, tempos, calibracao, nota_ref=nota_ref)
             seq_notas = extrair_sequencia_notas(f0_limpo, tempos)
             notas_unicas = sorted({n for n, _ in seq_notas})
-            historico_recente = resumo_evolucao_firestore()            
+            historico_recente = resumo_evolucao_firestore()
+            perfil_aluno = carregar_perfil_firestore()            
             devolutiva = "[!] Professor indisponível (configure a chave Gemini)."
             if cliente is not None:
                 prompt_prof = montar_prompt_professor(resultado)
@@ -1905,6 +1962,17 @@ with tab_analise:
                         "isso e não houve melhora — treine X'. Se houve melhora, reconheça o avanço citando os números."
                     )                    
                 texto_resp, modelo = chamar_gemini_com_fallback(prompt_prof)
+                if perfil_aluno:
+                    prompt_prof += (
+                        "\n\nPERFIL VOCAL DO ALUNO (da avaliação inicial):\n"
+                        f"- Voz: {perfil_aluno.get('voz_tipo', '—')} — classificação: {perfil_aluno.get('classificacao', '—')}\n"
+                        f"- Extensão: {perfil_aluno.get('nota_grave', '—')} a {perfil_aluno.get('nota_aguda', '—')} "
+                        f"({perfil_aluno.get('extensao_semitons', '—')} semitons)\n"
+                        f"- Tessitura confortável: {perfil_aluno.get('tessitura', '—')}\n"
+                        "Use este perfil como base: avalie se as notas cantadas estão dentro da extensão, "
+                        "respeite a tessitura nas sugestões de exercícios e considere a classificação vocal "
+                        "ao comentar a região da voz."
+                    )                
                 if texto_resp:
                     devolutiva = (f"🎯 Afinação detectada: nota {resultado['nota_predominante']} — "
                                   f"{resultado['desvio_sinal_cents']:+.1f} cents ({resultado['tendencia']}).\n\n" + texto_resp)
@@ -2050,6 +2118,62 @@ with tab_gravador:
                         st.session_state["gravacoes"] = [g for g in st.session_state["gravacoes"] if g["nome"] != nome]
                     st.rerun()
         st.caption("💡 As gravações aparecem na Análise, na Produção e a Laranjinha pode avaliá-las pelo nome.")
+# ── ABA AVALIAÇÃO VOCAL ──
+with tab_avaliacao:
+    st.markdown(titulo_secao("📋", "Avaliação Vocal Inicial"), unsafe_allow_html=True)
+    perfil_salvo = carregar_perfil_firestore()
+    if perfil_salvo:
+        st.info(f"Você já tem uma avaliação salva. Refazer os exercícios atualiza o seu perfil.")
+    st.markdown(
+        "Esta avaliação mapeia sua voz: extensão, tessitura e classificação vocal. "
+        "O professor vai usar esse perfil em **todas** as análises da aba de estudo."
+    )
+    voz_tipo = st.radio("Sua voz é", ["Masculina", "Feminina"], horizontal=True, key="voz_tipo_av")
+    exercicios = [
+        ("Nota mais GRAVE", "Cante a nota mais grave que conseguir, sustentando por 3 segundos."),
+        ("Nota mais AGUDA", "Cante a nota mais aguda confortável, sustentando por 3 segundos."),
+        ("Nota confortável", "Cante uma nota no seu tom confortável e sustente por 5 segundos."),
+        ("Glissando", "Deslize a voz do grave ao agudo e volte, sem pausas."),
+        ("Frase natural", "Cante uma frase de uma música que você gosta, com voz natural."),
+    ]
+    resultados_av = {}
+    for titulo_ex, instrucao in exercicios:
+        st.markdown(f"**{titulo_ex}** — {instrucao}")
+        grav_ex = st.audio_input(f"🎤 Gravar: {titulo_ex}", key=f"av_{titulo_ex}")
+        if grav_ex is not None:
+            res_ex = analisar_exercicio_avaliacao(grav_ex, calibracao)
+            if res_ex:
+                resultados_av[titulo_ex] = res_ex
+                st.success(f"✅ Capturado: {librosa.hz_to_note(res_ex['f_min'])} a {librosa.hz_to_note(res_ex['f_max'])}")
+            else:
+                st.warning("Não detectei voz. Tente de novo, mais perto do microfone.")
+    if len(resultados_av) >= 3 and st.button("📊 Gerar minha avaliação", type="primary"):
+        f_min = min(r["f_min"] for r in resultados_av.values())
+        f_max = max(r["f_max"] for r in resultados_av.values())
+        f_med = float(np.mean([r["f_med"] for r in resultados_av.values()]))
+        nota_grave = librosa.hz_to_note(f_min)
+        nota_aguda = librosa.hz_to_note(f_max)
+        extensao_st = int(round(librosa.hz_to_midi(f_max) - librosa.hz_to_midi(f_min)))
+        perfil = {
+            "voz_tipo": voz_tipo,
+            "nota_grave": nota_grave,
+            "nota_aguda": nota_aguda,
+            "extensao_semitons": extensao_st,
+            "tessitura": librosa.hz_to_note(f_med),
+            "classificacao": classificar_voz(f_min, voz_tipo),
+            "exercicios_feitos": len(resultados_av),
+        }
+        if salvar_perfil_firestore(perfil):
+            st.markdown(titulo_secao("🎓", "Seu Perfil Vocal"), unsafe_allow_html=True)
+            st.markdown(metricas_html([
+                ("Classificação", perfil["classificacao"], f"voz {voz_tipo.lower()}"),
+                ("Extensão", f"{nota_grave} → {nota_aguda}", f"{extensao_st} semitons"),
+                ("Tessitura confortável", perfil["tessitura"], "onde sua voz mora"),
+                ("Exercícios", f"{len(resultados_av)}/5", "capturados nesta avaliação"),
+            ]), unsafe_allow_html=True)
+            st.success("Perfil salvo! O professor já vai usar esses dados nas próximas análises.")
+        else:
+            st.error("Não foi possível salvar o perfil no Firestore.")        
 # ── ABA HISTÓRICO ──
 with tab_historico:
     st.markdown(titulo_secao("📊", "Tabela de Evolução/Performance"), unsafe_allow_html=True)
