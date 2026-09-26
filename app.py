@@ -2805,7 +2805,7 @@ def laranjinha_dialog():
         st.markdown('<div id="laranjinha-topo"></div>', unsafe_allow_html=True)
         col_img, col_t, col_li = st.columns([1, 5, 1])
         
-    with st.container():
+       with st.container():
         st.markdown('<div id="laranjinha-topo"></div>', unsafe_allow_html=True)
         col_img, col_t, col_li = st.columns([1, 5, 1])
         if laranjinha_b64:
@@ -2818,12 +2818,9 @@ def laranjinha_dialog():
         else:
             col_img.markdown("🍊")
         col_t.markdown(
-            '<div style="padding-top:18px;">**Laranjinha — Assistente do Orange Harmony**</div>'
+            '<div style="padding-top:18px;font-weight:700;">Laranjinha — Assistente do Orange Harmony</div>',
+            unsafe_allow_html=True,
         )
-        st.markdown('<div class="oh-title-line"></div>', unsafe_allow_html=True)
-        else:
-            col_img.markdown("🍊")
-        col_t.markdown("**Laranjinha — Assistente do Orange Harmony**")
         st.markdown('<div class="oh-title-line"></div>', unsafe_allow_html=True)
         if col_li.button("🗑️", key="limpar_chat_btn", help="Limpar conversa atual (mantém o chat)"):
             chat_atual = st.session_state.get("chat_atual_id")
