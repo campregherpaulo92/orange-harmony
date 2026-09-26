@@ -3058,15 +3058,12 @@ def _audio_para_b64(src):
             dados = f.read()
     return _b64_mod.b64encode(dados).decode()
 
-def _player_espectro(b64_audio, cor, uid):
-    # Player com espectro animado em tempo real (Web Audio API)
-    if not b64_audio:
-        st.caption("⚠️ Não foi possível carregar o áudio para o player.")
-        return
+def _player_espectro(src_audio, cor, uid):
+    # Player com espectro animado em tempo real (Web Audio API) via URL
     html = f"""
     <div style="background:#0d0d0d;border:1px solid #2a2a2a;border-radius:12px;padding:10px 12px;">
       <canvas id="cv_{uid}" height="70" style="width:100%;display:block;border-radius:8px;"></canvas>
-      <audio id="au_{uid}" src="data:audio/mpeg;base64,{b64_audio}" preload="auto"></audio>
+      <audio id="au_{uid}" src="{src_audio}" crossorigin="anonymous" preload="auto"></audio>
       <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
         <button id="pp_{uid}" style="background:{cor};border:none;border-radius:50%;width:38px;height:38px;color:#0d0d0d;font-size:16px;cursor:pointer;font-weight:700;">▶</button>
         <button id="mu_{uid}" style="background:#1f1f1f;border:1px solid #3a3a3a;border-radius:6px;color:#d4d4d4;padding:5px 12px;font-size:0.75rem;font-weight:700;cursor:pointer;">M</button>
@@ -3083,6 +3080,11 @@ def _player_espectro(b64_audio, cor, uid):
       const vl = document.getElementById('vl_{uid}');
       const tm = document.getElementById('tm_{uid}');
       const cor = '{cor}';
+      au.addEventListener('error', () => {{
+        cv.getContext('2d').fillStyle = '#a3a3a3';
+        cv.getContext('2d').font = '13px sans-serif';
+        cv.getContext('2d').fillText('⚠ Não foi possível carregar o áudio — o servidor do Colab pode ter caído.', 10, 40);
+      }});
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const fonte = ctx.createMediaElementSource(au);
       const an = ctx.createAnalyser();
@@ -3260,8 +3262,7 @@ def studio_dialog():
     if voz:
         st.markdown('<div class="oh-track-name voz">🎙️ Vocals <span style="font-size:0.7rem;color:#ef4444;font-weight:700;">R</span></div>', unsafe_allow_html=True)
         try:
-            b64_voz = _audio_para_b64(voz)
-            _player_espectro(b64_voz, "#f97316", "voz")
+            _player_espectro(voz, "#f97316", "voz")
         except Exception as e:
             st.caption(f"⚠️ Player indisponível ({e}) — usando player simples.")
             st.audio(voz)
@@ -3274,8 +3275,7 @@ def studio_dialog():
     if inst:
         st.markdown('<div class="oh-track-name inst">🎼 Instrumental <span style="font-size:0.7rem;color:#ef4444;font-weight:700;">R</span></div>', unsafe_allow_html=True)
         try:
-            b64_inst = _audio_para_b64(inst)
-            _player_espectro(b64_inst, "#22d3ee", "inst")
+            _player_espectro(inst, "#22d3ee", "inst")
         except Exception as e:
             st.caption(f"⚠️ Player indisponível ({e}) — usando player simples.")
             st.audio(inst)
