@@ -2115,8 +2115,8 @@ st.markdown("""
 
 with st.sidebar:
     st.markdown(
-        '<div style="text-align:center;font-size:2rem;margin-bottom:-6px;">🍊</div>'
-        '<div class="oh-sidebar-titulo">Orange Harmony</div>',
+        '<div style="text-align:center;font-size:2rem;margin-bottom:-6px;"></div>'
+        '<div class="oh-sidebar-titulo">ORANGE HARMONY</div>',
         unsafe_allow_html=True,
     )
     for chave, icone, rotulo in PAGINAS_APP:
