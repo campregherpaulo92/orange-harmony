@@ -315,6 +315,26 @@ def ler_aba_ativa():
         if chave in st.session_state:
             dados[chave] = st.session_state[chave]
     return dados
+    
+def ler_perfil_vocal():
+    """Lê o perfil vocal salvo (voz, extensão, tessitura, classificação)."""
+    return carregar_perfil_firestore()
+
+def ler_composicoes_resumo(limite=10):
+    """Lista as composições salvas (título, tom, versão)."""
+    comps = listar_composicoes()[:limite]
+    return [{"titulo": t, "versao": v} for t, v, _ in comps]
+
+def ler_evolucao_resumo():
+    """Retorna o resumo textual das últimas análises (mesmo texto usado no prompt do professor)."""
+    return resumo_evolucao_firestore()
+
+def ler_stems_estudio():
+    """Diz se já existem stems (voz/instrumental) separados no Estúdio nesta sessão."""
+    return {
+        "tem_voz": bool(st.session_state.get("stems_voz")),
+        "tem_instrumental": bool(st.session_state.get("stems_inst")),
+    }    
 
 # ── Ferramentas (Function Calling) que a Laranjinha pode usar ──
 def executar_ferramenta(nome, argumentos):
@@ -325,6 +345,14 @@ def executar_ferramenta(nome, argumentos):
         return ler_ultima_analise()
     if nome == "ler_aba_ativa":
         return ler_aba_ativa()
+    if nome == "ler_perfil_vocal":
+        return ler_perfil_vocal()
+    if nome == "ler_composicoes_resumo":
+        return ler_composicoes_resumo(limite=argumentos.get("limite", 10))
+    if nome == "ler_evolucao_resumo":
+        return ler_evolucao_resumo()
+    if nome == "ler_stems_estudio":
+        return ler_stems_estudio()
     return {"erro": f"Ferramenta desconhecida: {nome}"}
 # ── Constantes musicais ──
 NOMES_NOTAS = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
@@ -1520,6 +1548,23 @@ def conversar_laranjinha(mensagem, historico):
             name="ler_aba_ativa",
             description="Lê os dados atuais da aba ativa (afinador, cifra, edição vocal etc.).",
         ),
+                types.FunctionDeclaration(
+            name="ler_perfil_vocal",
+            description="Lê o perfil vocal do usuário: tipo de voz, classificação, extensão e tessitura.",
+        ),
+        types.FunctionDeclaration(
+            name="ler_composicoes_resumo",
+            description="Lista as composições salvas do usuário (título, tom, versão).",
+            parameters={"type": "object", "properties": {"limite": {"type": "integer"}}, "required": []},
+        ),
+        types.FunctionDeclaration(
+            name="ler_evolucao_resumo",
+            description="Lê o resumo da evolução vocal do usuário nas últimas análises salvas.",
+        ),
+        types.FunctionDeclaration(
+            name="ler_stems_estudio",
+            description="Verifica se o usuário já separou stems (voz/instrumental) no Orange Studio nesta sessão.",
+        ),
     ]
     instrucao_sistema = (
         "Você é a Laranjinha, assistente do Orange Harmony. "
@@ -1619,23 +1664,55 @@ def interpretar_comando_edicao_ia(comando):
 
 # ══════════════════ CONHECIMENTO DO APP (memória da Laranjinha) ══════════════════
 CONHECIMENTO_APP = """
-Você é a assistente oficial do Orange Harmony e conhece TODO o aplicativo. Guia completo:
+Você é a Laranjinha, assistente oficial do Orange Harmony, e conhece TODO o aplicativo em detalhe. Guia completo:
 
 ## Abas do aplicativo
-1. **🎵 Análise e Estudo**: Referência de tom, análise da voz (upload, gravação ou biblioteca). Modos: Análise completa e Análise de Cover.
-2. **🎸 Afinador**: Afinador de violão/guitarra/voz com várias afinações, calibração A4 (440/442) e modo tempo real.
-3. **🎙️ Gravador**: Grava/sobe áudio, salva na nuvem (Firestore).
-4. **📊 Histórico**: Evolução da performance com tabela e gráfico.
-5. **🎼 Composições**: Cria e salva composições com cifras e seções.
-6. **✨ Edição Vocal (IA)**: Interpreta o comando do usuário via IA e aplica redução de ruído, normalização, ajuste de tom, EQ de presença, compressão suave, remoção de sibilância e reverb leve.
-7. **🔄 Conversor**: Converte áudio entre WAV, MP3, FLAC, OGG e M4A (múltiplos formatos de entrada e saída).
-8. **🎛️ Produção**: Gera backing track (baixo, bateria, acordes) com opção de "qualidade profissional" (ducking + reverb de master).
-9. **🎛️ Orange Studio (botão flutuante)**: separação de voz/instrumental via Demucs no Colab. Abre um painel grande na própria página (cobre quase a tela toda), com link direto para o notebook do Colab, campo de URL, gravação/upload, separação e faixas com espectro animado.
+1. **🎵 Análise e Estudo**: toca nota/escala de referência; analisa voz via upload, gravação ou biblioteca.
+   Modo "Análise completa" dá nota predominante, desvio em cents, tendência, % afinado, frases sustentadas,
+   pausas, curva de pitch, vibrato (taxa, extensão, deslize) e devolutiva do professor IA — que considera o
+   perfil vocal do aluno e o histórico recente de evolução. Modo "Análise de Cover" avalia a gravação inteira
+   (voz + instrumental): tom, BPM, % de notas na escala e veredito.
+2. **📋 Avaliação Vocal**: 5 exercícios guiados (grave, aguda, confortável, glissando, frase natural) que geram
+   o perfil vocal do usuário (classificação: Baixo/Barítono/Tenor ou Contralto/Mezzo/Soprano, extensão em
+   semitons, tessitura confortável). Esse perfil alimenta todas as devolutivas do professor.
+3. **🎸 Afinador**: afinações de violão/guitarra/ukulele (padrão, Drop D/C/B, meio tom abaixo, Open G/D/C,
+   DADGAD, 7 cordas, ukulele), calibração A4 (440/442) e modo tempo real via microfone (agulha visual).
+4. **🎙️ Gravador**: grava ou sobe áudio, nomeia e salva na nuvem (Firestore, comprimido em MP3). As gravações
+   salvas aparecem na Análise, na Produção, e você pode avaliá-las pelo nome quando o usuário pedir.
+5. **📊 Histórico**: tabela e gráfico de evolução (desvio médio em cents e % afinado ao longo do tempo),
+   relatório detalhado por análise (com a devolutiva salva), renomear e excluir análises.
+6. **🎼 Composições**: cria e salva letras com cifras (ex: [Am]) e seções marcadas com # (Verso, Refrão, Ponte),
+   com versionamento automático (v1, v2...) e prévia colorida.
+7. **✨ Edição Vocal (IA)**: o usuário escreve um comando em linguagem natural (ex: "limpa o ruído e deixa mais
+   profissional") e a IA interpreta esse comando em ações estruturadas: redução de ruído, normalização, ajuste
+   fino de tom em semitons, EQ de presença, compressão suave, remoção de sibilância e reverb leve.
+8. **🔄 Conversor**: aceita WAV, MP3, M4A, OGG, FLAC, AAC, AMR, 3GP, WebM, OPUS e WMA como entrada, e converte
+   para múltiplos formatos de saída ao mesmo tempo (WAV, MP3, FLAC, OGG, M4A).
+9. **🎛️ Produção**: gera backing track completo (baixo melódico com groove, bateria dinâmica com kick/snare/
+   hat/crash sintetizados, acordes na progressão I-V-vi-IV) no tom e BPM detectados da gravação, em 12 estilos
+   musicais. Tem opção de "qualidade profissional": ducking dinâmico (o baixo e os acordes abaixam de volume
+   quando a voz está mais forte, como um sidechain de estúdio) e reverb de master para dar coesão à mixagem.
+10. **🤖 IA Songwriter**: gera uma música instrumental+vocal a partir de uma descrição livre (estilo,
+    instrumentos, clima, BPM); o prompt é automaticamente enriquecido com descritores de produção profissional
+    (mixagem limpa, masterização coerente, dinâmica natural) antes de ir para o modelo gerador.
+11. **🎛️ Orange Studio (botão flutuante, ícone laranja)**: separação de voz/instrumental (stems) via Demucs
+    rodando num notebook do Google Colab. O painel cobre quase a tela toda; tem um botão que abre o notebook
+    do Colab diretamente, um campo para colar a URL gradio.live gerada (que muda a cada execução da célula),
+    gravação/upload do áudio a separar, e depois de separado mostra as faixas "Vocals" e "Instrumental" com
+    um player de espectro animado (canvas + Web Audio API), download de cada faixa, e as faixas continuam
+    visíveis no rodapé da página mesmo com o Estúdio fechado.
+
+## Ferramentas que você pode usar (function calling)
+Você pode ler dados reais do usuário via ferramentas: gravações salvas, última análise, aba ativa, perfil
+vocal, lista de composições, resumo da evolução vocal, e se já existem stems separados no Estúdio. SEMPRE
+prefira usar essas ferramentas a supor informações quando o usuário perguntar sobre o próprio progresso,
+perfil ou histórico.
 
 ## Como você funciona
-- Avalia gravações salvas quando o usuário pede "avalia a gravação [nome]".
-- Dá dicas de canto, explica pitch/afinação/vibrato/respiração/sustentação, gera letras e composições.
-- Responde em português, de forma acolhedora, prática e específica.
+- Avalia gravações salvas quando o usuário pede "avalia a gravação [nome]" (ouve o áudio de verdade).
+- Dá dicas de canto, explica pitch/afinação/vibrato/respiração/sustentação, ajuda com letras e composições,
+  orienta sobre produção musical e sobre como usar o Orange Studio.
+- Sempre responde em português, de forma acolhedora, prática, específica e encorajadora — nunca genérica.
 """
 # ══════════════════ ASSISTENTE VIRTUAL (Gemini) ══════════════════
 def assistente_resposta(prompt_usuario, chat_id=None, historico=None):
@@ -1921,6 +1998,23 @@ st.markdown("""
     [data-testid="stDialog"] .stChatMessage[data-testid="stChatMessageAssistant"] {
         background: linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.03)) !important;
         border: 1px solid rgba(249,115,22,0.22) !important;
+    }
+        /* ═══ Correção do botão "Browse files" sobreposto em colunas estreitas ═══ */
+    [data-testid="stFileUploaderDropzone"] {
+        flex-wrap: wrap !important;
+    }
+    [data-testid="stFileUploaderDropzone"] button {
+        white-space: nowrap !important;
+        min-width: 132px !important;
+        flex-shrink: 0 !important;
+        margin-top: 6px !important;
+    }
+    [data-testid="stFileUploaderDropzoneInstructions"] {
+        overflow: hidden !important;
+        min-width: 0 !important;
+    }
+    [data-testid="stFileUploaderDropzoneInstructions"] span {
+        white-space: normal !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -2646,6 +2740,15 @@ laranjinha_b64 = ""
 if LARANJINHA_PATH:
     with open(LARANJINHA_PATH, "rb") as f:
         laranjinha_b64 = base64.b64encode(f.read()).decode()
+
+STUDIO_PATH = _encontrar_imagem([
+    "studio.png", "Studio.png", "STUDIO.png",
+    "orange_studio.png", "estudio.png", "Estudio.png",
+]) or _busca_fallback_png(["studio", "estudio"])
+studio_b64 = ""
+if STUDIO_PATH:
+    with open(STUDIO_PATH, "rb") as f:
+        studio_b64 = base64.b64encode(f.read()).decode()
         
 def _enviar_msg_laranjinha():
     """Callback do Enviar: processa a mensagem ANTES da tela redesenhar (o chat não fecha)."""
@@ -2676,7 +2779,7 @@ def laranjinha_dialog():
                 st.session_state["chat_atual_nome"] = "Chat geral"
         st.session_state["chat_hist"] = carregar_chat_firestore(st.session_state.get("chat_atual_id")) if st.session_state.get("chat_atual_id") else []
         
-    st.markdown("""
+        st.markdown("""
     <style>
     div[data-testid="stDialog"] div[data-testid="stElementContainer"]:has(div#laranjinha-topo) {
         position: sticky !important; top: 0 !important; z-index: 999 !important;
@@ -2686,9 +2789,17 @@ def laranjinha_dialog():
         position: sticky !important; bottom: 0 !important; z-index: 999 !important;
         background: #0d0d0d !important;
     }
+    /* Esconde o letreiro nativo, pequeno, do st.dialog — usamos nosso próprio banner abaixo */
+    div[data-testid="stDialog"] > div > div:first-child h1,
+    div[data-testid="stDialog"] > div > div:first-child h2,
+    div[data-testid="stDialog"] > div > div:first-child h3 {
+        display: none !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
+    st.markdown(titulo_secao("🍊", "Laranjinha"), unsafe_allow_html=True)
+        
     with st.container():
         st.markdown('<div id="laranjinha-topo"></div>', unsafe_allow_html=True)
         col_img, col_t, col_li = st.columns([1, 5, 1])
@@ -3297,21 +3408,39 @@ def _renderizar_secao_estudio():
         st.markdown("", unsafe_allow_html=True)
 
     with st.container(key="estudio_fullscreen_box"):
-        col_header, col_fechar = st.columns([9, 1])
-        with col_header:
-            st.markdown("""
-            <div class="oh-studio-top">
-                <span class="st-title">🎛️ Orange Studio</span>
-                <span class="oh-studio-chip">🎙️ Stems · Demucs</span>
-                <span class="oh-studio-chip">Voz + Instrumental</span>
-                <span class="oh-studio-chip">htdemucs</span>
-            </div>
-            """, unsafe_allow_html=True)
+        col_titulo, col_fechar = st.columns([9, 1])
+        with col_titulo:
+            st.markdown(titulo_secao("🎛️", "Orange Studio"), unsafe_allow_html=True)
         with col_fechar:
             if st.button("✕", key="fechar_estudio_btn", help="Fechar Estúdio"):
                 st.session_state["estudio_aberto"] = False
                 st.rerun()
 
+        col_img, col_t = st.columns([1, 9])
+        with col_img:
+            if studio_b64:
+                st.markdown(
+                    f'<img src="data:image/png;base64,{studio_b64}" '
+                    'style="width:44px;height:44px;border-radius:50%;'
+                    'box-shadow:0 4px 14px rgba(249,115,22,0.45);" />',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown("🎛️")
+        with col_t:
+            st.markdown(
+                '<div style="font-family:Poppins,sans-serif;font-weight:700;font-size:1.05rem;'
+                'color:#fff;padding-top:8px;">Orange Studio — Separação de Stems (Demucs)</div>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("""
+        <div class="oh-studio-top">
+            <span class="oh-studio-chip">🎙️ Stems · Demucs</span>
+            <span class="oh-studio-chip">Voz + Instrumental</span>
+            <span class="oh-studio-chip">htdemucs</span>
+        </div>
+        """, unsafe_allow_html=True)
         col_link, col_dica = st.columns([1, 2])
         with col_link:
             if URL_NOTEBOOK_COLAB.startswith("http"):
@@ -3332,15 +3461,12 @@ def _renderizar_secao_estudio():
         if url_demucs:
             st.session_state["url_demucs"] = url_demucs
 
-        col_gravar, col_subir = st.columns(2)
-        with col_gravar:
-            gravacao_studio = st.audio_input("🎙️ Gravar agora", key="rec_studio")
-        with col_subir:
-            arquivo_studio = st.file_uploader(
-                "📁 Subir gravação",
-                type=["mp3", "wav", "mp4", "m4a", "ogg"],
-                key="up_studio",
-            )
+        gravacao_studio = st.audio_input("🎙️ Gravar agora", key="rec_studio")
+        arquivo_studio = st.file_uploader(
+            "📁 Subir gravação",
+            type=["mp3", "wav", "mp4", "m4a", "ogg"],
+            key="up_studio",
+        )
         arquivo_final_studio = gravacao_studio if gravacao_studio is not None else arquivo_studio
         if arquivo_final_studio is not None:
             st.audio(arquivo_final_studio)
@@ -3423,14 +3549,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Botão flutuante do Estúdio, usando studio.png (já no repositório) ──
-STUDIO_PATH = _encontrar_imagem([
-    "studio.png", "Studio.png", "STUDIO.png",
-    "orange_studio.png", "estudio.png", "Estudio.png",
-]) or _busca_fallback_png(["studio", "estudio"])
-studio_b64 = ""
-if STUDIO_PATH:
-    with open(STUDIO_PATH, "rb") as f:
-        studio_b64 = base64.b64encode(f.read()).decode()
 
 st.markdown('<div id="fab-estudio"></div>', unsafe_allow_html=True)
 if st.button("", key="abrir_estudio", help="Abrir Estúdio"):
