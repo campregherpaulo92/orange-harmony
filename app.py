@@ -3764,3 +3764,132 @@ div[data-testid="stElementContainer"]:has(#fab-estudio) + div[data-testid="stEle
 }}
 </style>
 """, unsafe_allow_html=True)            
+# ══════════════════════════════════════════════════════════════
+# BOTÕES FLUTUANTES ARRASTÁVEIS (drag) — Laranjinha e Estúdio
+# ══════════════════════════════════════════════════════════════
+_components.html("""
+<script>
+(function() {
+  const doc = window.parent.document;
+  const STORAGE_PREFIX = 'oh_fab_pos_';
+
+  function makeDraggable(anchorId, imgId) {
+    const anchor = doc.getElementById(anchorId);
+    if (!anchor) return false;
+    const markerContainer = anchor.closest('div[data-testid="stElementContainer"]');
+    if (!markerContainer) return false;
+    const buttonContainer = markerContainer.nextElementSibling;
+    if (!buttonContainer) return false;
+    const wrapper = buttonContainer.querySelector('div[data-testid="stButton"]');
+    if (!wrapper) return false;
+    const btn = wrapper.querySelector('button');
+    if (!btn) return false;
+    const img = imgId ? doc.getElementById(imgId) : null;
+
+    if (wrapper.dataset.ohDraggable === '1') return true;
+    wrapper.dataset.ohDraggable = '1';
+
+    wrapper.style.position = 'fixed';
+    if (img) img.style.position = 'fixed';
+
+    const saved = doc.defaultView.localStorage.getItem(STORAGE_PREFIX + anchorId);
+    if (saved) {
+      try {
+        const pos = JSON.parse(saved);
+        wrapper.style.left = pos.left + 'px';
+        wrapper.style.top = pos.top + 'px';
+        wrapper.style.right = 'auto';
+        wrapper.style.bottom = 'auto';
+        if (img) {
+          img.style.left = pos.left + 'px';
+          img.style.top = pos.top + 'px';
+          img.style.right = 'auto';
+          img.style.bottom = 'auto';
+        }
+      } catch (e) {}
+    }
+
+    let dragging = false;
+    let moved = false;
+    let startX = 0, startY = 0, origLeft = 0, origTop = 0;
+
+    function onDown(e) {
+      const point = e.touches ? e.touches[0] : e;
+      dragging = true;
+      moved = false;
+      const rect = wrapper.getBoundingClientRect();
+      origLeft = rect.left;
+      origTop = rect.top;
+      startX = point.clientX;
+      startY = point.clientY;
+      doc.addEventListener('mousemove', onMove);
+      doc.addEventListener('mouseup', onUp);
+      doc.addEventListener('touchmove', onMove, {passive: false});
+      doc.addEventListener('touchend', onUp);
+    }
+
+    function onMove(e) {
+      if (!dragging) return;
+      const point = e.touches ? e.touches[0] : e;
+      const dx = point.clientX - startX;
+      const dy = point.clientY - startY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+      if (!moved) return;
+      e.preventDefault();
+      let newLeft = origLeft + dx;
+      let newTop = origTop + dy;
+      const maxLeft = doc.defaultView.innerWidth - wrapper.offsetWidth - 4;
+      const maxTop = doc.defaultView.innerHeight - wrapper.offsetHeight - 4;
+      newLeft = Math.max(4, Math.min(newLeft, maxLeft));
+      newTop = Math.max(4, Math.min(newTop, maxTop));
+      wrapper.style.left = newLeft + 'px';
+      wrapper.style.top = newTop + 'px';
+      wrapper.style.right = 'auto';
+      wrapper.style.bottom = 'auto';
+      if (img) {
+        img.style.left = newLeft + 'px';
+        img.style.top = newTop + 'px';
+        img.style.right = 'auto';
+        img.style.bottom = 'auto';
+      }
+    }
+
+    function onUp() {
+      if (!dragging) return;
+      dragging = false;
+      doc.removeEventListener('mousemove', onMove);
+      doc.removeEventListener('mouseup', onUp);
+      doc.removeEventListener('touchmove', onMove);
+      doc.removeEventListener('touchend', onUp);
+      if (moved) {
+        const suppressClick = function(ce) {
+          ce.stopPropagation();
+          ce.preventDefault();
+          btn.removeEventListener('click', suppressClick, true);
+        };
+        btn.addEventListener('click', suppressClick, true);
+        const rect = wrapper.getBoundingClientRect();
+        doc.defaultView.localStorage.setItem(
+          STORAGE_PREFIX + anchorId,
+          JSON.stringify({left: rect.left, top: rect.top})
+        );
+      }
+    }
+
+    btn.style.cursor = 'grab';
+    btn.addEventListener('mousedown', onDown);
+    btn.addEventListener('touchstart', onDown, {passive: true});
+    return true;
+  }
+
+  function tentar() {
+    const okL = makeDraggable('fab-laranjinha', 'fab-laranjinha-img');
+    const okE = makeDraggable('fab-estudio', 'fab-estudio-img');
+    if (!okL || !okE) {
+      setTimeout(tentar, 300);
+    }
+  }
+  tentar();
+})();
+</script>
+""", height=0)
