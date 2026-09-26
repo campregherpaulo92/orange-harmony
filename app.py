@@ -3046,7 +3046,7 @@ except Exception:
 import streamlit.components.v1 as _components
 
 def _audio_para_b64(src):
-    %%Converte URL do Colab ou caminho local em base64 pro player%%
+    # Converte URL do Colab ou caminho local em base64 pro player
     if isinstance(src, str) and src.startswith("http"):
         if _requests is None:
             return None
@@ -3059,7 +3059,7 @@ def _audio_para_b64(src):
     return _b64_mod.b64encode(dados).decode()
 
 def _player_espectro(b64_audio, cor, uid):
-    %%Player com espectro animado em tempo real (Web Audio API)%%
+    # Player com espectro animado em tempo real (Web Audio API)
     if not b64_audio:
         st.caption("⚠️ Não foi possível carregar o áudio para o player.")
         return
