@@ -2037,12 +2037,84 @@ st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</spa
 if "modelo_ia" not in st.session_state:
     st.session_state["modelo_ia"] = MODELOS_DISPONIVEIS[0]
     
-# ══════════════════ INTERFACE ══════════════════
-tab_analise, tab_avaliacao, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao, tab_ia_compositora = st.tabs(
-    ["🎵 Análise e Estudo", "📋 Avaliação", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção", "🤖 IA Songwriter"]
-)
+# ══════════════════ NAVEGAÇÃO LATERAL (sidebar estilo Claude) ══════════════════
+PAGINAS_APP = [
+    ("analise",     "🎵", "Análise e Estudo"),
+    ("avaliacao",   "📋", "Avaliação"),
+    ("afinador",    "🎸", "Afinador"),
+    ("gravador",    "🎙️", "Gravador"),
+    ("historico",   "📊", "Histórico"),
+    ("composicoes", "🎼", "Composições"),
+    ("edicao",      "✨", "Edição Vocal (IA)"),
+    ("conversor",   "🔄", "Conversor"),
+    ("producao",    "🎛️", "Produção"),
+    ("songwriter",  "🤖", "IA Songwriter"),
+]
+
+if "pagina_ativa" not in st.session_state:
+    st.session_state["pagina_ativa"] = PAGINAS_APP[0][0]
+
+st.markdown("""
+<style>
+    /* ═══ Sidebar estilo Claude: fundo escuro, item ativo destacado, fonte Poppins ═══ */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #14100c, #0a0806) !important;
+        border-right: 1px solid rgba(249,115,22,0.18) !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button {
+        width: 100% !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        background: transparent !important;
+        color: #d9d9d9 !important;
+        border: 1px solid transparent !important;
+        border-radius: 10px !important;
+        font-family: 'Poppins', sans-serif !important;
+        font-weight: 600 !important;
+        font-size: 0.92rem !important;
+        padding: 0.55rem 0.9rem !important;
+        box-shadow: none !important;
+        margin-bottom: 2px !important;
+        transition: all 0.15s ease !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button:hover {
+        background: rgba(249,115,22,0.10) !important;
+        color: #fff !important;
+        transform: none !important;
+        box-shadow: none !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, rgba(249,115,22,0.22), rgba(249,115,22,0.08)) !important;
+        color: #f97316 !important;
+        border: 1px solid rgba(249,115,22,0.35) !important;
+        box-shadow: 0 0 12px rgba(249,115,22,0.15) !important;
+    }
+    section[data-testid="stSidebar"] .oh-sidebar-titulo {
+        font-family: 'Poppins', sans-serif;
+        font-weight: 800;
+        color: #f97316;
+        font-size: 1.15rem;
+        padding: 4px 0 14px 4px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+with st.sidebar:
+    st.markdown('<div class="oh-sidebar-titulo">🍊 Orange Harmony</div>', unsafe_allow_html=True)
+    for chave, icone, rotulo in PAGINAS_APP:
+        ativo = st.session_state["pagina_ativa"] == chave
+        if st.button(
+            f"{icone}  {rotulo}",
+            key=f"nav_{chave}",
+            type="primary" if ativo else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state["pagina_ativa"] = chave
+            st.rerun()
+
+pagina_ativa = st.session_state["pagina_ativa"]
 # ── ABA ANÁLISE E ESTUDO ──
-with tab_analise:
+if pagina_ativa == "analise":
     st.markdown(titulo_secao("🎯", "Tom de Referência"), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     nota_ref = c1.selectbox("Nota de referência", NOTAS_REFERENCIA, index=NOTAS_REFERENCIA.index("C4"), key="nota_ref_sel")
@@ -2255,7 +2327,7 @@ with tab_analise:
             else:
                 st.info("Nenhuma nota sustentada (>= 0.8s). Sustente uma nota firme por 3-4s.")
 # ── ABA AFINADOR ──
-with tab_afinador:
+if pagina_ativa == "afinador":
     st.markdown(titulo_secao("🎸", "Afinador"), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     afincao = c1.selectbox("Afinação", list(AFINACOES.keys()), key="afinador_sel")
@@ -2291,7 +2363,7 @@ with tab_afinador:
         st.warning(f"Modo tempo real indisponível. Detalhe: {ERRO_WEBRTC}")
 
 # ── ABA GRAVADOR ──
-with tab_gravador:
+if pagina_ativa == "gravador":
     st.markdown(titulo_secao("🎙️", "Gravador"), unsafe_allow_html=True)
     grav_nome = st.text_input("Nome da gravação", placeholder="Ex: Cover Snuff - 23/09", key="grav_nome_input")
     grav_audio = st.audio_input("Gravar", key="grav_audio_input")
@@ -2341,7 +2413,7 @@ with tab_gravador:
                     st.rerun()
         st.caption("💡 As gravações aparecem na Análise, na Produção e a Laranjinha pode avaliá-las pelo nome.")
 # ── ABA AVALIAÇÃO VOCAL ──
-with tab_avaliacao:
+if pagina_ativa == "avaliacao":
     st.markdown(titulo_secao("📋", "Avaliação Vocal Inicial"), unsafe_allow_html=True)
     perfil_salvo = carregar_perfil_firestore()
     if perfil_salvo:
@@ -2397,7 +2469,7 @@ with tab_avaliacao:
         else:
             st.error("Não foi possível salvar o perfil no Firestore.")        
 # ── ABA HISTÓRICO ──
-with tab_historico:
+if pagina_ativa == "historico":
     st.markdown(titulo_secao("📊", "Tabela de Evolução/Performance"), unsafe_allow_html=True)
     analises = carregar_historico_firestore()
 
@@ -2495,7 +2567,7 @@ with tab_historico:
                     else:
                         st.error("Não foi possível excluir. Verifique o Firebase.")
 # ── ABA COMPOSIÇÕES ──
-with tab_composicoes:
+if pagina_ativa == "composicoes":
     st.markdown(titulo_secao("🎼", "Crie e salve suas composições"), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     comp_titulo = c1.text_input("Título da música", placeholder="Ex: Minha canção",
@@ -2564,7 +2636,7 @@ with tab_composicoes:
         st.markdown(titulo_secao("👁️", "Visualização da letra"), unsafe_allow_html=True)
         st.markdown(renderizar_composicao_html(letra_atual), unsafe_allow_html=True)
 # ── ABA EDIÇÃO VOCAL (IA) ──
-with tab_edicao:
+if pagina_ativa == "edicao":
     st.markdown(titulo_secao("✨", "Ajuste de Voz via IA"), unsafe_allow_html=True)
     edicao_in = st.file_uploader("Voz para editar (use o áudio isolado)", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="edicao_upload")
     comando = st.text_input("Comando para a IA", placeholder="Ex: alinha minha voz no tom, remove a sibilância e deixa mais profissional", key="edicao_comando")
@@ -2621,7 +2693,7 @@ with tab_edicao:
             st.audio(out, sample_rate=sr)
             st.success("Edição aplicada: " + ", ".join(acoes) + ".")
 # ── ABA CONVERSOR DE FORMATO (múltiplas entradas e múltiplas saídas) ──
-with tab_conversor:
+if pagina_ativa == "conversor":
     st.markdown(titulo_secao("🔄", "Conversor de formato"), unsafe_allow_html=True)
     conv_in = st.file_uploader(
         "📂 Subir mídia",
@@ -2657,7 +2729,7 @@ with tab_conversor:
                     except Exception as e:
                         st.warning(f"Não foi possível gerar {fmt}: {e}")
 # ── ABA PRODUÇÃO (backing track musical, com opção de qualidade profissional) ──
-with tab_producao:
+if pagina_ativa == "producao":
     st.markdown(titulo_secao("🎛️", "Estúdio de Produção"), unsafe_allow_html=True)
     st.markdown(titulo_secao("1️⃣", "Captura"), unsafe_allow_html=True)
     prod_in = st.file_uploader("📂 Subir gravação (voz + violão)", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="producao_upload")
@@ -3155,7 +3227,7 @@ def gerar_musica_ia(prompt, duracao_segundos=20, letra=None):
     except Exception as e:
         return None, f"Resposta inesperada da IA: {str(e)[:300]}"
         
-with tab_ia_compositora:
+if pagina_ativa == "songwriter":
     st.markdown(titulo_secao("🤖", "IA Songwriter"), unsafe_allow_html=True)
     st.caption("Descreva a música que você quer e a IA gera um trecho instrumental pronto. "
                "Use estilo, instrumentos, clima e BPM (ex.: 'samba suave, violão e percussão, 80 BPM'). "
