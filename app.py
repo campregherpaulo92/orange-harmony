@@ -3146,7 +3146,7 @@ def studio_dialog():
     <style>
     [data-testid="stDialog"] div[role="dialog"] {
         width: 94vw !important;
-        max-width: 1500px !important;
+        max-width: 3000px !important;
         height: 92vh !important;
     }
     .oh-studio-top {
