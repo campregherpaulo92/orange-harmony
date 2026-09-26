@@ -2414,9 +2414,10 @@ with tab_conversor:
 # ══════════════════════════════════════════════════════════════
 # BLOCO 12 — ABA STEMS (separação voz/instrumental, Colab + Demucs)
 # ══════════════════════════════════════════════════════════════
-URL_NOTEBOOK_COLAB = "https://colab.research.google.com/drive/1qOzZls0EyhESEb004Zyc238uRoKEw4Kz#scrollTo=zKGzCLHG8pb5"  # ex: https://colab.research.google.com/drive/XXXX
-    with tab_stems:
-st.markdown(titulo_secao("🎤", "Separação de Stems"), unsafe_allow_html=True)
+URL_NOTEBOOK_COLAB = "https://colab.research.google.com/drive/1qOzZls0EyhESEb004Zyc238uRoKEw4Kz#scrollTo=zKGzCLHG8pb5"
+
+with tab_stems:
+    st.markdown(titulo_secao("🎤", "Separação de Stems"), unsafe_allow_html=True)
     st.caption("Separe a voz do instrumental da sua gravação com Demucs. O processamento roda no Google Colab.")
 
     # ── Atalho para o Colab ──
@@ -2495,7 +2496,7 @@ st.markdown(titulo_secao("🎤", "Separação de Stems"), unsafe_allow_html=True
                     st.success("Separação concluída! Ouça e baixe pelos players abaixo.")
                     col_voz, col_inst = st.columns(2)
                     with col_voz:
-st.markdown(titulo_secao("🎙️", "Voz isolada"), unsafe_allow_html=True)
+                        st.markdown(titulo_secao("🎙️", "Voz isolada"), unsafe_allow_html=True)
                         st.audio(voz)
                         st.download_button(
                             "📥 Baixar voz",
@@ -2505,7 +2506,7 @@ st.markdown(titulo_secao("🎙️", "Voz isolada"), unsafe_allow_html=True)
                             key="dl_voz",
                         )
                     with col_inst:
-st.markdown(titulo_secao("🎼", "Instrumental"), unsafe_allow_html=True)
+                        st.markdown(titulo_secao("🎼", "Instrumental"), unsafe_allow_html=True)
                         st.audio(instrumental)
                         st.download_button(
                             "📥 Baixar instrumental",
