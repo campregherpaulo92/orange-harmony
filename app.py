@@ -3038,6 +3038,107 @@ with tab_ia_compositora:
 # ══════════════════════════════════════════════════════════════
 # ESTÚDIO DE STEMS — botão flutuante + janela grande (estilo DAW)
 # ══════════════════════════════════════════════════════════════
+import base64 as _b64_mod
+try:
+    import requests as _requests
+except Exception:
+    _requests = None
+import streamlit.components.v1 as _components
+
+def _audio_para_b64(src):
+    %%Converte URL do Colab ou caminho local em base64 pro player%%
+    if isinstance(src, str) and src.startswith("http"):
+        if _requests is None:
+            return None
+        r = _requests.get(src, timeout=60)
+        r.raise_for_status()
+        dados = r.content
+    else:
+        with open(src, "rb") as f:
+            dados = f.read()
+    return _b64_mod.b64encode(dados).decode()
+
+def _player_espectro(b64_audio, cor, uid):
+    %%Player com espectro animado em tempo real (Web Audio API)%%
+    if not b64_audio:
+        st.caption("⚠️ Não foi possível carregar o áudio para o player.")
+        return
+    html = f"""
+    <div style="background:#0d0d0d;border:1px solid #2a2a2a;border-radius:12px;padding:10px 12px;">
+      <canvas id="cv_{uid}" height="70" style="width:100%;display:block;border-radius:8px;"></canvas>
+      <audio id="au_{uid}" src="data:audio/mpeg;base64,{b64_audio}" preload="auto"></audio>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+        <button id="pp_{uid}" style="background:{cor};border:none;border-radius:50%;width:38px;height:38px;color:#0d0d0d;font-size:16px;cursor:pointer;font-weight:700;">▶</button>
+        <button id="mu_{uid}" style="background:#1f1f1f;border:1px solid #3a3a3a;border-radius:6px;color:#d4d4d4;padding:5px 12px;font-size:0.75rem;font-weight:700;cursor:pointer;">M</button>
+        <input id="vl_{uid}" type="range" min="0" max="100" value="80" style="flex:1;accent-color:{cor};">
+        <span id="tm_{uid}" style="color:#a3a3a3;font-size:0.72rem;font-family:monospace;">0:00</span>
+      </div>
+    </div>
+    <script>
+    (function() {{
+      const au = document.getElementById('au_{uid}');
+      const cv = document.getElementById('cv_{uid}');
+      const pp = document.getElementById('pp_{uid}');
+      const mu = document.getElementById('mu_{uid}');
+      const vl = document.getElementById('vl_{uid}');
+      const tm = document.getElementById('tm_{uid}');
+      const cor = '{cor}';
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const fonte = ctx.createMediaElementSource(au);
+      const an = ctx.createAnalyser();
+      an.fftSize = 128;
+      fonte.connect(an);
+      an.connect(ctx.destination);
+      const dados = new Uint8Array(an.frequencyBinCount);
+      let rodando = false;
+      function desenhar() {{
+        if (!rodando) return;
+        requestAnimationFrame(desenhar);
+        an.getByteFrequencyData(dados);
+        const w = cv.width = cv.clientWidth;
+        const h = cv.height;
+        const c = cv.getContext('2d');
+        c.clearRect(0, 0, w, h);
+        const n = 40;
+        const largura = w / n;
+        for (let i = 0; i < n; i++) {{
+          const v = dados[Math.floor(i * dados.length / n)] / 255;
+          const altura = Math.max(2, v * h);
+          c.fillStyle = cor;
+          c.globalAlpha = 0.35 + v * 0.65;
+          c.fillRect(i * largura + 1, h - altura, largura - 2, altura);
+        }}
+        c.globalAlpha = 1;
+        const m = Math.floor(au.currentTime);
+        const s = Math.floor(au.currentTime % 60);
+        tm.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+      }}
+      pp.addEventListener('click', () => {{
+        if (au.paused) {{
+          ctx.resume();
+          au.play();
+          pp.textContent = '⏸';
+          rodando = true;
+          desenhar();
+        }} else {{
+          au.pause();
+          pp.textContent = '▶';
+          rodando = false;
+          const c = cv.getContext('2d');
+          c.clearRect(0, 0, cv.width, cv.height);
+        }}
+      }});
+      mu.addEventListener('click', () => {{
+        au.muted = !au.muted;
+        mu.style.borderColor = au.muted ? '#ef4444' : '#3a3a3a';
+        mu.style.color = au.muted ? '#ef4444' : '#d4d4d4';
+      }});
+      vl.addEventListener('input', () => {{ au.volume = vl.value / 100; }});
+      au.addEventListener('ended', () => {{ pp.textContent = '▶'; rodando = false; }});
+    }})();
+    </script>
+    """
+    _components.html(html, height=180)
 
 @st.dialog("🎛️ Orange Studio", width="large")
 def studio_dialog():
@@ -3074,33 +3175,14 @@ def studio_dialog():
         color: #e5e5e5;
     }
     .oh-studio-chip.blue { border-color: #22d3ee; color: #22d3ee; }
-    .oh-track {
-        background: #101010;
-        border: 1px solid #2a2a2a;
-        border-left: 3px solid #22d3ee;
-        border-radius: 12px;
-        padding: 12px 16px;
-        margin-bottom: 12px;
-    }
-    .oh-track.voz { border-left-color: #f97316; }
     .oh-track-name {
         font-family: 'Poppins', sans-serif;
         font-weight: 600;
-        color: #f5f5f5;
         font-size: 0.95rem;
+        margin-bottom: 6px;
     }
-    .oh-badge {
-        display: inline-block;
-        background: #1f1f1f;
-        border: 1px solid #3a3a3a;
-        color: #d4d4d4;
-        border-radius: 6px;
-        padding: 1px 9px;
-        font-size: 0.72rem;
-        font-weight: 700;
-        margin-left: 6px;
-    }
-    .oh-badge.rec { border-color: #ef4444; color: #ef4444; }
+    .oh-track-name.voz { color: #f97316; }
+    .oh-track-name.inst { color: #22d3ee; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -3164,9 +3246,6 @@ def studio_dialog():
                     resultado = cliente.predict(handle_file(caminho_temp), api_name=api)
                     st.session_state["stems_voz"] = resultado[0]
                     st.session_state["stems_inst"] = resultado[1]
-                    st.session_state["voz_mudo_studio"] = False
-                    st.session_state["inst_mudo_studio"] = False
-                    st.session_state["reabrir_estudio"] = True
                     st.toast("Separação concluída!", icon="✅")
                 except Exception as e:
                     st.error(f"Não foi possível separar os stems: {e}")
@@ -3174,45 +3253,35 @@ def studio_dialog():
                     if caminho_temp and os.path.exists(caminho_temp):
                         os.remove(caminho_temp)
 
-    # ── Faixas estilo DAW (M/S/R + player + download) ──
+    # ── Faixas estilo DAW com espectro ao vivo ──
     voz = st.session_state.get("stems_voz")
     inst = st.session_state.get("stems_inst")
 
     if voz:
-        st.markdown('<div class="oh-track voz"><span class="oh-track-name">🎙️ Vocals</span><span class="oh-badge rec">R</span><span class="oh-badge">S</span><span class="oh-badge">M</span></div>', unsafe_allow_html=True)
-        col_voz_a, col_voz_b = st.columns([5, 1])
-        with col_voz_a:
-            if st.session_state.get("voz_mudo_studio"):
-                st.caption("🔇 Faixa silenciada")
-            else:
-                st.audio(voz)
-        with col_voz_b:
-            if st.button("M", key="btn_mute_voz", use_container_width=True, help="Silenciar / religar esta faixa"):
-                st.session_state["voz_mudo_studio"] = not st.session_state.get("voz_mudo_studio", False)
-                st.session_state["reabrir_estudio"] = True
-                st.rerun()
+        st.markdown('<div class="oh-track-name voz">🎙️ Vocals <span style="font-size:0.7rem;color:#ef4444;font-weight:700;">R</span></div>', unsafe_allow_html=True)
         try:
-            dados_voz = open(voz, "rb").read() if isinstance(voz, str) and os.path.exists(voz) else voz
-            st.download_button("📥 Baixar voz", data=dados_voz, file_name="voz_isolada.mp3", mime="audio/mpeg", key="dl_voz_studio")
+            b64_voz = _audio_para_b64(voz)
+            _player_espectro(b64_voz, "#f97316", "voz")
+        except Exception as e:
+            st.caption(f"⚠️ Player indisponível ({e}) — usando player simples.")
+            st.audio(voz)
+        try:
+            dados_voz = _audio_para_b64(voz)
+            st.download_button("📥 Baixar voz", data=base64.b64decode(dados_voz), file_name="voz_isolada.mp3", mime="audio/mpeg", key="dl_voz_studio")
         except Exception:
             pass
 
     if inst:
-        st.markdown('<div class="oh-track"><span class="oh-track-name">🎼 Instrumental</span><span class="oh-badge rec">R</span><span class="oh-badge">S</span><span class="oh-badge">M</span></div>', unsafe_allow_html=True)
-        col_inst_a, col_inst_b = st.columns([5, 1])
-        with col_inst_a:
-            if st.session_state.get("inst_mudo_studio"):
-                st.caption("🔇 Faixa silenciada")
-            else:
-                st.audio(inst)
-        with col_inst_b:
-            if st.button("M", key="btn_mute_inst", use_container_width=True, help="Silenciar / religar esta faixa"):
-                st.session_state["inst_mudo_studio"] = not st.session_state.get("inst_mudo_studio", False)
-                st.session_state["reabrir_estudio"] = True
-                st.rerun()
+        st.markdown('<div class="oh-track-name inst">🎼 Instrumental <span style="font-size:0.7rem;color:#ef4444;font-weight:700;">R</span></div>', unsafe_allow_html=True)
         try:
-            dados_inst = open(inst, "rb").read() if isinstance(inst, str) and os.path.exists(inst) else inst
-            st.download_button("📥 Baixar instrumental", data=dados_inst, file_name="instrumental.mp3", mime="audio/mpeg", key="dl_inst_studio")
+            b64_inst = _audio_para_b64(inst)
+            _player_espectro(b64_inst, "#22d3ee", "inst")
+        except Exception as e:
+            st.caption(f"⚠️ Player indisponível ({e}) — usando player simples.")
+            st.audio(inst)
+        try:
+            dados_inst = _audio_para_b64(inst)
+            st.download_button("📥 Baixar instrumental", data=base64.b64decode(dados_inst), file_name="instrumental.mp3", mime="audio/mpeg", key="dl_inst_studio")
         except Exception:
             pass
 
