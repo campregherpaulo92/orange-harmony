@@ -3179,6 +3179,30 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 # ── ABA IA COMPOSITORA (geração de música por IA) ──
+def analisar_referencia_sonora(audio, sr):
+    """Analisa um áudio de referência (cantado/tocado) e devolve uma descrição textual
+    rica (BPM, tom, gênero, clima, instrumentação, estilo vocal) para enriquecer o prompt
+    do Songwriter. O modelo gerador de música trabalha só com texto, então aqui traduzimos
+    o áudio de referência em uma descrição detalhada."""
+    bpm, _ = detectar_bpm_e_beats(audio, sr)
+    tom = detectar_tom(audio, sr)
+    descricao_tecnica = f"aproximadamente {bpm:.0f} BPM, tom de {tom}"
+    if cliente is None:
+        return descricao_tecnica
+    wav_bytes = audio_para_bytes(audio, sr)
+    prompt = (
+        "Você é um produtor musical experiente. Ouça este trecho de referência (pode ser cantado, "
+        "tocado num instrumento, ou os dois) e descreva em português, em uma única frase corrida "
+        "e objetiva (sem markdown, sem listas), características úteis para recriar o estilo: "
+        "gênero musical, clima/emoção, tipo de melodia (ex: ascendente, repetitiva, com saltos), "
+        "instrumentação sugerida, e estilo vocal se houver voz (ex: rouca, suave, potente). "
+        "Seja específico e sucinto — no máximo 2 frases."
+    )
+    texto_resp, _ = chamar_gemini_com_fallback(prompt, audio_anexo=("referencia.wav", wav_bytes))
+    if texto_resp:
+        return f"{descricao_tecnica}. {texto_resp.strip()}"
+    return descricao_tecnica
+    
 def enriquecer_prompt_estilo(prompt_usuario):
     """Adiciona descritores de qualidade de produção ao prompt do usuário, mantendo a ideia original."""
     base = (prompt_usuario or "").strip()
@@ -3256,6 +3280,25 @@ if pagina_ativa == "songwriter":
         key="prompt_ia",
     )
     letra_ia = st.text_area("📝 Letra (opcional)", key="letra_ia", placeholder="Escreva sua letra aqui...")
+
+    st.markdown(titulo_secao("🎤", "Referência sonora (opcional)"), unsafe_allow_html=True)
+    st.caption(
+        "Grave ou suba um trecho cantado, tocado, ou os dois — a IA analisa BPM, tom, gênero, "
+        "clima e estilo, e usa isso para enriquecer o prompt de geração."
+    )
+    col_ref_grav, col_ref_upload = st.columns(2)
+    with col_ref_grav:
+        ref_gravada = st.audio_input("🎙️ Gravar referência", key="songwriter_ref_gravar")
+    with col_ref_upload:
+        ref_upload = st.file_uploader(
+            "📂 Ou subir referência",
+            type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "webm"],
+            key="songwriter_ref_upload",
+        )
+    ref_fonte = ref_gravada if ref_gravada is not None else ref_upload
+    if ref_fonte is not None:
+        st.audio(ref_fonte)
+
     c_ia1, c_ia2 = st.columns(2)
     duracao_ia = c_ia1.slider("⏱️ Duração (segundos)", 10, 30, 20, key="duracao_ia_slider")
     usar_contexto = c_ia2.checkbox("🎵 Usar tom/BPM da última análise", value=False, key="usar_contexto_ia")
@@ -3266,6 +3309,13 @@ if pagina_ativa == "songwriter":
         prompt_final = prompt_ia.strip()
         if usar_contexto and "ultimo_bpm" in st.session_state and "ultimo_tom" in st.session_state:
             prompt_final += f", {st.session_state.ultimo_bpm:.0f} BPM, key of {st.session_state.ultimo_tom}"
+        if ref_fonte is not None:
+            with st.spinner("🎧 Analisando a referência sonora..."):
+                audio_ref, sr_ref = carregar_audio(ref_fonte)
+                if audio_ref is not None:
+                    descricao_ref = analisar_referencia_sonora(audio_ref, sr_ref)
+                    prompt_final += f". Referência sonora enviada pelo usuário: {descricao_ref}"
+                    st.caption(f"🎧 Referência interpretada como: {descricao_ref}")
         with st.spinner("🤖 A IA está compondo... (pode levar 1-2 minutos na primeira vez)"):
             resultado, erro = gerar_musica_ia(prompt_final, duracao_ia, letra_ia)
         if erro:
@@ -3631,7 +3681,7 @@ st.markdown("""
     inset: 0 !important;
     background: rgba(0,0,0,0.62) !important;
     backdrop-filter: blur(2px) !important;
-    z-index: 10040 !important;
+    z-index: 999998 !important;
 }
 .st-key-estudio_fullscreen_box {
     position: fixed !important;
@@ -3640,12 +3690,16 @@ st.markdown("""
     width: 96vw !important;
     height: 96vh !important;
     overflow-y: auto !important;
-    z-index: 10050 !important;
+    z-index: 999999 !important;
     background: linear-gradient(165deg, rgba(20,14,8,0.98), rgba(10,8,5,0.99)) !important;
     border: 1px solid rgba(249,115,22,0.35) !important;
     border-radius: 20px !important;
     box-shadow: 0 30px 90px rgba(0,0,0,0.6) !important;
     padding: 24px 28px !important;
+}
+/* Enquanto o Studio está aberto, garante que a sidebar fique atrás dele */
+section[data-testid="stSidebar"] {
+    z-index: 1 !important;
 }
 </style>
 """, unsafe_allow_html=True)
