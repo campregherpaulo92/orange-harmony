@@ -14,6 +14,12 @@ try:
     TEM_AUBIO = True
 except Exception:
     TEM_AUBIO = False
+# ═══ STEMS: gradio_client (import protegido) ═══
+try:
+    from gradio_client import Client, handle_file
+    GRADIO_CLIENT_OK = True
+except Exception:
+    GRADIO_CLIENT_OK = False    
 # ── WebRTC (tempo real) — protegido: se o pacote faltar, o app não quebra ──
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode
@@ -1834,8 +1840,8 @@ if "modelo_ia" not in st.session_state:
     st.session_state["modelo_ia"] = MODELOS_DISPONIVEIS[0]
     
 # ══════════════════ INTERFACE ══════════════════
-tab_analise, tab_avaliacao, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao, tab_ia_compositora = st.tabs(
-    ["🎵 Análise e Estudo", "📋 Avaliação", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção", "🤖 IA Songwriter"]
+tab_analise, tab_avaliacao, tab_afinador, tab_gravador, tab_historico, tab_composicoes, tab_edicao, tab_conversor, tab_producao, tab_stems, tab_ia_compositora = st.tabs(
+    ["🎵 Análise e Estudo", "📋 Avaliação", "🎸 Afinador", "🎙️ Gravador", "📊 Histórico", "🎼 Composições", "✨ Edição Vocal (IA)", "🔄 Conversor", "🎛️ Produção", "🎤 Stems", "🤖 IA Songwriter"]
 )
 # ── ABA ANÁLISE E ESTUDO ──
 with tab_analise:
@@ -2405,6 +2411,69 @@ with tab_conversor:
                             st.warning("Conversão para MP3 requer o pacote 'lameenc' no requirements.txt. Adicione 'lameenc' e tente de novo. (WAV funciona normalmente.)")
                         else:
                             st.error(f"Erro na conversão: {e}")
+# ══════════════════════════════════════════════════════════════
+# BLOCO 12 — ABA STEMS (separação voz/instrumental, Colab + Demucs)
+# ══════════════════════════════════════════════════════════════
+with tab_stems:
+    st.markdown(titulo_secao("🎤", "Separação de Stems"))
+    st.caption("Separa a voz do instrumental da sua gravação usando Demucs. O processamento roda no Google Colab — deixe o servidor ligado.")
+
+    url_demucs = st.text_input(
+        "URL do servidor Demucs (cole o link gradio.live do Colab)",
+        value=st.session_state.get("url_demucs", ""),
+        key="input_url_demucs",
+    )
+    if url_demucs:
+        st.session_state["url_demucs"] = url_demucs
+
+    arquivo_stems = st.file_uploader(
+        "Suba sua gravação",
+        type=["mp3", "wav", "mp4", "m4a", "ogg"],
+        key="up_stems",
+    )
+    if arquivo_stems is not None:
+        st.audio(arquivo_stems)
+
+    if st.button("🎵 Separar stems", type="primary", key="btn_separar_stems"):
+        if not GRADIO_CLIENT_OK:
+            st.error("O pacote gradio_client não está instalado. Confira o requirements.txt.")
+        elif not url_demucs:
+            st.warning("Cole primeiro a URL gradio.live que aparece no Colab.")
+        elif arquivo_stems is None:
+            st.warning("Suba uma gravação primeiro.")
+        else:
+            caminho_temp = None
+            with st.spinner("🎙️ Separando voz e instrumental... pode levar 1–3 minutos."):
+                try:
+                    sufixo = os.path.splitext(arquivo_stems.name)[1] or ".mp3"
+                    fd, caminho_temp = tempfile.mkstemp(suffix=sufixo)
+                    with os.fdopen(fd, "wb") as f:
+                        f.write(arquivo_stems.getbuffer())
+
+                    cliente = Client(url_demucs)
+                    resultado = cliente.predict(
+                        handle_file(caminho_temp),
+                        api_name="/predict",
+                    )
+                    voz, instrumental = resultado[0], resultado[1]
+
+                    col_voz, col_inst = st.columns(2)
+                    with col_voz:
+                        st.subheader("🎙️ Voz isolada")
+                        st.audio(voz)
+                    with col_inst:
+                        st.subheader("🎼 Instrumental")
+                        st.audio(instrumental)
+                    st.success("Separação concluída! Ouça e baixe pelos players acima.")
+                except Exception as e:
+                    st.error(f"Não foi possível separar os stems: {e}")
+                    st.caption(
+                        "Causas comuns: o Colab desconectou (rode a célula do servidor de novo e cole a URL nova), "
+                        "a URL está errada ou o servidor ainda está processando."
+                    )
+                finally:
+                    if caminho_temp and os.path.exists(caminho_temp):
+                        os.remove(caminho_temp)                            
 # ── ABA PRODUÇÃO (backing track musical) ──
 with tab_producao:
     st.markdown(titulo_secao("🎛️", "Estúdio de Produção"), unsafe_allow_html=True)
