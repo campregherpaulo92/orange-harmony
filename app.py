@@ -2451,10 +2451,15 @@ with tab_stems:
                         f.write(arquivo_stems.getbuffer())
 
                     cliente = Client(url_demucs)
-                    resultado = cliente.predict(
-                        handle_file(caminho_temp),
-                        api_name="/predict",
-                    )
+
+                    # Descobre os endpoints que o servidor realmente expõe
+                    mapa = cliente.view_api(return_format="dict")
+                    endpoints = list((mapa or {}).get("named_endpoints", {}).keys())
+                    if not endpoints:
+                        raise RuntimeError("O servidor não expõe nenhum endpoint. Rode a célula do Colab de novo.")
+                    api = "/predict" if "/predict" in endpoints else endpoints[0]
+
+                    resultado = cliente.predict(handle_file(caminho_temp), api_name=api)
                     voz, instrumental = resultado[0], resultado[1]
 
                     col_voz, col_inst = st.columns(2)
