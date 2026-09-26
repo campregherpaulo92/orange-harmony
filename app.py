@@ -1946,6 +1946,10 @@ st.markdown("""
     @keyframes ohFadeIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
     @keyframes ohPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0.45); } 50% { box-shadow: 0 0 0 10px rgba(249,115,22,0); } }
     @keyframes ohGradient { 0% { background-position: 0% center; } 100% { background-position: 200% center; } }
+    @keyframes ohLogoGlow {
+        0%, 100% { opacity: 0.75; transform: translate(-50%, -50%) scale(1); }
+        50% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
+    }    
 
     .stDataFrame { background: rgba(255,255,255,0.03); border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); }
     .stAudio { border-radius: 14px; overflow: hidden; }
@@ -2048,11 +2052,18 @@ if os.path.exists(LOGO_PATH):
     with open(LOGO_PATH, "rb") as f:
         logo_b64 = base64.b64encode(f.read()).decode()
     st.markdown(f'''
-    <div style="text-align:center;padding:12px 0 6px 0;">
+    <div style="position:relative;text-align:center;padding:20px 0 12px 0;">
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+                    width:340px;height:190px;border-radius:50%;
+                    background:radial-gradient(circle, rgba(249,115,22,0.38) 0%,
+                                rgba(249,115,22,0.14) 45%, transparent 72%);
+                    filter:blur(28px);
+                    animation:ohLogoGlow 3.5s ease-in-out infinite;
+                    z-index:0;"></div>
         <img src="data:image/png;base64,{logo_b64}"
-             style="height:200px;width:auto;max-width:92%;object-fit:contain;
-                    background:transparent !important;box-shadow:none !important;
-                    border:none !important;border-radius:0 !important;">
+             style="position:relative;z-index:1;height:200px;width:auto;max-width:92%;
+                    object-fit:contain;background:transparent !important;
+                    box-shadow:none !important;border:none !important;border-radius:0 !important;">
     </div>
     ''', unsafe_allow_html=True)
 else:
