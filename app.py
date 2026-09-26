@@ -3036,7 +3036,7 @@ with tab_ia_compositora:
         )
         st.info("💡 Dica: quanto mais específico o prompt (estilo, instrumentos, clima, BPM), melhor o resultado.")
 # ══════════════════════════════════════════════════════════════
-# ESTÚDIO DE STEMS — botão flutuante + janela grande (estilo DAW)
+# ESTÚDIO DE STEMS — janela no botão flutuante + faixas na página
 # ══════════════════════════════════════════════════════════════
 import base64 as _b64_mod
 try:
@@ -3064,11 +3064,11 @@ def _player_espectro(src_audio, cor, uid):
         b64 = _audio_para_b64(src_audio)
     except Exception:
         return False
-    if not b64 or len(b64) > 4000000:
+    if not b64 or len(b64) > 900000:
         return False
     html = f"""
     <div style="background:#0d0d0d;border:1px solid #2a2a2a;border-radius:12px;padding:10px 12px;">
-      <canvas id="cv_{uid}" height="70" style="width:100%;display:block;border-radius:8px;"></canvas>
+      <canvas id="cv_{uid}" height="70" style="width:100%;display:block;border-radius:8px;background:#0a0a0a;"></canvas>
       <audio id="au_{uid}" src="data:audio/mpeg;base64,{b64}" preload="auto"></audio>
       <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
         <button id="pp_{uid}" style="background:{cor};border:none;border-radius:50%;width:38px;height:38px;color:#0d0d0d;font-size:16px;cursor:pointer;font-weight:700;">▶</button>
@@ -3143,58 +3143,62 @@ def _player_espectro(src_audio, cor, uid):
     """
     _components.html(html, height=180)
     return True
+
+_CSS_FAIXAS = """
+<style>
+.oh-studio-top {
+    background: linear-gradient(90deg, #1a1a1a, #0d0d0d);
+    border: 1px solid #2a2a2a;
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.oh-studio-top .st-title {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #f97316;
+}
+.oh-studio-chip {
+    background: #171717;
+    border: 1px solid #2a2a2a;
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-size: 0.78rem;
+    color: #e5e5e5;
+}
+.oh-track-name {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+}
+.oh-track-name.voz { color: #f97316; }
+.oh-track-name.inst { color: #22d3ee; }
+</style>
+"""
+
 @st.dialog("🎛️ Orange Studio", width="large")
 def studio_dialog():
     st.markdown("""
     <style>
     [data-testid="stDialog"] div[role="dialog"] {
         width: 94vw !important;
-        max-width: 3000px !important;
+        max-width: 1500px !important;
         height: 92vh !important;
     }
-    .oh-studio-top {
-        background: linear-gradient(90deg, #1a1a1a, #0d0d0d);
-        border: 1px solid #2a2a2a;
-        border-radius: 14px;
-        padding: 14px 18px;
-        margin-bottom: 14px;
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        flex-wrap: wrap;
-    }
-    .oh-studio-top .st-title {
-        font-family: 'Poppins', sans-serif;
-        font-weight: 700;
-        font-size: 1.1rem;
-        color: #f97316;
-    }
-    .oh-studio-chip {
-        background: #171717;
-        border: 1px solid #2a2a2a;
-        border-radius: 999px;
-        padding: 4px 14px;
-        font-size: 0.78rem;
-        color: #e5e5e5;
-    }
-    .oh-studio-chip.blue { border-color: #22d3ee; color: #22d3ee; }
-    .oh-track-name {
-        font-family: 'Poppins', sans-serif;
-        font-weight: 600;
-        font-size: 0.95rem;
-        margin-bottom: 6px;
-    }
-    .oh-track-name.voz { color: #f97316; }
-    .oh-track-name.inst { color: #22d3ee; }
     </style>
     """, unsafe_allow_html=True)
 
-    # ── Barra de transporte (estilo DAW) ──
     st.markdown("""
     <div class="oh-studio-top">
         <span class="st-title">🎛️ Orange Studio</span>
         <span class="oh-studio-chip">🎙️ Stems · Demucs</span>
-        <span class="oh-studio-chip blue">Voz + Instrumental</span>
+        <span class="oh-studio-chip">Voz + Instrumental</span>
         <span class="oh-studio-chip">htdemucs</span>
     </div>
     """, unsafe_allow_html=True)
@@ -3249,16 +3253,25 @@ def studio_dialog():
                     resultado = cliente.predict(handle_file(caminho_temp), api_name=api)
                     st.session_state["stems_voz"] = resultado[0]
                     st.session_state["stems_inst"] = resultado[1]
-                    st.toast("Separação concluída!", icon="✅")
+                    st.success("Separação concluída! Feche esta janela (X) — as faixas com espectro aparecem no rodapé da página.")
                 except Exception as e:
                     st.error(f"Não foi possível separar os stems: {e}")
                 finally:
                     if caminho_temp and os.path.exists(caminho_temp):
                         os.remove(caminho_temp)
 
-    # ── Faixas estilo DAW com espectro ao vivo ──
-    voz = st.session_state.get("stems_voz")
-    inst = st.session_state.get("stems_inst")
+# ── Faixas do Estúdio na página principal (onde o player renderiza livre) ──
+voz = st.session_state.get("stems_voz")
+inst = st.session_state.get("stems_inst")
+
+if voz or inst:
+    st.markdown(_CSS_FAIXAS + """
+    <div class="oh-studio-top">
+        <span class="st-title">🎛️ Orange Studio — Faixas</span>
+        <span class="oh-studio-chip">▶ aperte o play de cada faixa</span>
+        <span class="oh-studio-chip">espectro em tempo real</span>
+    </div>
+    """, unsafe_allow_html=True)
 
     if voz:
         st.markdown('<div class="oh-track-name voz">🎙️ Vocals <span style="font-size:0.7rem;color:#ef4444;font-weight:700;">R</span></div>', unsafe_allow_html=True)
