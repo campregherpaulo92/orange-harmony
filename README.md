@@ -1,69 +1,76 @@
-# 🍊 Orange Harmony — Professor de Canto com IA
+# 🍊 Orange Harmony
 
-Aplicação web que analisa sua voz em tempo real, detecta afinação, vibrato, sustentação e pausas respiratórias, e gera um feedback pedagógico completo com IA — como um professor particular de canto. Inclui a **Laranjinha**, assistente virtual que lê seus dados de estudo e conversa com você.
+Assistente vocal inteligente que analisa sua voz, acompanha sua evolução e te ensina a cantar melhor — com professor de IA, avaliação vocal completa e assistente pessoal integrados.
 
-🔗 **App publicado:** [orange-harmony.streamlit.app](https://orange-harmony.streamlit.app)
+![Análise e Estudo](prints/analise.png)
 
-![Orange Harmony](screenshots/hero.png)
+## 🎯 O que é
 
----
+O Orange Harmony é um app de coaching vocal que combina análise de áudio em tempo real (pitch, afinação, vibrato) com inteligência artificial. Ele conhece o seu perfil vocal, acompanha seu histórico e dá devolutivas de professor de canto — exigentes e baseadas em dados reais, não em elogios genéricos.
 
 ## ✨ Funcionalidades
 
-| Módulo | Descrição |
-|--------|-----------|
-| 🎵 **Análise e Estudo** | Extração de pitch (F0), nota predominante, desvio em cents, % de afinação e devolutiva pedagógica |
-| 🎸 **Afinador** | Afinador multi-instrumento com 11 afinações (violão, 7 cordas, ukulele, drop tunings) |
-| 🎙️ **Gravador** | Gravação direto pela interface (microfone do computador ou celular) + upload de áudio |
-| 🎯 **Vibrato** | Detecção de taxa (Hz), extensão (cents), periodicidade e classificação |
-| 🤖 **Laranjinha** | Assistente virtual flutuante com chat: acessa suas análises, histórico e composições via Function Calling |
-| 📊 **Histórico** | Evolução da performance salva no Firebase Firestore |
-| 🎼 **Composições** | Criação e versionamento de letras com cifras e seções |
-| ✨ **Edição Vocal (IA)** | Redução de ruído, normalização, ajuste de tom e EQ via comandos de texto |
-| 🔄 **Conversor** | Conversão entre formatos de áudio dentro do app |
-| 🎛️ **Produção** | Geração de baixo, bateria e acordes a partir da sua gravação |
-| ✍️ **IA Songwriter** | Geração de músicas completas com IA, usando o tom/BPM da última análise |
+### 🎵 Análise e Estudo
+- **Análise completa**: nota predominante, desvio em cents, tendência, % de notas afinadas (±50c), frases sustentadas, pausas respiratórias e curva de pitch
+- **Devolutiva do Professor (IA)**: parecer com pontos fortes, pontos a melhorar e exercício prático — com mentalidade de produtor musical, citando os dados da análise
+- **Sequência melódica**: detecta as notas sustentadas cantadas e analisa as transições
+- **Evolução**: o professor compara cada análise com o histórico recente e cobra problemas persistentes
+- **Base da devolutiva**: escolha entre avaliar a voz natural (nota detectada) ou a aderência à nota de referência
+- **Análise de Cover**: detecta tom, BPM, % de notas na escala e dá veredito com devolutiva
+- **Detecção de vibrato**: taxa, extensão, deslize e classificação por nota sustentada
 
-### 🍊 Destaque: Laranjinha, o assistente virtual
+### 📋 Avaliação Vocal Inicial
+Avaliação diagnóstica com 5 exercícios guiados (nota grave, aguda, confortável, glissando e frase natural) que gera seu **perfil vocal**: classificação (Baixo/Barítono/Tenor ou Contralto/Mezzo/Soprano), extensão em semitons e tessitura confortável. O perfil fica salvo no Firestore e é usado pelo professor e pela assistente em **todas** as análises.
 
-- **Botão flutuante** com o mascote em qualquer aba do app
-- **Chat em tela cheia** com histórico de conversas salvas
-- **Function Calling de verdade**: a Laranjinha lê suas composições, análises e histórico — as respostas citam suas músicas, notas e métricas reais
-- **Fallback de modelos**: se o modelo principal ficar indisponível, o app troca automaticamente
+![Avaliação Vocal](prints/avaliacao.png)
 
----
+### 🎸 Afinador
+Afinador de violão/guitarra/voz com várias afinações (padrão, Drop D/C/B, meio tom abaixo, Open G/D/C, DADGAD, 7 cordas, ukulele), calibração A4 (440/442) e modo tempo real.
 
-## 🛠️ Stack Tecnológica
+### 🎙️ Gravador
+Grave ou envie áudios, nomeie e salve na nuvem. As gravações ficam disponíveis na Análise, na Produção e podem ser avaliadas pela assistente pelo nome.
 
-- **Python 3.10+**
-- **Streamlit** — interface web
-- **Librosa** — processamento de áudio e extração de pitch
-- **NumPy** — computação numérica
-- **Matplotlib** — gráficos de curva de pitch
-- **Google Gemini API** — professor de IA e Laranjinha (múltiplos modelos com fallback automático)
-- **Firebase Firestore** — histórico, gravações e composições
-- **Noisereduce** — redução de ruído na edição vocal
+### 📊 Histórico
+Evolução da performance salva no Firebase, com tabela e gráfico de desvio médio e % afinado ao longo do tempo.
 
----
+### 🎼 Composições
+Crie e salve composições com cifras [Am], seções (# Verso, # Refrão) e versionamento (v1, v2...), com prévia, salvar e carregar.
 
-## 🚀 Como rodar localmente
+### ✨ Edição Vocal (IA)
+Ajuste a voz com comandos: redução de ruído, normalização, ajuste de tom e EQ de presença.
 
-```bash
-# 1. Clone o repositório
-git clone https://github.com/SEU_USUARIO/orange-harmony.git
-cd orange-harmony
+### 🔄 Conversor
+Conversão de áudio entre WAV e MP3.
 
-# 2. Crie e ative o ambiente virtual
-python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # Linux/Mac
+### 🎛️ Produção
+Estúdio que gera backing track (baixo, bateria e acordes) no tom e BPM detectados da gravação, em vários estilos: Pop, Rock, Balada, Sertanejo, Funk, MPB, Gospel, Reggae, Blues, Jazz, Forró e Eletrônica.
 
-# 3. Instale as dependências
-pip install -r requirements.txt
+### 🍊 Laranjinha — Assistente IA
+Assistente oficial do app com Function Calling: lê suas gravações, análises e dados da aba ativa direto do Firestore. Conhece seu perfil vocal (classificação, extensão, tessitura) e usa esses dados ao avaliar gravações e covers. Dá dicas de canto, explica técnica vocal e ajuda em composições.
 
-# 4. Configure as variáveis de ambiente
-#   GEMINI_API_KEY = sua chave do Google AI Studio
-#   GOOGLE_APPLICATION_CREDENTIALS_JSON = conteúdo do firebase_service_account.json
+![Laranjinha](prints/laranjinha.png)
 
-# 5. Rode o app
-streamlit run app.py
+## 🛠️ Stack
+
+- **Python / Streamlit** — interface e lógica do app
+- **librosa** — extração de pitch e análise de áudio
+- **Google Gemini API** — devolutivas do professor e assistente Laranjinha (com Function Calling)
+- **Firebase Firestore** — histórico de análises, gravações, composições e perfil vocal
+- **Matplotlib** — visualização da curva de pitch
+
+## ⚙️ Configuração
+
+1. Clone o repositório
+2. Instale as dependências: `pip install -r requirements.txt`
+3. Configure a chave da Gemini API (sidebar do app)
+4. Configure o Firebase (credenciais do Firestore)
+
+## 🗺️ Roadmap
+
+**Fase 2** (dependem de mais recursos de IA):
+- [ ] Edição vocal profissional com IA
+- [ ] Produção com stems de instrumentos aprimorados
+- [ ] Songwriter: geração de música completa (e música com a voz do usuário)
+- [ ] Correção do Conversor
+- [ ] Separação de stems (voz isolada da gravação)
+- [ ] Migração para web app + mobile (FastAPI + Flutter, mantendo Firebase)
