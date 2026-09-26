@@ -2037,7 +2037,7 @@ st.markdown(
     'font-size:1.05rem;background:linear-gradient(90deg,#f97316,#ffb066,#f97316,#ffb066,#f97316);'
     'background-size:300% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;'
     'background-clip:text;animation:ohGradient 4s linear infinite;margin:12px 0 18px;">'
-    'Coach Virtual e Analista de Evolução Musical</div>',
+    'AI Powered Vocal Analisys & Coaching</div>',
     unsafe_allow_html=True,
 )
 
@@ -2662,7 +2662,7 @@ if pagina_ativa == "composicoes":
         st.markdown(renderizar_composicao_html(letra_atual), unsafe_allow_html=True)
 # ── ABA EDIÇÃO VOCAL (IA) ──
 if pagina_ativa == "edicao":
-    st.markdown(titulo_secao("✨", "Ajuste de Voz via IA"), unsafe_allow_html=True)
+    st.markdown(titulo_secao("✨", "Edição Inteligente"), unsafe_allow_html=True)
     edicao_in = st.file_uploader("Voz para editar (use o áudio isolado)", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="edicao_upload")
     comando = st.text_input("Comando para a IA", placeholder="Ex: alinha minha voz no tom, remove a sibilância e deixa mais profissional", key="edicao_comando")
     if st.button("✨ Aplicar edição com IA", type="primary", key="btn_aplicar_edicao"):
@@ -2761,15 +2761,15 @@ if pagina_ativa == "producao":
     prod_grav = st.audio_input("🎤 Gravar", key="producao_gravar")
     grav_salvas_prod = get_gravacoes()
     opcoes_grav_prod = ["—"] + grav_salvas_prod
-    usar_grav_prod = st.selectbox("🎙️ Ou usar uma gravação salva", opcoes_grav_prod, key="usar_grav_prod")
+    usar_grav_prod = st.selectbox("🎙️ Upload Biblioteca", opcoes_grav_prod, key="usar_grav_prod")
     st.markdown(titulo_secao("2️⃣", "Estilo e geração"), unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     estilo = c1.selectbox("🎵 Estilo musical", list(ESTILOS_MUSICAIS.keys()), key="producao_estilo_sel")
     c2.caption(ESTILOS_MUSICAIS[estilo])
     c3, c4 = st.columns(2)
-    com_baixo = c3.checkbox("Gerar baixo", value=True, key="producao_com_baixo")
-    com_bateria = c4.checkbox("Gerar bateria", value=True, key="producao_com_bateria")
-    com_acordes = st.checkbox("🎹 Gerar Backing Track)", value=True, key="producao_com_acordes")
+    com_baixo = c3.checkbox("Gerar Linha de ContraBaixo", value=True, key="producao_com_baixo")
+    com_bateria = c4.checkbox("Gerar Percurssão", value=True, key="producao_com_bateria")
+    com_acordes = st.checkbox("🎹 Gerar Backing Track", value=True, key="producao_com_acordes")
     qualidade_pro = st.checkbox(
         "✨ Qualidade profissional (ducking dinâmico do baixo/acordes na voz + reverb de master)",
         value=True,
@@ -3297,7 +3297,7 @@ if pagina_ativa == "songwriter":
         ref_gravada = st.audio_input("🎙️ Gravar referência", key="songwriter_ref_gravar")
     with col_ref_upload:
         ref_upload = st.file_uploader(
-            "📂 Ou subir referência",
+            "📂 Upload",
             type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "webm"],
             key="songwriter_ref_upload",
         )
