@@ -2797,8 +2797,10 @@ def laranjinha_dialog():
     }
     </style>
     """, unsafe_allow_html=True)
-
-    st.markdown(titulo_secao("🍊", "Laranjinha"), unsafe_allow_html=True)
+        
+    with st.container():
+        st.markdown('<div id="laranjinha-topo"></div>', unsafe_allow_html=True)
+        col_img, col_t, col_li = st.columns([1, 5, 1])
         
     with st.container():
         st.markdown('<div id="laranjinha-topo"></div>', unsafe_allow_html=True)
@@ -2811,8 +2813,10 @@ def laranjinha_dialog():
                 unsafe_allow_html=True,
             )
         else:
+        else:
             col_img.markdown("🍊")
         col_t.markdown("**Laranjinha — Assistente do Orange Harmony**")
+        st.markdown('<div class="oh-title-line"></div>', unsafe_allow_html=True)
         if col_li.button("🗑️", key="limpar_chat_btn", help="Limpar conversa atual (mantém o chat)"):
             chat_atual = st.session_state.get("chat_atual_id")
             if chat_atual:
@@ -3408,15 +3412,7 @@ def _renderizar_secao_estudio():
         st.markdown("", unsafe_allow_html=True)
 
     with st.container(key="estudio_fullscreen_box"):
-        col_titulo, col_fechar = st.columns([9, 1])
-        with col_titulo:
-            st.markdown(titulo_secao("🎛️", "Orange Studio"), unsafe_allow_html=True)
-        with col_fechar:
-            if st.button("✕", key="fechar_estudio_btn", help="Fechar Estúdio"):
-                st.session_state["estudio_aberto"] = False
-                st.rerun()
-
-        col_img, col_t = st.columns([1, 9])
+        col_img, col_t, col_fechar = st.columns([1, 8, 1])
         with col_img:
             if studio_b64:
                 st.markdown(
@@ -3433,6 +3429,12 @@ def _renderizar_secao_estudio():
                 'color:#fff;padding-top:8px;">Orange Studio — Separação de Stems (Demucs)</div>',
                 unsafe_allow_html=True,
             )
+        with col_fechar:
+            if st.button("✕", key="fechar_estudio_btn", help="Fechar Estúdio"):
+                st.session_state["estudio_aberto"] = False
+                st.rerun()
+
+        st.markdown('<div class="oh-title-line"></div>', unsafe_allow_html=True)
 
         st.markdown("""
         <div class="oh-studio-top">
