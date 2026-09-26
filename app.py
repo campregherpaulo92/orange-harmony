@@ -3773,41 +3773,45 @@ _components.html("""
   const doc = window.parent.document;
   const STORAGE_PREFIX = 'oh_fab_pos_';
 
-  function makeDraggable(anchorId, imgId) {
+  function aplicarPosicaoSalva(anchorId, wrapper, img) {
+    const saved = doc.defaultView.localStorage.getItem(STORAGE_PREFIX + anchorId);
+    if (!saved) return;
+    try {
+      const pos = JSON.parse(saved);
+      wrapper.style.left = pos.left + 'px';
+      wrapper.style.top = pos.top + 'px';
+      wrapper.style.right = 'auto';
+      wrapper.style.bottom = 'auto';
+      if (img) {
+        img.style.left = pos.left + 'px';
+        img.style.top = pos.top + 'px';
+        img.style.right = 'auto';
+        img.style.bottom = 'auto';
+      }
+    } catch (e) {}
+  }
+
+  function conectar(anchorId, imgId) {
     const anchor = doc.getElementById(anchorId);
-    if (!anchor) return false;
+    if (!anchor) return;
     const markerContainer = anchor.closest('div[data-testid="stElementContainer"]');
-    if (!markerContainer) return false;
+    if (!markerContainer) return;
     const buttonContainer = markerContainer.nextElementSibling;
-    if (!buttonContainer) return false;
+    if (!buttonContainer) return;
     const wrapper = buttonContainer.querySelector('div[data-testid="stButton"]');
-    if (!wrapper) return false;
+    if (!wrapper) return;
     const btn = wrapper.querySelector('button');
-    if (!btn) return false;
+    if (!btn) return;
     const img = imgId ? doc.getElementById(imgId) : null;
 
-    if (wrapper.dataset.ohDraggable === '1') return true;
-    wrapper.dataset.ohDraggable = '1';
+    // Se este exato botão já foi conectado (o Streamlit não recriou), não faz nada.
+    if (btn.dataset.ohDragBound === '1') return;
+    btn.dataset.ohDragBound = '1';
 
     wrapper.style.position = 'fixed';
     if (img) img.style.position = 'fixed';
 
-    const saved = doc.defaultView.localStorage.getItem(STORAGE_PREFIX + anchorId);
-    if (saved) {
-      try {
-        const pos = JSON.parse(saved);
-        wrapper.style.left = pos.left + 'px';
-        wrapper.style.top = pos.top + 'px';
-        wrapper.style.right = 'auto';
-        wrapper.style.bottom = 'auto';
-        if (img) {
-          img.style.left = pos.left + 'px';
-          img.style.top = pos.top + 'px';
-          img.style.right = 'auto';
-          img.style.bottom = 'auto';
-        }
-      } catch (e) {}
-    }
+    aplicarPosicaoSalva(anchorId, wrapper, img);
 
     let dragging = false;
     let moved = false;
@@ -3879,17 +3883,15 @@ _components.html("""
     btn.style.cursor = 'grab';
     btn.addEventListener('mousedown', onDown);
     btn.addEventListener('touchstart', onDown, {passive: true});
-    return true;
   }
 
-  function tentar() {
-    const okL = makeDraggable('fab-laranjinha', 'fab-laranjinha-img');
-    const okE = makeDraggable('fab-estudio', 'fab-estudio-img');
-    if (!okL || !okE) {
-      setTimeout(tentar, 300);
-    }
-  }
-  tentar();
+  // Roda continuamente: a cada rerun do Streamlit os botões são recriados,
+  // então precisamos reconectar o listener e reaplicar a posição salva sempre
+  // que detectarmos um botão "novo" (sem o marcador ohDragBound).
+  setInterval(function() {
+    conectar('fab-laranjinha', 'fab-laranjinha-img');
+    conectar('fab-estudio', 'fab-estudio-img');
+  }, 500);
 })();
 </script>
 """, height=0)
