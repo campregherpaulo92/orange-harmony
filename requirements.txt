@@ -13,4 +13,5 @@ huggingface_hub
 gradio_client
 streamlit-audiorecorder
 pydub
+gradio_client
 
