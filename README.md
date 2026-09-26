@@ -2,7 +2,7 @@
 
 Assistente vocal inteligente que analisa sua voz, acompanha sua evolução e te ensina a cantar melhor — com professor de IA, avaliação vocal completa e assistente pessoal integrados.
 
-![Análise e Estudo](prints/analise.png)
+![Análise e Estudo](screenshots/prints/analise.png)
 
 ## 🎯 O que é
 
@@ -22,7 +22,7 @@ O Orange Harmony é um app de coaching vocal que combina análise de áudio em t
 ### 📋 Avaliação Vocal Inicial
 Avaliação diagnóstica com 5 exercícios guiados (nota grave, aguda, confortável, glissando e frase natural) que gera seu **perfil vocal**: classificação (Baixo/Barítono/Tenor ou Contralto/Mezzo/Soprano), extensão em semitons e tessitura confortável. O perfil fica salvo no Firestore e é usado pelo professor e pela assistente em **todas** as análises.
 
-![Avaliação Vocal](prints/avaliacao.png)
+![Avaliação Vocal](screenshots/prints/avaliacao.png)
 
 ### 🎸 Afinador
 Afinador de violão/guitarra/voz com várias afinações (padrão, Drop D/C/B, meio tom abaixo, Open G/D/C, DADGAD, 7 cordas, ukulele), calibração A4 (440/442) e modo tempo real.
@@ -48,7 +48,7 @@ Estúdio que gera backing track (baixo, bateria e acordes) no tom e BPM detectad
 ### 🍊 Laranjinha — Assistente IA
 Assistente oficial do app com Function Calling: lê suas gravações, análises e dados da aba ativa direto do Firestore. Conhece seu perfil vocal (classificação, extensão, tessitura) e usa esses dados ao avaliar gravações e covers. Dá dicas de canto, explica técnica vocal e ajuda em composições.
 
-![Laranjinha](prints/laranjinha.png)
+![Laranjinha](screenshots/prints/laranjinha.png)
 
 ## 🛠️ Stack
 
