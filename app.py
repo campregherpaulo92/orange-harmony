@@ -2805,7 +2805,7 @@ def laranjinha_dialog():
         st.markdown('<div id="laranjinha-topo"></div>', unsafe_allow_html=True)
         col_img, col_t, col_li = st.columns([1, 5, 1])
         
-       with st.container():
+    with st.container():
         st.markdown('<div id="laranjinha-topo"></div>', unsafe_allow_html=True)
         col_img, col_t, col_li = st.columns([1, 5, 1])
         if laranjinha_b64:
