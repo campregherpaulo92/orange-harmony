@@ -2032,7 +2032,7 @@ if os.path.exists(LOGO_PATH):
     ''', unsafe_allow_html=True)
 else:
     st.markdown('<h1 style="text-align:center;">🍊 Orange Harmony</h1>', unsafe_allow_html=True)
-st.markdown('<div class="oh-section-title"><span class="oh-title-icon">🎤</span><span class="oh-title-text"></span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
+st.markdown('<div class="oh-section-title"><span class="oh-title-icon"></span><span class="oh-title-text"></span><span class="oh-title-line"></span></div>', unsafe_allow_html=True)
 
 if "modelo_ia" not in st.session_state:
     st.session_state["modelo_ia"] = MODELOS_DISPONIVEIS[0]
