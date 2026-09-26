@@ -3276,7 +3276,7 @@ def gerar_musica_ia(prompt, duracao_segundos=20, letra=None):
             letra = client.predict(
                 prompt_enriquecido,
                 prompt_enriquecido,
-                "Portuguese",
+                "Spanish",
                 "Verse – Chorus – Verse – Chorus – Bridge – Chorus – Outro",
                 42,
                 api_name="/write_lyrics",
