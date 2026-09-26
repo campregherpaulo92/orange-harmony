@@ -1999,22 +1999,41 @@ st.markdown("""
         background: linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.03)) !important;
         border: 1px solid rgba(249,115,22,0.22) !important;
     }
-        /* ═══ Correção do botão "Browse files" sobreposto em colunas estreitas ═══ */
+        /* ═══ Correção definitiva do "Browse files" sobreposto ═══ */
     [data-testid="stFileUploaderDropzone"] {
-        flex-wrap: wrap !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 10px !important;
+        min-height: 84px !important;
+        padding: 14px 16px !important;
     }
-    [data-testid="stFileUploaderDropzone"] button {
-        white-space: nowrap !important;
-        min-width: 132px !important;
-        flex-shrink: 0 !important;
-        margin-top: 6px !important;
+    [data-testid="stFileUploaderDropzone"] > div:first-child {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 4px !important;
+        width: 100% !important;
     }
     [data-testid="stFileUploaderDropzoneInstructions"] {
-        overflow: hidden !important;
+        overflow: visible !important;
         min-width: 0 !important;
+        width: 100% !important;
     }
     [data-testid="stFileUploaderDropzoneInstructions"] span {
         white-space: normal !important;
+        display: block !important;
+    }
+    [data-testid="stFileUploaderDropzone"] button {
+        position: static !important;
+        white-space: nowrap !important;
+        width: auto !important;
+        flex-shrink: 0 !important;
+        margin: 0 !important;
+    }
+    /* Esconde qualquer ícone/rótulo duplicado de acessibilidade sobre o botão */
+    [data-testid="stFileUploaderDropzone"] button svg + span,
+    [data-testid="stFileUploaderDropzone"] button > span:empty {
+        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -2027,7 +2046,8 @@ if os.path.exists(LOGO_PATH):
     <div style="text-align:center;padding:12px 0 6px 0;">
         <img src="data:image/png;base64,{logo_b64}"
              style="height:200px;width:auto;max-width:92%;object-fit:contain;
-                    border-radius:16px;box-shadow:0 10px 40px rgba(249,115,22,0.35);">
+                    background:transparent !important;box-shadow:none !important;
+                    border:none !important;border-radius:0 !important;">
     </div>
     ''', unsafe_allow_html=True)
 else:
