@@ -2414,9 +2414,24 @@ with tab_conversor:
 # ══════════════════════════════════════════════════════════════
 # BLOCO 12 — ABA STEMS (separação voz/instrumental, Colab + Demucs)
 # ══════════════════════════════════════════════════════════════
+URL_NOTEBOOK_COLAB = "https://colab.research.google.com/drive/1qOzZls0EyhESEb004Zyc238uRoKEw4Kz#scrollTo=zKGzCLHG8pb5"  # ex: https://colab.research.google.com/drive/XXXX
+
 with tab_stems:
     st.markdown(titulo_secao("🎤", "Separação de Stems"))
-    st.caption("Separa a voz do instrumental da sua gravação usando Demucs. O processamento roda no Google Colab — deixe o servidor ligado.")
+    st.caption("Separe a voz do instrumental da sua gravação com Demucs. O processamento roda no Google Colab.")
+
+    # ── Atalho para o Colab ──
+    col_link, col_passos = st.columns([2, 3])
+    with col_link:
+        if URL_NOTEBOOK_COLAB.startswith("http"):
+            st.link_button("🔗 Abrir notebook no Colab", URL_NOTEBOOK_COLAB, use_container_width=True)
+        else:
+            st.info("Defina o link do notebook na variável URL_NOTEBOOK_COLAB, no início deste bloco.")
+    with col_passos:
+        st.markdown(
+            "**Fluxo:** 1️⃣ Abra o Colab e conecte  •  2️⃣ Rode o instalador e a célula do servidor  •  "
+            "3️⃣ Copie a URL `gradio.live` e cole abaixo  •  4️⃣ Grave ou suba o áudio e separe."
+        )
 
     url_demucs = st.text_input(
         "URL do servidor Demucs (cole o link gradio.live do Colab)",
@@ -2426,29 +2441,45 @@ with tab_stems:
     if url_demucs:
         st.session_state["url_demucs"] = url_demucs
 
-    arquivo_stems = st.file_uploader(
-        "Suba sua gravação",
-        type=["mp3", "wav", "mp4", "m4a", "ogg"],
-        key="up_stems",
-    )
-    if arquivo_stems is not None:
-        st.audio(arquivo_stems)
+    # ── Entradas: gravar agora ou subir arquivo ──
+    col_gravar, col_subir = st.columns(2)
+    with col_gravar:
+        gravacao_stems = st.audio_input("🎙️ Ou grave agora", key="rec_stems")
+    with col_subir:
+        arquivo_stems = st.file_uploader(
+            "📁 Ou suba sua gravação",
+            type=["mp3", "wav", "mp4", "m4a", "ogg"],
+            key="up_stems",
+        )
 
+    arquivo_final = gravacao_stems if gravacao_stems is not None else arquivo_stems
+
+    if arquivo_final is not None:
+        st.markdown("##### 🎧 Áudio selecionado")
+        st.audio(arquivo_final)
+
+    # ── Separação ──
     if st.button("🎵 Separar stems", type="primary", key="btn_separar_stems"):
         if not GRADIO_CLIENT_OK:
             st.error("O pacote gradio_client não está instalado. Confira o requirements.txt.")
         elif not url_demucs:
             st.warning("Cole primeiro a URL gradio.live que aparece no Colab.")
-        elif arquivo_stems is None:
-            st.warning("Suba uma gravação primeiro.")
+        elif arquivo_final is None:
+            st.warning("Grave ou suba uma gravação primeiro.")
         else:
             caminho_temp = None
             with st.spinner("🎙️ Separando voz e instrumental... pode levar 1–3 minutos."):
                 try:
-                    sufixo = os.path.splitext(arquivo_stems.name)[1] or ".mp3"
+                    if gravacao_stems is not None:
+                        sufixo = ".wav"
+                        conteudo = gravacao_stems.getbuffer()
+                    else:
+                        sufixo = os.path.splitext(arquivo_stems.name)[1] or ".mp3"
+                        conteudo = arquivo_stems.getbuffer()
+
                     fd, caminho_temp = tempfile.mkstemp(suffix=sufixo)
                     with os.fdopen(fd, "wb") as f:
-                        f.write(arquivo_stems.getbuffer())
+                        f.write(conteudo)
 
                     cliente = Client(url_demucs)
 
@@ -2462,14 +2493,28 @@ with tab_stems:
                     resultado = cliente.predict(handle_file(caminho_temp), api_name=api)
                     voz, instrumental = resultado[0], resultado[1]
 
+                    st.success("Separação concluída! Ouça e baixe pelos players abaixo.")
                     col_voz, col_inst = st.columns(2)
                     with col_voz:
-                        st.subheader("🎙️ Voz isolada")
+                        st.markdown(titulo_secao("🎙️", "Voz isolada"))
                         st.audio(voz)
+                        st.download_button(
+                            "📥 Baixar voz",
+                            data=open(voz, "rb").read() if isinstance(voz, str) and os.path.exists(voz) else voz,
+                            file_name="voz_isolada.mp3",
+                            mime="audio/mpeg",
+                            key="dl_voz",
+                        )
                     with col_inst:
-                        st.subheader("🎼 Instrumental")
+                        st.markdown(titulo_secao("🎼", "Instrumental"))
                         st.audio(instrumental)
-                    st.success("Separação concluída! Ouça e baixe pelos players acima.")
+                        st.download_button(
+                            "📥 Baixar instrumental",
+                            data=open(instrumental, "rb").read() if isinstance(instrumental, str) and os.path.exists(instrumental) else instrumental,
+                            file_name="instrumental.mp3",
+                            mime="audio/mpeg",
+                            key="dl_inst",
+                        )
                 except Exception as e:
                     st.error(f"Não foi possível separar os stems: {e}")
                     st.caption(
