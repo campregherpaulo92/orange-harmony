@@ -3798,7 +3798,23 @@ _components.html("""
   const doc = window.parent.document;
   const STORAGE_PREFIX = 'oh_fab_pos_';
 
-  function aplicarPosicaoSalva(anchorId, wrapper, img) {
+  function getParts(anchorId) {
+    const anchor = doc.getElementById(anchorId);
+    if (!anchor) return null;
+    const markerContainer = anchor.closest('div[data-testid="stElementContainer"]');
+    if (!markerContainer) return null;
+    const buttonContainer = markerContainer.nextElementSibling;
+    if (!buttonContainer) return null;
+    const wrapper = buttonContainer.querySelector('div[data-testid="stButton"]');
+    if (!wrapper) return null;
+    const btn = wrapper.querySelector('button');
+    if (!btn) return null;
+    return {wrapper: wrapper, btn: btn};
+  }
+
+  function aplicarPosicao(anchorId, wrapper, img) {
+    wrapper.style.position = 'fixed';
+    if (img) img.style.position = 'fixed';
     const saved = doc.defaultView.localStorage.getItem(STORAGE_PREFIX + anchorId);
     if (!saved) return;
     try {
@@ -3816,52 +3832,30 @@ _components.html("""
     } catch (e) {}
   }
 
-  function conectar(anchorId, imgId) {
-    const anchor = doc.getElementById(anchorId);
-    if (!anchor) return;
-    const markerContainer = anchor.closest('div[data-testid="stElementContainer"]');
-    if (!markerContainer) return;
-    const buttonContainer = markerContainer.nextElementSibling;
-    if (!buttonContainer) return;
-    const wrapper = buttonContainer.querySelector('div[data-testid="stButton"]');
-    if (!wrapper) return;
-    const btn = wrapper.querySelector('button');
-    if (!btn) return;
-    const img = imgId ? doc.getElementById(imgId) : null;
-
-    // Se este exato botão já foi conectado (o Streamlit não recriou), não faz nada.
+  function bindDrag(anchorId, wrapper, btn, img) {
     if (btn.dataset.ohDragBound === '1') return;
     btn.dataset.ohDragBound = '1';
-
-    wrapper.style.position = 'fixed';
-    if (img) img.style.position = 'fixed';
-
-    aplicarPosicaoSalva(anchorId, wrapper, img);
+    btn.style.cursor = 'grab';
 
     let dragging = false;
     let moved = false;
     let startX = 0, startY = 0, origLeft = 0, origTop = 0;
 
     function onDown(e) {
-      const point = e.touches ? e.touches[0] : e;
       dragging = true;
       moved = false;
       const rect = wrapper.getBoundingClientRect();
       origLeft = rect.left;
       origTop = rect.top;
-      startX = point.clientX;
-      startY = point.clientY;
-      doc.addEventListener('mousemove', onMove);
-      doc.addEventListener('mouseup', onUp);
-      doc.addEventListener('touchmove', onMove, {passive: false});
-      doc.addEventListener('touchend', onUp);
+      startX = e.clientX;
+      startY = e.clientY;
+      try { btn.setPointerCapture(e.pointerId); } catch (err) {}
     }
 
     function onMove(e) {
       if (!dragging) return;
-      const point = e.touches ? e.touches[0] : e;
-      const dx = point.clientX - startX;
-      const dy = point.clientY - startY;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
       if (!moved) return;
       e.preventDefault();
@@ -3883,20 +3877,16 @@ _components.html("""
       }
     }
 
-    function onUp() {
+    function onUpFn(e) {
       if (!dragging) return;
       dragging = false;
-      doc.removeEventListener('mousemove', onMove);
-      doc.removeEventListener('mouseup', onUp);
-      doc.removeEventListener('touchmove', onMove);
-      doc.removeEventListener('touchend', onUp);
+      try { btn.releasePointerCapture(e.pointerId); } catch (err) {}
       if (moved) {
         const suppressClick = function(ce) {
           ce.stopPropagation();
           ce.preventDefault();
-          btn.removeEventListener('click', suppressClick, true);
         };
-        btn.addEventListener('click', suppressClick, true);
+        btn.addEventListener('click', suppressClick, {capture: true, once: true});
         const rect = wrapper.getBoundingClientRect();
         doc.defaultView.localStorage.setItem(
           STORAGE_PREFIX + anchorId,
@@ -3905,18 +3895,26 @@ _components.html("""
       }
     }
 
-    btn.style.cursor = 'grab';
-    btn.addEventListener('mousedown', onDown);
-    btn.addEventListener('touchstart', onDown, {passive: true});
+    btn.addEventListener('pointerdown', onDown);
+    btn.addEventListener('pointermove', onMove);
+    btn.addEventListener('pointerup', onUpFn);
+    btn.addEventListener('pointercancel', onUpFn);
   }
 
-  // Roda continuamente: a cada rerun do Streamlit os botões são recriados,
-  // então precisamos reconectar o listener e reaplicar a posição salva sempre
-  // que detectarmos um botão "novo" (sem o marcador ohDragBound).
-  setInterval(function() {
-    conectar('fab-laranjinha', 'fab-laranjinha-img');
-    conectar('fab-estudio', 'fab-estudio-img');
-  }, 500);
+  function tick() {
+    [['fab-laranjinha', 'fab-laranjinha-img'], ['fab-estudio', 'fab-estudio-img']].forEach(function(par) {
+      const anchorId = par[0];
+      const imgId = par[1];
+      const parts = getParts(anchorId);
+      if (!parts) return;
+      const img = imgId ? doc.getElementById(imgId) : null;
+      aplicarPosicao(anchorId, parts.wrapper, img);
+      bindDrag(anchorId, parts.wrapper, parts.btn, img);
+    });
+  }
+
+  setInterval(tick, 400);
+  tick();
 })();
 </script>
 """, height=0)
