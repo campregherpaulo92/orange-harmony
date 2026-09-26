@@ -1692,7 +1692,7 @@ Você é a Laranjinha, assistente oficial do Orange Harmony, e conhece TODO o ap
    hat/crash sintetizados, acordes na progressão I-V-vi-IV) no tom e BPM detectados da gravação, em 12 estilos
    musicais. Tem opção de "qualidade profissional": ducking dinâmico (o baixo e os acordes abaixam de volume
    quando a voz está mais forte, como um sidechain de estúdio) e reverb de master para dar coesão à mixagem.
-10. **🤖 IA Songwriter**: gera uma música instrumental+vocal a partir de uma descrição livre (estilo,
+10. **🤖 Songwriter**: gera uma música instrumental+vocal a partir de uma descrição livre (estilo,
     instrumentos, clima, BPM); o prompt é automaticamente enriquecido com descritores de produção profissional
     (mixagem limpa, masterização coerente, dinâmica natural) antes de ir para o modelo gerador.
 11. **🎛️ Orange Studio (botão flutuante, ícone laranja)**: separação de voz/instrumental (stems) via Demucs
@@ -2048,7 +2048,7 @@ PAGINAS_APP = [
     ("edicao",      "✨", "Edição Vocal (IA)"),
     ("conversor",   "🔄", "Conversor"),
     ("producao",    "🎛️", "Produção"),
-    ("songwriter",  "🤖", "IA Songwriter"),
+    ("songwriter",  "🤖", "Songwriter"),
 ]
 
 if "pagina_ativa" not in st.session_state:
@@ -3270,7 +3270,7 @@ def gerar_musica_ia(prompt, duracao_segundos=20, letra=None):
         return None, f"Resposta inesperada da IA: {str(e)[:300]}"
         
 if pagina_ativa == "songwriter":
-    st.markdown(titulo_secao("🤖", "IA Songwriter"), unsafe_allow_html=True)
+    st.markdown(titulo_secao("🤖", "Songwriter"), unsafe_allow_html=True)
     st.caption("Descreva a música que você quer e a IA gera um trecho instrumental pronto. "
                "Use estilo, instrumentos, clima e BPM (ex.: 'samba suave, violão e percussão, 80 BPM'). "
                "O pedido é automaticamente enriquecido com descritores de produção profissional.")
