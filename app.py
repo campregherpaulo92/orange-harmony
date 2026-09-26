@@ -1957,8 +1957,18 @@ st.markdown("""
     }
     [data-testid="stWarning"], [data-testid="stError"], [data-testid="stInfo"] { border-radius: 12px; backdrop-filter: blur(8px); }
 
+    /* ═══ FONTE GLOBAL — força Poppins/Inter em TODOS os elementos ═══ */
     html, body, .stApp, .stApp * {
         font-family: 'Inter', sans-serif !important;
+    }
+    /* Exceção: ícones do Streamlit (setinha de recolher sidebar, etc.) usam uma
+       fonte especial (Material Symbols) — sem essa exceção, o nome do ícone
+       aparece como texto cru em vez do símbolo gráfico. */
+    [data-testid="stIconMaterial"],
+    [data-testid="collapsedControl"] span,
+    .material-symbols-outlined,
+    .material-icons {
+        font-family: 'Material Symbols Outlined', 'Material Icons' !important;
     }
     label, .stSelectbox label, .stRadio label, .stTextInput label,
     .stNumberInput label, .stTextArea label {
