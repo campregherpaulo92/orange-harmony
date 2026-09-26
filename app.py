@@ -1957,18 +1957,13 @@ st.markdown("""
     }
     [data-testid="stWarning"], [data-testid="stError"], [data-testid="stInfo"] { border-radius: 12px; backdrop-filter: blur(8px); }
 
-    /* ═══ FONTE GLOBAL — força Poppins/Inter em TODOS os elementos ═══ */
-    html, body, .stApp, .stApp * {
+    /* ═══ FONTE GLOBAL — força Poppins/Inter em TODOS os elementos, ═══
+       EXCETO os ícones do Streamlit (setinha de recolher sidebar, etc.),
+       que dependem de uma fonte especial (Material Symbols) para virar
+       símbolo gráfico em vez de aparecer como texto cru do nome do ícone. */
+    html, body, .stApp,
+    .stApp *:not([data-testid="stIconMaterial"]):not([class*="material-symbols"]):not([class*="material-icons"]) {
         font-family: 'Inter', sans-serif !important;
-    }
-    /* Exceção: ícones do Streamlit (setinha de recolher sidebar, etc.) usam uma
-       fonte especial (Material Symbols) — sem essa exceção, o nome do ícone
-       aparece como texto cru em vez do símbolo gráfico. */
-    [data-testid="stIconMaterial"],
-    [data-testid="collapsedControl"] span,
-    .material-symbols-outlined,
-    .material-icons {
-        font-family: 'Material Symbols Outlined', 'Material Icons' !important;
     }
     label, .stSelectbox label, .stRadio label, .stTextInput label,
     .stNumberInput label, .stTextArea label {
