@@ -2813,7 +2813,6 @@ def laranjinha_dialog():
                 unsafe_allow_html=True,
             )
         else:
-        else:
             col_img.markdown("🍊")
         col_t.markdown("**Laranjinha — Assistente do Orange Harmony**")
         st.markdown('<div class="oh-title-line"></div>', unsafe_allow_html=True)
