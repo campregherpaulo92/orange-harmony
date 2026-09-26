@@ -3064,7 +3064,7 @@ def _player_espectro(src_audio, cor, uid):
         b64 = _audio_para_b64(src_audio)
     except Exception:
         return False
-    if not b64 or len(b64) > 2000000:
+    if not b64 or len(b64) > 4000000:
         return False
     html = f"""
     <div style="background:#0d0d0d;border:1px solid #2a2a2a;border-radius:12px;padding:10px 12px;">
