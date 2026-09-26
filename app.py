@@ -2779,7 +2779,7 @@ def laranjinha_dialog():
                 st.session_state["chat_atual_nome"] = "Chat geral"
         st.session_state["chat_hist"] = carregar_chat_firestore(st.session_state.get("chat_atual_id")) if st.session_state.get("chat_atual_id") else []
         
-        st.markdown("""
+    st.markdown("""
     <style>
     div[data-testid="stDialog"] div[data-testid="stElementContainer"]:has(div#laranjinha-topo) {
         position: sticky !important; top: 0 !important; z-index: 999 !important;
@@ -2789,11 +2789,14 @@ def laranjinha_dialog():
         position: sticky !important; bottom: 0 !important; z-index: 999 !important;
         background: #0d0d0d !important;
     }
-    /* Esconde o letreiro nativo, pequeno, do st.dialog — usamos nosso próprio banner abaixo */
-    div[data-testid="stDialog"] > div > div:first-child h1,
-    div[data-testid="stDialog"] > div > div:first-child h2,
-    div[data-testid="stDialog"] > div > div:first-child h3 {
+    /* Esconde o letreiro nativo, pequeno, do st.dialog — usamos nosso próprio avatar+nome abaixo */
+    div[data-testid="stDialog"] [data-testid="stDialogTitle"],
+    div[data-testid="stDialog"] h1[data-testid="stMarkdownContainer"],
+    div[data-testid="stDialog"] div[data-testid="stModal"] h1 {
         display: none !important;
+    }
+    div[data-testid="stDialog"] > div:first-child > div:first-child {
+        padding-top: 0 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -2808,10 +2811,16 @@ def laranjinha_dialog():
         if laranjinha_b64:
             col_img.markdown(
                 f'<img src="data:image/png;base64,{laranjinha_b64}" '
-                'style="width:44px;height:44px;border-radius:50%;'
+                'style="width:68px;height:68px;border-radius:50%;'
                 'box-shadow:0 4px 14px rgba(249,115,22,0.45);" />',
                 unsafe_allow_html=True,
             )
+        else:
+            col_img.markdown("🍊")
+        col_t.markdown(
+            '<div style="padding-top:18px;">**Laranjinha — Assistente do Orange Harmony**</div>'
+        )
+        st.markdown('<div class="oh-title-line"></div>', unsafe_allow_html=True)
         else:
             col_img.markdown("🍊")
         col_t.markdown("**Laranjinha — Assistente do Orange Harmony**")
