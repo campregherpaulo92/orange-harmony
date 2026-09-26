@@ -2092,15 +2092,33 @@ st.markdown("""
     section[data-testid="stSidebar"] .oh-sidebar-titulo {
         font-family: 'Poppins', sans-serif;
         font-weight: 800;
-        color: #f97316;
-        font-size: 1.15rem;
-        padding: 4px 0 14px 4px;
+        font-size: 1.7rem;
+        text-align: center;
+        padding: 10px 0 20px 0;
+        background: linear-gradient(90deg, #f97316, #ffb066, #f97316, #ffb066, #f97316);
+        background-size: 300% auto;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: ohGradient 4s linear infinite;
+    }
+    /* ═══ Deixa os itens do menu lateral com fonte maior de fato ═══ */
+    section[data-testid="stSidebar"] .stButton > button p,
+    section[data-testid="stSidebar"] .stButton > button span,
+    section[data-testid="stSidebar"] .stButton > button div {
+        font-family: 'Poppins', sans-serif !important;
+        font-size: 1.05rem !important;
+        font-weight: 600 !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
-    st.markdown('<div class="oh-sidebar-titulo">🍊 Orange Harmony</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="text-align:center;font-size:2rem;margin-bottom:-6px;">🍊</div>'
+        '<div class="oh-sidebar-titulo">Orange Harmony</div>',
+        unsafe_allow_html=True,
+    )
     for chave, icone, rotulo in PAGINAS_APP:
         ativo = st.session_state["pagina_ativa"] == chave
         if st.button(
