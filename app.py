@@ -3310,14 +3310,17 @@ def _audio_para_b64(src):
 
 def _player_espectro(src_audio, cor, uid):
     """Player com espectro animado em tempo real (Web Audio API + canvas), via base64.
-    Funciona no Streamlit normalmente através de components.html — o que não funcionava
-    era rodar dentro de st.dialog; aqui o Estúdio é uma seção comum da página."""
+    Retorna (True, "") em sucesso, ou (False, motivo) quando cai no fallback — o motivo
+    é mostrado ao usuário em vez de ser escondido, para facilitar diagnóstico."""
     try:
         b64 = _audio_para_b64(src_audio)
-    except Exception:
-        return False
-    if not b64 or len(b64) > 2000000:
-        return False
+    except Exception as e:
+        return False, f"não consegui converter o áudio para base64 ({e})"
+    if not b64:
+        return False, "a conversão para base64 retornou vazia"
+    if len(b64) > 6000000:
+        tamanho_mb = len(b64) / 1_000_000
+        return False, f"áudio grande demais para o player com espectro ({tamanho_mb:.1f} MB em base64)"
     html = f"""
     <div style="background:#0d0d0d;border:1px solid #2a2a2a;border-radius:12px;padding:10px 12px;">
       <canvas id="cv_{uid}" height="70" style="width:100%;display:block;border-radius:8px;background:#0a0a0a;"></canvas>
@@ -3400,7 +3403,7 @@ def _player_espectro(src_audio, cor, uid):
     </script>
     """
     _components.html(html, height=180)
-    return True
+    return True, ""
 
 _CSS_FAIXAS = """
 <style>
@@ -3458,8 +3461,9 @@ def _renderizar_faixas_estudio():
     if voz:
         st.markdown('<div class="oh-track-name voz">🎙️ Vocals</div>', unsafe_allow_html=True)
         try:
-            if not _player_espectro(voz, "#f97316", "voz"):
-                st.caption("🎵 Áudio grande demais para o player com espectro — usando player simples.")
+            ok, motivo = _player_espectro(voz, "#f97316", "voz")
+            if not ok:
+                st.caption(f"🎵 Player simples (espectro indisponível: {motivo}).")
                 st.audio(voz)
         except Exception as e:
             st.caption(f"⚠️ Player indisponível ({e}) — usando player simples.")
@@ -3479,8 +3483,9 @@ def _renderizar_faixas_estudio():
     if inst:
         st.markdown('<div class="oh-track-name inst">🎼 Instrumental</div>', unsafe_allow_html=True)
         try:
-            if not _player_espectro(inst, "#22d3ee", "inst"):
-                st.caption("🎵 Áudio grande demais para o player com espectro — usando player simples.")
+            ok, motivo = _player_espectro(inst, "#22d3ee", "inst")
+            if not ok:
+                st.caption(f"🎵 Player simples (espectro indisponível: {motivo}).")
                 st.audio(inst)
         except Exception as e:
             st.caption(f"⚠️ Player indisponível ({e}) — usando player simples.")
