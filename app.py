@@ -2416,7 +2416,7 @@ with tab_conversor:
 # ══════════════════════════════════════════════════════════════
 URL_NOTEBOOK_COLAB = "https://colab.research.google.com/drive/1qOzZls0EyhESEb004Zyc238uRoKEw4Kz#scrollTo=zKGzCLHG8pb5"  # ex: https://colab.research.google.com/drive/XXXX
 
-with tab_stems:
+    with tab_stems:
 st.markdown(titulo_secao("🎤", "Separação de Stems"), unsafe_allow_html=True)
     st.caption("Separe a voz do instrumental da sua gravação com Demucs. O processamento roda no Google Colab.")
 
