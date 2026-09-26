@@ -2039,15 +2039,15 @@ if "modelo_ia" not in st.session_state:
     
 # ══════════════════ NAVEGAÇÃO LATERAL (sidebar estilo Claude) ══════════════════
 PAGINAS_APP = [
-    ("analise",     "🎵", "Análise e Estudo"),
     ("avaliacao",   "📋", "Avaliação"),
+    ("analise",     "🎵", "Estudo"),
     ("afinador",    "🎸", "Afinador"),
     ("gravador",    "🎙️", "Gravador"),
     ("historico",   "📊", "Histórico"),
     ("composicoes", "🎼", "Composições"),
-    ("edicao",      "✨", "Edição Vocal (IA)"),
     ("conversor",   "🔄", "Conversor"),
-    ("producao",    "🎛️", "Produção"),
+    ("producao",    "🎛️", "Produtor"),
+    ("edicao",      "✨", "Edição Vocal Inteligente"),
     ("songwriter",  "🤖", "Songwriter"),
 ]
 
@@ -2748,11 +2748,10 @@ if pagina_ativa == "conversor":
                         st.warning(f"Não foi possível gerar {fmt}: {e}")
 # ── ABA PRODUÇÃO (backing track musical, com opção de qualidade profissional) ──
 if pagina_ativa == "producao":
-    st.markdown(titulo_secao("🎛️", "Estúdio de Produção"), unsafe_allow_html=True)
-    st.markdown(titulo_secao("1️⃣", "Captura"), unsafe_allow_html=True)
-    prod_in = st.file_uploader("📂 Subir gravação (voz + violão)", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="producao_upload")
+    st.markdown(titulo_secao("🎛️", "Studio Produção"), unsafe_allow_html=True)
+    prod_in = st.file_uploader("📂 Upload", type=["wav", "mp3", "m4a", "ogg", "flac", "aac", "amr", "3gp", "webm"], key="producao_upload")
     st.markdown("****")
-    prod_grav = st.audio_input("🎤 Gravar música agora", key="producao_gravar")
+    prod_grav = st.audio_input("🎤 Gravar", key="producao_gravar")
     grav_salvas_prod = get_gravacoes()
     opcoes_grav_prod = ["—"] + grav_salvas_prod
     usar_grav_prod = st.selectbox("🎙️ Ou usar uma gravação salva", opcoes_grav_prod, key="usar_grav_prod")
@@ -2763,7 +2762,7 @@ if pagina_ativa == "producao":
     c3, c4 = st.columns(2)
     com_baixo = c3.checkbox("Gerar baixo", value=True, key="producao_com_baixo")
     com_bateria = c4.checkbox("Gerar bateria", value=True, key="producao_com_bateria")
-    com_acordes = st.checkbox("🎹 Gerar acordes (backing mais musical)", value=True, key="producao_com_acordes")
+    com_acordes = st.checkbox("🎹 Gerar Backing Track)", value=True, key="producao_com_acordes")
     qualidade_pro = st.checkbox(
         "✨ Qualidade profissional (ducking dinâmico do baixo/acordes na voz + reverb de master)",
         value=True,
