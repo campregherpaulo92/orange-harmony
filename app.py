@@ -2417,7 +2417,7 @@ with tab_conversor:
 URL_NOTEBOOK_COLAB = "https://colab.research.google.com/drive/1qOzZls0EyhESEb004Zyc238uRoKEw4Kz#scrollTo=zKGzCLHG8pb5"  # ex: https://colab.research.google.com/drive/XXXX
 
 with tab_stems:
-    st.markdown(titulo_secao("🎤", "Separação de Stems"))
+st.markdown(titulo_secao("🎤", "Separação de Stems"), unsafe_allow_html=True)
     st.caption("Separe a voz do instrumental da sua gravação com Demucs. O processamento roda no Google Colab.")
 
     # ── Atalho para o Colab ──
@@ -2496,7 +2496,7 @@ with tab_stems:
                     st.success("Separação concluída! Ouça e baixe pelos players abaixo.")
                     col_voz, col_inst = st.columns(2)
                     with col_voz:
-                        st.markdown(titulo_secao("🎙️", "Voz isolada"))
+st.markdown(titulo_secao("🎙️", "Voz isolada"), unsafe_allow_html=True)
                         st.audio(voz)
                         st.download_button(
                             "📥 Baixar voz",
@@ -2506,7 +2506,7 @@ with tab_stems:
                             key="dl_voz",
                         )
                     with col_inst:
-                        st.markdown(titulo_secao("🎼", "Instrumental"))
+st.markdown(titulo_secao("🎼", "Instrumental"), unsafe_allow_html=True)
                         st.audio(instrumental)
                         st.download_button(
                             "📥 Baixar instrumental",
@@ -3035,3 +3035,217 @@ with tab_ia_compositora:
             mime="audio/wav",
         )
         st.info("💡 Dica: quanto mais específico o prompt (estilo, instrumentos, clima, BPM), melhor o resultado.")
+# ══════════════════════════════════════════════════════════════
+# ESTÚDIO DE STEMS — botão flutuante + janela grande (estilo DAW)
+# ══════════════════════════════════════════════════════════════
+
+@st.dialog("🎛️ Orange Studio", width="large")
+def studio_dialog():
+    st.markdown("""
+    <style>
+    [data-testid="stDialog"] div[role="dialog"] {
+        width: 94vw !important;
+        max-width: 1500px !important;
+        height: 92vh !important;
+    }
+    .oh-studio-top {
+        background: linear-gradient(90deg, #1a1a1a, #0d0d0d);
+        border: 1px solid #2a2a2a;
+        border-radius: 14px;
+        padding: 14px 18px;
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+    .oh-studio-top .st-title {
+        font-family: 'Poppins', sans-serif;
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: #f97316;
+    }
+    .oh-studio-chip {
+        background: #171717;
+        border: 1px solid #2a2a2a;
+        border-radius: 999px;
+        padding: 4px 14px;
+        font-size: 0.78rem;
+        color: #e5e5e5;
+    }
+    .oh-studio-chip.blue { border-color: #22d3ee; color: #22d3ee; }
+    .oh-track {
+        background: #101010;
+        border: 1px solid #2a2a2a;
+        border-left: 3px solid #22d3ee;
+        border-radius: 12px;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+    }
+    .oh-track.voz { border-left-color: #f97316; }
+    .oh-track-name {
+        font-family: 'Poppins', sans-serif;
+        font-weight: 600;
+        color: #f5f5f5;
+        font-size: 0.95rem;
+    }
+    .oh-badge {
+        display: inline-block;
+        background: #1f1f1f;
+        border: 1px solid #3a3a3a;
+        color: #d4d4d4;
+        border-radius: 6px;
+        padding: 1px 9px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        margin-left: 6px;
+    }
+    .oh-badge.rec { border-color: #ef4444; color: #ef4444; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Barra de transporte (estilo DAW) ──
+    st.markdown("""
+    <div class="oh-studio-top">
+        <span class="st-title">🎛️ Orange Studio</span>
+        <span class="oh-studio-chip">🎙️ Stems · Demucs</span>
+        <span class="oh-studio-chip blue">Voz + Instrumental</span>
+        <span class="oh-studio-chip">htdemucs</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    url_demucs = st.text_input(
+        "URL do servidor Demucs (gradio.live do Colab)",
+        value=st.session_state.get("url_demucs", ""),
+        key="input_url_demucs_studio",
+    )
+    if url_demucs:
+        st.session_state["url_demucs"] = url_demucs
+
+    col_gravar, col_subir = st.columns(2)
+    with col_gravar:
+        gravacao_studio = st.audio_input("🎙️ Gravar agora", key="rec_studio")
+    with col_subir:
+        arquivo_studio = st.file_uploader(
+            "📁 Subir gravação",
+            type=["mp3", "wav", "mp4", "m4a", "ogg"],
+            key="up_studio",
+        )
+    arquivo_final_studio = gravacao_studio if gravacao_studio is not None else arquivo_studio
+    if arquivo_final_studio is not None:
+        st.audio(arquivo_final_studio)
+
+    if st.button("🎵 Separar stems", type="primary", key="btn_separar_studio"):
+        if not GRADIO_CLIENT_OK:
+            st.error("O pacote gradio_client não está instalado.")
+        elif not url_demucs:
+            st.warning("Cole primeiro a URL gradio.live do Colab.")
+        elif arquivo_final_studio is None:
+            st.warning("Grave ou suba uma gravação primeiro.")
+        else:
+            caminho_temp = None
+            with st.spinner("🎙️ Separando voz e instrumental..."):
+                try:
+                    if gravacao_studio is not None:
+                        sufixo = ".wav"
+                        conteudo = gravacao_studio.getbuffer()
+                    else:
+                        sufixo = os.path.splitext(arquivo_studio.name)[1] or ".mp3"
+                        conteudo = arquivo_studio.getbuffer()
+                    fd, caminho_temp = tempfile.mkstemp(suffix=sufixo)
+                    with os.fdopen(fd, "wb") as f:
+                        f.write(conteudo)
+                    cliente = Client(url_demucs)
+                    mapa = cliente.view_api(return_format="dict")
+                    endpoints = list((mapa or {}).get("named_endpoints", {}).keys())
+                    if not endpoints:
+                        raise RuntimeError("Servidor sem endpoints. Rode a célula do Colab de novo.")
+                    api = "/predict" if "/predict" in endpoints else endpoints[0]
+                    resultado = cliente.predict(handle_file(caminho_temp), api_name=api)
+                    st.session_state["stems_voz"] = resultado[0]
+                    st.session_state["stems_inst"] = resultado[1]
+                    st.session_state["voz_mudo_studio"] = False
+                    st.session_state["inst_mudo_studio"] = False
+                    st.session_state["reabrir_estudio"] = True
+                    st.toast("Separação concluída!", icon="✅")
+                except Exception as e:
+                    st.error(f"Não foi possível separar os stems: {e}")
+                finally:
+                    if caminho_temp and os.path.exists(caminho_temp):
+                        os.remove(caminho_temp)
+
+    # ── Faixas estilo DAW (M/S/R + player + download) ──
+    voz = st.session_state.get("stems_voz")
+    inst = st.session_state.get("stems_inst")
+
+    if voz:
+        st.markdown('<div class="oh-track voz"><span class="oh-track-name">🎙️ Vocals</span><span class="oh-badge rec">R</span><span class="oh-badge">S</span><span class="oh-badge">M</span></div>', unsafe_allow_html=True)
+        col_voz_a, col_voz_b = st.columns([5, 1])
+        with col_voz_a:
+            if st.session_state.get("voz_mudo_studio"):
+                st.caption("🔇 Faixa silenciada")
+            else:
+                st.audio(voz)
+        with col_voz_b:
+            if st.button("M", key="btn_mute_voz", use_container_width=True, help="Silenciar / religar esta faixa"):
+                st.session_state["voz_mudo_studio"] = not st.session_state.get("voz_mudo_studio", False)
+                st.session_state["reabrir_estudio"] = True
+                st.rerun()
+        try:
+            dados_voz = open(voz, "rb").read() if isinstance(voz, str) and os.path.exists(voz) else voz
+            st.download_button("📥 Baixar voz", data=dados_voz, file_name="voz_isolada.mp3", mime="audio/mpeg", key="dl_voz_studio")
+        except Exception:
+            pass
+
+    if inst:
+        st.markdown('<div class="oh-track"><span class="oh-track-name">🎼 Instrumental</span><span class="oh-badge rec">R</span><span class="oh-badge">S</span><span class="oh-badge">M</span></div>', unsafe_allow_html=True)
+        col_inst_a, col_inst_b = st.columns([5, 1])
+        with col_inst_a:
+            if st.session_state.get("inst_mudo_studio"):
+                st.caption("🔇 Faixa silenciada")
+            else:
+                st.audio(inst)
+        with col_inst_b:
+            if st.button("M", key="btn_mute_inst", use_container_width=True, help="Silenciar / religar esta faixa"):
+                st.session_state["inst_mudo_studio"] = not st.session_state.get("inst_mudo_studio", False)
+                st.session_state["reabrir_estudio"] = True
+                st.rerun()
+        try:
+            dados_inst = open(inst, "rb").read() if isinstance(inst, str) and os.path.exists(inst) else inst
+            st.download_button("📥 Baixar instrumental", data=dados_inst, file_name="instrumental.mp3", mime="audio/mpeg", key="dl_inst_studio")
+        except Exception:
+            pass
+
+# ── Botão flutuante do Estúdio (mesmo padrão da Laranjinha) ──
+st.markdown('<div id="fab-estudio"></div>', unsafe_allow_html=True)
+if st.button("", key="abrir_estudio", help="Abrir Estúdio"):
+    studio_dialog()
+
+st.markdown("""
+<style>
+#fab-estudio { display: none; }
+div[data-testid="stElementContainer"]:has(#fab-estudio) + div[data-testid="stElementContainer"] > div[data-testid="stButton"] {
+    position: fixed !important;
+    bottom: 160px !important;
+    right: 24px !important;
+    width: 120px !important;
+    height: 120px !important;
+    z-index: 10000 !important;
+}
+div[data-testid="stElementContainer"]:has(#fab-estudio) + div[data-testid="stElementContainer"] > div[data-testid="stButton"] button {
+    width: 120px !important;
+    height: 120px !important;
+    border-radius: 50% !important;
+    background: linear-gradient(135deg, #f97316, #ea580c) !important;
+    border: none !important;
+    color: white !important;
+    font-family: 'Poppins', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    box-shadow: 0 8px 30px rgba(249,115,22,0.55) !important;
+}
+div[data-testid="stElementContainer"]:has(#fab-estudio) + div[data-testid="stElementContainer"] > div[data-testid="stButton"] button::before {
+    content: "🎛️ Estúdio";
+}
+</style>
+""", unsafe_allow_html=True)
