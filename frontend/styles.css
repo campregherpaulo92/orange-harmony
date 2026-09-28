@@ -1,0 +1,1032 @@
+:root {
+  --oh-orange: #f97316;
+  --oh-orange-dark: #ea580c;
+  --oh-bg: #0a0a0a;
+}
+
+/* Blindagem global: o atributo `hidden` do HTML precisa SEMPRE vencer,
+   mesmo quando alguma regra de classe define display:flex/block/grid sem
+   querer (foi exatamente isso que fez os painéis da Laranjinha e do
+   Estúdio ficarem presos abertos, ignorando o hidden = true do JS). */
+[hidden] { display: none !important; }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Nunito', sans-serif;
+  color: #f2f2f2;
+  background: var(--oh-bg);
+  min-height: 100vh;
+}
+
+.oh-app {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ═══════════════ SIDEBAR ═══════════════ */
+.oh-sidebar {
+  width: 240px;
+  min-width: 160px;
+  max-width: 480px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #140f0a, #0a0806);
+  border-right: 1px solid rgba(249,115,22,0.18);
+  padding: 24px 14px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  position: relative;
+  transition: margin-left 0.2s ease;
+}
+.oh-sidebar-colapsada { margin-left: -240px; }
+.oh-sidebar-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+}
+.oh-sidebar-resize:hover, .oh-sidebar-resize.oh-resize-ativo { background: rgba(249,115,22,0.35); }
+.oh-sidebar-toggle {
+  position: fixed;
+  top: 18px;
+  left: 14px;
+  z-index: 200;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: var(--oh-orange);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.oh-sidebar-logo {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  display: block;
+}
+
+.oh-nav { display: flex; flex-direction: column; gap: 2px; }
+
+.oh-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: #d9d9d9;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 600;
+  font-size: 0.88rem;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.oh-nav-item:hover { background: rgba(249,115,22,0.10); color: #fff; }
+.oh-nav-item.oh-nav-active {
+  background: linear-gradient(135deg, rgba(249,115,22,0.22), rgba(249,115,22,0.08));
+  color: var(--oh-orange);
+  border-color: rgba(249,115,22,0.35);
+  box-shadow: 0 0 12px rgba(249,115,22,0.15);
+}
+
+/* ═══════════════ CONTEÚDO ═══════════════ */
+.oh-content {
+  flex: 1;
+  position: relative;
+  padding: 24px 32px 60px;
+  max-width: 980px;
+}
+
+.oh-glow {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 480px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(249,115,22,0.24) 0%, transparent 70%);
+  filter: blur(40px);
+  z-index: 0;
+  pointer-events: none;
+  animation: ohLogoGlow 3.5s ease-in-out infinite;
+}
+@keyframes ohLogoGlow {
+  0%, 100% { opacity: 0.7; transform: translateX(-50%) scale(1); }
+  50% { opacity: 1; transform: translateX(-50%) scale(1.05); }
+}
+
+.oh-header { text-align: center; padding: 12px 0 28px; position: relative; z-index: 1; }
+
+.oh-logo-imagem {
+  width: 210px;
+  height: 210px;
+  border-radius: 50%;
+  box-shadow: 0 8px 30px rgba(249,115,22,0.4);
+  animation: ohFloat 3s ease-in-out infinite;
+}
+@keyframes ohFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.oh-subtitle {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--oh-orange);
+  margin: 10px 0 0;
+}
+
+/* ═══════════════ PÁGINAS ═══════════════ */
+.oh-page { display: none; position: relative; z-index: 1; }
+.oh-page.oh-page-ativa { display: block; animation: ohFadeIn 0.35s ease; }
+@keyframes ohFadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.oh-card {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 18px;
+  padding: 22px 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+}
+
+.oh-card-estudio {
+  border-color: rgba(249,115,22,0.3);
+  box-shadow: 0 8px 40px rgba(249,115,22,0.12);
+}
+
+.oh-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  color: var(--oh-orange);
+  font-size: 1.02rem;
+  margin-bottom: 16px;
+}
+.oh-title-line {
+  flex: 1;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(249,115,22,0.6), transparent);
+  font-style: normal;
+}
+
+.oh-label-campo {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #d9d9d9;
+  margin: 0 0 8px;
+}
+.oh-em-construcao { color: #999; font-size: 0.85rem; margin-top: 10px; }
+
+.oh-row { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 12px; }
+.oh-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: #d9d9d9;
+  flex: 1;
+  min-width: 180px;
+}
+
+select {
+  background: rgba(255,255,255,0.08);
+  color: var(--oh-orange);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  width: 100%;
+}
+select option {
+  background: #1a1a1a;
+  color: #fff;
+  font-weight: 600;
+}
+.oh-input-texto {
+  background: rgba(255,255,255,0.08);
+  color: #f2f2f2;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: 'Nunito', sans-serif;
+  width: 100%;
+}
+
+.oh-radio-group { display: flex; gap: 16px; align-items: center; }
+.oh-radio { flex-direction: row !important; align-items: center; gap: 6px !important; font-weight: 400 !important; color: #f2f2f2 !important; }
+.oh-radio input { accent-color: var(--oh-orange); }
+
+/* Dropzone de upload — botão + hint, empilhados, sem sobreposição */
+.oh-dropzone {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: rgba(255,255,255,0.04);
+  border: 1px dashed rgba(255,255,255,0.18);
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.oh-dropzone input[type="file"] { display: none; }
+.oh-dropzone-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.oh-dropzone-hint { color: #999; font-size: 0.78rem; }
+
+.oh-btn {
+  background: linear-gradient(135deg, var(--oh-orange), var(--oh-orange-dark));
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  padding: 12px 22px;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(249,115,22,0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.oh-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(249,115,22,0.5); }
+.oh-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.oh-btn-secundario {
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: none;
+}
+
+.oh-hint { color: #999; font-size: 0.82rem; margin: 8px 0 0; }
+.oh-status { text-align: center; color: #bbb; min-height: 20px; margin-top: 10px; }
+
+/* ═══════════════ LISTA DE GRAVAÇÕES ═══════════════ */
+.oh-lista-gravacoes { display: flex; flex-direction: column; gap: 12px; }
+.oh-gravacao-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.oh-gravacao-info { display: flex; flex-direction: column; gap: 2px; min-width: 140px; flex: 1; }
+.oh-gravacao-nome { font-family: 'Baloo 2', sans-serif; font-weight: 700; color: #fff; font-size: 0.9rem; }
+.oh-gravacao-meta { font-size: 0.75rem; color: #999; }
+.oh-gravacao-item audio { height: 34px; max-width: 240px; flex: 1; }
+.oh-gravacao-acoes { display: flex; gap: 6px; }
+.oh-btn-icone {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-decoration: none;
+  color: #fff;
+  font-size: 0.9rem;
+}
+.oh-btn-icone:hover { background: rgba(255,255,255,0.12); }
+.oh-btn-excluir:hover { background: rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.4); }
+
+/* ═══════════════ TEXTAREA (Composições) ═══════════════ */
+.oh-textarea {
+  width: 100%;
+  min-height: 220px;
+  background: rgba(255,255,255,0.05);
+  color: #f2f2f2;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+/* ═══════════════ PRÉVIA DA COMPOSIÇÃO (cifras coloridas) ═══════════════ */
+.oh-composicao-preview {
+  margin-top: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 18px;
+  font-family: monospace;
+  line-height: 1.7;
+  color: #fff;
+}
+.oh-chord { color: var(--oh-orange); font-weight: 700; }
+.oh-secao-titulo {
+  color: var(--oh-orange);
+  font-weight: 800;
+  font-size: 1.1em;
+  margin-top: 12px;
+  font-family: 'Baloo 2', sans-serif;
+}
+.oh-letra-linha { color: #fff; }
+
+/* ═══════════════ DEVOLUTIVA (Histórico) ═══════════════ */
+.oh-devolutiva-card {
+  margin-top: 16px;
+  background: linear-gradient(135deg, rgba(16,185,129,0.20), rgba(16,185,129,0.05));
+  border: 1px solid rgba(16,185,129,0.45);
+  border-radius: 16px;
+  padding: 20px;
+}
+.oh-devolutiva-titulo {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  color: #34d399;
+  margin-bottom: 8px;
+}
+.oh-devolutiva-texto { color: #f2f2f2; white-space: pre-wrap; }
+
+/* ═══════════════ CONVERSOR (resultados) ═══════════════ */
+.oh-conversor-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.oh-conversor-item audio { height: 34px; flex: 1; min-width: 160px; }
+
+/* ═══════════════ AFINADOR (modo agulha) ═══════════════ */
+.oh-afinador-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+  border: 1px solid rgba(249,115,22,0.20);
+  border-radius: 20px;
+  padding: 22px 20px 26px;
+  margin-top: 16px;
+  box-shadow: 0 0 40px rgba(249,115,22,0.06);
+}
+.oh-afinador-nota-grande {
+  font-size: 2.6rem;
+  font-weight: 800;
+  font-family: 'Baloo 2', sans-serif;
+  color: #fff;
+  line-height: 1;
+}
+.oh-afinador-freq { font-size: 0.78rem; color: #999; font-family: 'Nunito', monospace; margin-bottom: 6px; }
+.oh-afinador-svg { width: 100%; max-width: 300px; }
+.oh-afinador-status {
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: 'Baloo 2', sans-serif;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+#afinadorAgulhaGrupo {
+  transition: transform 0.09s linear;
+}
+.oh-afinador-notas-cromaticas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+}
+.oh-nota-crom {
+  min-width: 30px;
+  text-align: center;
+  padding: 6px 4px;
+  border-radius: 8px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: #777;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: all 0.15s ease;
+}
+.oh-nota-crom-ativa {
+  color: #fff;
+  background: linear-gradient(135deg, var(--oh-orange), var(--oh-orange-dark));
+  border-color: transparent;
+  box-shadow: 0 0 14px rgba(249,115,22,0.5);
+  transform: translateY(-2px);
+}
+
+.oh-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+.oh-metric {
+  background: linear-gradient(150deg, rgba(249,115,22,0.14), rgba(255,255,255,0.03));
+  border: 1px solid rgba(249,115,22,0.22);
+  border-radius: 16px;
+  padding: 16px 14px;
+  text-align: center;
+}
+.oh-metric-label { font-size: 0.7rem; color: var(--oh-orange); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.oh-metric-value { font-size: 1.4rem; font-weight: 800; color: #fff; margin: 6px 0 2px; font-family: 'Baloo 2', sans-serif; }
+.oh-metric-sub { font-size: 0.72rem; color: #aaa; }
+
+.oh-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.oh-table th, .oh-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  text-align: left;
+}
+.oh-table th { color: var(--oh-orange); font-family: 'Baloo 2', sans-serif; }
+
+canvas#curvaPitch { width: 100%; background: #0d0d0d; border-radius: 12px; }
+
+/* ═══════════════ GRAVADOR COM ESPECTRO ═══════════════ */
+.oh-rec-box {
+  position: relative;
+  background: #0d0d0d;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  overflow: hidden;
+}
+.oh-gravador-grande .oh-rec-box { padding: 30px; }
+
+.oh-rec-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.oh-rec-btn {
+  position: relative;
+  z-index: 1;
+  width: 60px;
+  height: 60px;
+  min-width: 60px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--oh-orange), var(--oh-orange-dark));
+  box-shadow: 0 4px 20px rgba(249,115,22,0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease;
+}
+.oh-rec-btn:hover { transform: scale(1.05); }
+.oh-rec-btn.oh-rec-ativo {
+  animation: ohRecPulse 1.4s infinite;
+}
+@keyframes ohRecPulse {
+  0% { box-shadow: 0 0 0 0 rgba(249,115,22,0.55); }
+  70% { box-shadow: 0 0 0 16px rgba(249,115,22,0); }
+  100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); }
+}
+.oh-rec-icon { font-size: 1.5rem; }
+
+.oh-rec-info {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.oh-rec-status { font-family: 'Baloo 2', sans-serif; font-weight: 600; font-size: 0.85rem; color: #e5e5e5; }
+.oh-rec-tempo { font-family: 'Nunito', monospace; font-size: 0.78rem; color: #999; }
+
+.oh-rec-player { width: 100%; margin-top: 12px; }
+.oh-rec-player-container { margin-top: 12px; }
+
+.oh-rec-excluir {
+  position: relative;
+  z-index: 1;
+  background: rgba(239,68,68,0.12);
+  border: 1px solid rgba(239,68,68,0.35);
+  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.15s ease;
+}
+.oh-rec-excluir:hover { background: rgba(239,68,68,0.25); }
+
+/* ═══════════════ PLAYER PERSONALIZADO (substitui <audio controls>) ═══════════════ */
+.oh-player-box {
+  position: relative;
+  background: #0d0d0d;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 10px 12px;
+  overflow: hidden;
+}
+.oh-player-canvas {
+  width: 100%;
+  height: 46px;
+  display: block;
+  border-radius: 8px;
+}
+.oh-player-controles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.oh-player-play {
+  background: var(--oh-orange);
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  color: #0d0d0d;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.oh-player-tempo {
+  color: #a3a3a3;
+  font-size: 0.72rem;
+  font-family: 'Nunito', monospace;
+  white-space: nowrap;
+}
+.oh-player-progresso {
+  flex: 1;
+  min-width: 60px;
+  accent-color: var(--oh-orange);
+}
+.oh-player-mute {
+  background: #1f1f1f;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  color: #d4d4d4;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.oh-player-velocidade {
+  background: #1f1f1f;
+  color: #d4d4d4;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.72rem;
+  width: auto;
+  font-weight: 400;
+}
+.oh-player-download {
+  background: #1f1f1f;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  color: #d4d4d4;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+.oh-conversor-player { flex: 1; min-width: 220px; }
+
+/* ═══════════════ CHAT (Laranjinha + Estúdio) — bolhas compartilhadas ═══════════════ */
+.oh-chat-bolha {
+  max-width: 82%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+.oh-chat-usuario {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--oh-orange), var(--oh-orange-dark));
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.oh-chat-assistente, .oh-chat-boasvindas {
+  align-self: flex-start;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #f2f2f2;
+  border-bottom-left-radius: 4px;
+}
+.oh-chat-mensagens {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 14px;
+}
+.oh-chat-input-area {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.oh-chat-input-area textarea {
+  flex: 1;
+  resize: none;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  color: #f2f2f2;
+  font-family: 'Nunito', sans-serif;
+  padding: 10px 12px;
+  max-height: 96px;
+}
+.oh-chat-enviar {
+  background: linear-gradient(135deg, var(--oh-orange), var(--oh-orange-dark));
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.oh-chat-fechar {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  color: #fff;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+/* ═══════════════ PAINEL DA LARANJINHA (menor, ancorado no canto) ═══════════════ */
+.oh-laranjinha-painel {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  top: 24px;
+  width: min(62vw, 760px);
+  max-width: calc(100vw - 32px);
+  height: auto;
+  background: linear-gradient(165deg, rgba(28,18,10,0.98), rgba(12,9,6,0.99));
+  border: 1px solid rgba(249,115,22,0.30);
+  border-radius: 20px;
+  box-shadow: 0 22px 70px rgba(0,0,0,0.5);
+  z-index: 9500;
+  flex-direction: column;
+  overflow: hidden;
+}
+.oh-laranjinha-painel:not([hidden]) { display: flex; }
+.oh-laranjinha-painel[hidden] { display: none; }
+.oh-laranjinha-resize {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+}
+.oh-laranjinha-resize:hover, .oh-laranjinha-resize.oh-resize-ativo { background: rgba(249,115,22,0.35); }
+@media (max-width: 760px) {
+  .oh-laranjinha-painel { left: 12px; right: 12px; width: auto; }
+}
+.oh-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.oh-chat-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  box-shadow: 0 4px 14px rgba(249,115,22,0.45);
+}
+.oh-chat-titulo {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  color: var(--oh-orange);
+}
+.oh-chat-conversas-barra {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.oh-chat-select {
+  flex: 1;
+  background: rgba(255,255,255,0.06);
+  color: var(--oh-orange);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+/* ═══════════════ PAINEL DO ORANGE STUDIO (formato DAW, quase tela cheia) ═══════════════ */
+.oh-studio-painel {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.62);
+  backdrop-filter: blur(2px);
+  z-index: 9000;
+  align-items: center;
+  justify-content: center;
+}
+.oh-studio-painel:not([hidden]) { display: flex; }
+.oh-studio-painel[hidden] { display: none; }
+.oh-studio-conteudo {
+  position: relative;
+  width: 96vw;
+  max-width: 1280px;
+  height: 92vh;
+  background: linear-gradient(165deg, rgba(20,14,8,0.98), rgba(10,8,5,0.99));
+  border: 1px solid rgba(249,115,22,0.30);
+  border-radius: 20px;
+  box-shadow: 0 30px 90px rgba(0,0,0,0.6);
+  padding: 18px 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.oh-studio-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  box-shadow: 0 4px 14px rgba(249,115,22,0.45);
+}
+.oh-studio-titulo {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--oh-orange);
+  line-height: 1.2;
+}
+.oh-studio-subtitulo { font-size: 0.75rem; color: #999; }
+
+/* barra de transporte, no topo */
+.oh-studio-topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.oh-studio-titulo-bloco { display: flex; align-items: center; gap: 10px; }
+.oh-studio-transporte {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 6px 12px;
+  margin-left: 12px;
+}
+.oh-studio-transp-btn {
+  background: var(--oh-orange);
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  color: #0d0d0d;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.oh-studio-tempo {
+  font-family: 'Nunito', monospace;
+  font-size: 0.78rem;
+  color: #ccc;
+  white-space: nowrap;
+}
+
+/* setup inicial (URL + upload/gravador) */
+.oh-studio-setup { max-width: 460px; }
+
+/* timeline com as faixas */
+.oh-studio-timeline { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.oh-studio-faixa {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.oh-studio-faixa-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.oh-studio-faixa-nome {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #f2f2f2;
+}
+.oh-studio-faixa-nome-input {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #f2f2f2;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 2px 6px;
+  min-width: 120px;
+}
+.oh-studio-faixa-nome-input:hover,
+.oh-studio-faixa-nome-input:focus {
+  border-color: rgba(249,115,22,0.4);
+  background: rgba(255,255,255,0.04);
+  outline: none;
+}
+.oh-studio-faixa-edicao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 0.72rem;
+  color: #999;
+}
+.oh-studio-faixa-edicao label { display: flex; flex-direction: column; gap: 2px; }
+.oh-studio-tempo-input {
+  width: 60px;
+  background: #1f1f1f;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  color: #f2f2f2;
+  padding: 3px 5px;
+  font-size: 0.72rem;
+}
+.oh-studio-btn-mini { padding: 4px 8px; font-size: 0.72rem; }
+.oh-studio-upload-mini { cursor: pointer; display: inline-flex; align-items: center; }
+.oh-studio-faixa-controles { display: flex; align-items: center; gap: 6px; }
+.oh-studio-mini-btn {
+  background: #1f1f1f;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  color: #999;
+  width: 26px;
+  height: 26px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.oh-studio-mini-btn-ativo {
+  background: var(--oh-orange);
+  border-color: var(--oh-orange);
+  color: #0d0d0d;
+}
+.oh-studio-volume {
+  width: 70px;
+  accent-color: var(--oh-orange);
+}
+.oh-studio-waveform-wrap { position: relative; height: 64px; }
+.oh-studio-waveform { width: 100%; height: 100%; display: block; border-radius: 6px; }
+.oh-studio-waveform-muted { opacity: 0.45; }
+.oh-studio-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255,255,255,0.8);
+  pointer-events: none;
+}
+.oh-studio-downloads { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+
+/* botão flutuante do agente, ancorado dentro do próprio Estúdio */
+.oh-studio-fab-agente {
+  position: absolute;
+  right: 26px;
+  bottom: 26px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--oh-orange), #ffb066);
+  color: #fff;
+  font-size: 1.3rem;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(249,115,22,0.5);
+  z-index: 2;
+}
+
+/* chat do agente, ancorado no canto do próprio painel do estúdio */
+.oh-studio-chat-painel {
+  position: absolute;
+  right: 26px;
+  bottom: 92px;
+  width: 340px;
+  max-width: calc(100% - 52px);
+  height: 420px;
+  max-height: calc(100% - 120px);
+  background: linear-gradient(165deg, rgba(28,18,10,0.99), rgba(12,9,6,1));
+  border: 1px solid rgba(249,115,22,0.35);
+  border-radius: 18px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 3;
+}
+.oh-studio-chat-painel:not([hidden]) { display: flex; }
+.oh-studio-chat-painel[hidden] { display: none; }
+.oh-studio-chat-painel .oh-chat-mensagens-estudio { flex: 1; min-height: 0; }
+
+/* ═══════════════ BOTÕES FLUTUANTES ═══════════════ */
+.oh-fab {
+  position: fixed;
+  right: 24px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: none;
+  font-size: 1.6rem;
+  cursor: grab;
+  background: linear-gradient(135deg, var(--oh-orange), var(--oh-orange-dark));
+  box-shadow: 0 8px 30px rgba(249,115,22,0.5);
+  z-index: 500;
+  transition: transform 0.15s ease;
+  animation: ohFabPulse 2.6s infinite;
+  touch-action: none;
+  user-select: none;
+}
+.oh-fab:hover { transform: translateY(-2px) scale(1.05); }
+.oh-fab.oh-fab-arrastando {
+  cursor: grabbing;
+  transition: none;
+  animation: none;
+}
+@keyframes ohFabPulse {
+  0%, 100% { box-shadow: 0 8px 30px rgba(249,115,22,0.5), 0 0 0 0 rgba(249,115,22,0.45); }
+  50% { box-shadow: 0 8px 30px rgba(249,115,22,0.5), 0 0 0 12px rgba(249,115,22,0); }
+}
+#fabLaranjinha { bottom: 28px; }
+.oh-fab-estudio { bottom: 104px; }
+.oh-fab-laranjinha {
+  background-image: url("laranjinha.png");
+  background-size: cover;
+  background-position: center;
+}
+.oh-fab-estudio {
+  background-image: url("studio.png");
+  background-size: cover;
+  background-position: center;
+}
+
+/* ═══════════════ RESPONSIVO ═══════════════ */
+@media (max-width: 800px) {
+  .oh-app { flex-direction: column; }
+  .oh-sidebar { width: 100%; height: auto; position: static; }
+  .oh-content { padding: 16px; }
+}
