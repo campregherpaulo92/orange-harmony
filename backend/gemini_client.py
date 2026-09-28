@@ -17,8 +17,8 @@ except Exception:
     types = None
     _cliente = None
 
-MODELOS_PADRAO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-3.1-pro", "gemini-2.0-flash"]
-MODELOS_COM_AUDIO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-2.0-flash"]
+MODELOS_PADRAO = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash"]
+MODELOS_COM_AUDIO = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash"]
 
 _modelos_cache = None
 
@@ -47,22 +47,14 @@ def listar_modelos():
                 continue
             encontrados.append(nome)
         if encontrados:
-            # "gemini-3.8-flash" propositalmente NÃO entra nessa ordem de
-            # preferência — modelos novíssimos da Google às vezes só funcionam
-            # pela "Interactions API" (lançada em 2026), separada da chamada
-            # padrão (generateContent) que este app usa. Preferimos modelos
-            # já estabelecidos, que sabidamente continuam suportando
-            # generateContent sem essa exigência nova.
-            ordem = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash",
-                     "gemini-3.1-pro", "gemini-2.5-pro", "gemini-2.0-flash"]
-            encontrados = [n for n in encontrados if n != "gemini-3.8-flash"]
+            # Prioriza os modelos mais atuais primeiro — nenhuma exclusão às
+            # ciegas aqui: a Laranjinha não usa mais function calling nativo
+            # do Gemini (só texto simples via generateContent), então não há
+            # mais razão pra evitar os modelos novos por causa da Interactions
+            # API — essa exigência era só para tool-use nativo.
+            ordem = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite",
+                     "gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-2.5-pro"]
             encontrados.sort(key=lambda n: ordem.index(n) if n in ordem else 99)
-            # Rede de segurança: "gemini-2.0-flash" é um modelo bem mais antigo
-            # e estabelecido, de antes da Interactions API existir — se TODOS
-            # os modelos descobertos acima falharem por essa exigência nova,
-            # ainda tentamos esse aqui por último, como garantia.
-            if "gemini-2.0-flash" not in encontrados:
-                encontrados.append("gemini-2.0-flash")
             _modelos_cache = encontrados
             return encontrados
     except Exception:
@@ -71,7 +63,8 @@ def listar_modelos():
 
 
 def gerar(modelo, contents, config=None):
-    """Chamada direta de baixo nível (usada pelo loop de function calling)."""
+    """Chamada direta de baixo nível (não usada atualmente — a Laranjinha
+    usa chamar_texto, mais simples). Mantida por compatibilidade."""
     if _cliente is None:
         raise RuntimeError("Gemini não configurado (falta GEMINI_API_KEY).")
     return _cliente.models.generate_content(model=modelo, contents=contents, config=config)
