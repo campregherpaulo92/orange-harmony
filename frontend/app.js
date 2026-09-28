@@ -327,12 +327,30 @@ function inicializarAnaliseVocal() {
 
       const devolutivaCard = document.getElementById("devolutivaCard");
       const devolutivaTexto = document.getElementById("devolutivaTexto");
-      if (dados.devolutiva) {
+      if (dados.modo !== "cover") {
+        // A devolutiva vem numa chamada SEPARADA (mais lenta, chama o Gemini) —
+        // assim o resultado numérico acima já aparece rápido, sem esperar ela.
         devolutivaCard.hidden = false;
-        devolutivaTexto.textContent = dados.devolutiva;
-      } else if (dados.aviso_devolutiva) {
-        devolutivaCard.hidden = false;
-        devolutivaTexto.textContent = `[!] Professor IA indisponível: ${dados.aviso_devolutiva}`;
+        devolutivaTexto.textContent = "Gerando devolutiva do professor…";
+        const formDevolutiva = new FormData();
+        formDevolutiva.append("resultado", JSON.stringify(dados.resultado));
+        formDevolutiva.append("nota_ref", document.getElementById("notaRef").value);
+        formDevolutiva.append("base_devolutiva", baseDevolutivaMarcada ? baseDevolutivaMarcada.value : "detectada");
+        if (dados.sequencia_notas) formDevolutiva.append("sequencia_notas", JSON.stringify(dados.sequencia_notas));
+        if (dados.historico_id) formDevolutiva.append("historico_id", dados.historico_id);
+
+        fetch(`${API_BASE}/api/analyze/devolutiva`, { method: "POST", body: formDevolutiva })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.devolutiva) {
+              devolutivaTexto.textContent = d.devolutiva;
+            } else {
+              devolutivaTexto.textContent = `[!] Professor IA indisponível: ${d.erro || "erro desconhecido"}`;
+            }
+          })
+          .catch((err) => {
+            devolutivaTexto.textContent = `[!] Não foi possível carregar a devolutiva: ${err.message}`;
+          });
       } else {
         devolutivaCard.hidden = true;
       }
