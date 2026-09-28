@@ -55,109 +55,49 @@ Você conhece TODO o aplicativo e tem ferramentas reais para LER dados E EXECUTA
 """
 
 
-def _declaracoes_ferramentas(types):
-    return [
-        types.FunctionDeclaration(
-            name="listar_gravacoes",
-            description="Lista as gravações salvas do usuário (nome, data, tamanho), mais recentes primeiro.",
-            parameters={"type": "object", "properties": {"limite": {"type": "integer"}}, "required": []},
-        ),
-        types.FunctionDeclaration(
-            name="avaliar_gravacao",
-            description="Ouve uma gravação salva (pelo nome) e dá um parecer vocal completo, como um professor de canto.",
-            parameters={"type": "object", "properties": {"nome": {"type": "string"}}, "required": ["nome"]},
-        ),
-        types.FunctionDeclaration(
-            name="analisar_gravacao",
-            description="Roda uma análise técnica (pitch, afinação, vibrato) numa gravação salva e registra no histórico.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "nome": {"type": "string"},
-                    "modo": {"type": "string", "enum": ["completa", "cover"]},
-                },
-                "required": ["nome"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="ler_historico",
-            description="Lê o resumo das últimas análises salvas no histórico do usuário.",
-            parameters={"type": "object", "properties": {"limite": {"type": "integer"}}, "required": []},
-        ),
-        types.FunctionDeclaration(
-            name="ler_perfil_vocal",
-            description="Lê o perfil vocal do usuário (classificação, extensão, tessitura), se ele já fez a Avaliação.",
-        ),
-        types.FunctionDeclaration(
-            name="listar_composicoes",
-            description="Lista as composições salvas (título, tom, versão).",
-            parameters={"type": "object", "properties": {"limite": {"type": "integer"}}, "required": []},
-        ),
-        types.FunctionDeclaration(
-            name="salvar_composicao",
-            description="Cria/salva uma nova composição (letra com cifras e seções).",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "titulo": {"type": "string"},
-                    "tom": {"type": "string"},
-                    "letra": {"type": "string"},
-                },
-                "required": ["titulo", "letra"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="gerar_producao",
-            description="Gera um backing track (baixo, bateria, acordes) a partir de uma gravação salva, e salva o resultado como uma nova gravação.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "nome_gravacao": {"type": "string"},
-                    "estilo": {"type": "string"},
-                    "com_baixo": {"type": "boolean"},
-                    "com_bateria": {"type": "boolean"},
-                    "com_acordes": {"type": "boolean"},
-                    "qualidade_pro": {"type": "boolean"},
-                },
-                "required": ["nome_gravacao"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="aplicar_edicao_vocal",
-            description="Aplica edição vocal numa gravação salva, interpretando o comando em português (ex: 'limpa o ruído e deixa mais grave'), e salva o resultado como uma nova gravação.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "nome_gravacao": {"type": "string"},
-                    "comando": {"type": "string"},
-                },
-                "required": ["nome_gravacao", "comando"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="renomear_gravacao",
-            description="Renomeia uma gravação salva.",
-            parameters={
-                "type": "object",
-                "properties": {"nome_atual": {"type": "string"}, "novo_nome": {"type": "string"}},
-                "required": ["nome_atual", "novo_nome"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="excluir_gravacao",
-            description="Exclui uma gravação salva. Só chame depois que o usuário confirmar.",
-            parameters={"type": "object", "properties": {"nome": {"type": "string"}}, "required": ["nome"]},
-        ),
-        types.FunctionDeclaration(
-            name="listar_conversas",
-            description="Lista as conversas salvas com a Laranjinha (nome, data da última mensagem).",
-        ),
-        types.FunctionDeclaration(
-            name="ler_conversa",
-            description="Lê o histórico completo de uma outra conversa salva com a Laranjinha, pelo nome.",
-            parameters={"type": "object", "properties": {"nome": {"type": "string"}}, "required": ["nome"]},
-        ),
-    ]
+def _catalogo_ferramentas_texto():
+    """Descreve as ferramentas como texto simples (não via function calling
+    nativo do Gemini) — evita depender da Interactions API, que alguns
+    modelos novos exigem para function calling nativo."""
+    return """
+## Suas ferramentas (você EXECUTA, não só descreve)
+Quando precisar usar uma ferramenta, responda **apenas** com um JSON exato
+neste formato, sem nenhum texto antes ou depois:
+{"ferramenta": "nome_da_ferramenta", "argumentos": {"chave": "valor"}}
+
+Ferramentas disponíveis:
+- listar_gravacoes(limite?: int) — lista as gravações salvas, mais recentes primeiro.
+- avaliar_gravacao(nome: str) — ouve uma gravação salva de verdade e dá parecer vocal.
+- analisar_gravacao(nome: str, modo?: "completa"|"cover") — roda análise técnica e registra no histórico.
+- ler_historico(limite?: int) — lê o resumo das últimas análises salvas.
+- ler_perfil_vocal() — lê o perfil vocal do usuário (classificação, extensão, tessitura).
+- listar_composicoes(limite?: int) — lista as composições salvas.
+- salvar_composicao(titulo: str, tom?: str, letra: str) — cria/salva uma composição.
+- gerar_producao(nome_gravacao: str, estilo?: str, com_baixo?: bool, com_bateria?: bool,
+  com_acordes?: bool, qualidade_pro?: bool) — gera backing track e salva como nova gravação.
+- aplicar_edicao_vocal(nome_gravacao: str, comando: str) — aplica edição vocal interpretando
+  o comando em português, salva como nova gravação.
+- renomear_gravacao(nome_atual: str, novo_nome: str) — renomeia uma gravação.
+- excluir_gravacao(nome: str) — exclui uma gravação. Só chame depois do usuário confirmar.
+- listar_conversas() — lista as conversas salvas com você (nome, data).
+- ler_conversa(nome: str) — lê o histórico completo de outra conversa salva.
+
+Depois que o resultado de uma ferramenta aparecer em "Resultados de ferramentas já
+chamadas", USE esse resultado pra responder ao usuário em texto normal — não chame
+a mesma ferramenta de novo à toa, e não responda em JSON quando já tiver o suficiente
+pra dar uma resposta final em português.
+
+## Como se comportar
+- Quando o usuário pedir uma ação (ex: "gera uma produção estilo pop na minha última
+  gravação", "limpa o ruído da gravação X"), EXECUTE a ferramenta correspondente — não
+  apenas descreva o que faria.
+- Para excluir_gravacao, confirme uma vez com o usuário antes de chamar a ferramenta,
+  a menos que ele já tenha confirmado explicitamente na mensagem.
+- Se o usuário disser "minha última gravação" sem nome exato, use listar_gravacoes
+  primeiro pra achar o nome certo (a lista vem ordenada da mais recente pra mais antiga).
+- Sempre responda em português, de forma acolhedora, prática e específica.
+- Baseie suas respostas em dados reais obtidos pelas ferramentas — nunca invente números.
+"""
 
 
 def _achar_gravacao_por_nome(nome):
@@ -410,14 +350,19 @@ def _executar_ferramenta(nome_func, args):
 
 
 def conversar(mensagem, chat_id=None):
-    """Roda o loop de function calling e devolve o texto de resposta final.
-    Se chat_id for passado, o histórico completo vem do Firestore (não do
-    navegador) — o servidor é a fonte da verdade — e a mensagem do usuário e
-    a resposta final são salvas nesse chat automaticamente."""
+    """Roda o loop de "ferramentas via JSON em texto" e devolve o texto de
+    resposta final. Se chat_id for passado, o histórico completo vem do
+    Firestore (não do navegador) — o servidor é a fonte da verdade — e a
+    mensagem do usuário e a resposta final são salvas nesse chat automaticamente.
+
+    Não usa function calling nativo do Gemini (tools=[...]) de propósito —
+    alguns modelos novos (ex: gemini-3.7/3.8-flash) exigem a Interactions API
+    pra function calling nativo, uma API ainda em beta e com bugs conhecidos
+    de encadeamento. Em vez disso, a IA responde com um JSON simples em texto
+    dizendo qual ferramenta quer usar, e o código executa de verdade — o
+    mesmo esquema já usado em interpretar_comando_edicao/producao."""
     if not gemini_client.gemini_disponivel():
         return "A Laranjinha está indisponível no momento (chave do Gemini não configurada no servidor)."
-
-    from google.genai import types
 
     if chat_id:
         chats.salvar_mensagem(chat_id, "user", mensagem)
@@ -425,9 +370,7 @@ def conversar(mensagem, chat_id=None):
     else:
         historico_conversa = [{"role": "user", "content": mensagem}]
 
-    ferramentas = _declaracoes_ferramentas(types)
-
-    instrucao_sistema = CONHECIMENTO_APP
+    instrucao_sistema = CONHECIMENTO_APP + "\n\n" + _catalogo_ferramentas_texto()
     try:
         outras = chats.ler_outras_conversas_resumo(chat_id) if chat_id else []
         if outras:
@@ -442,50 +385,49 @@ def conversar(mensagem, chat_id=None):
     except Exception:
         pass
 
-    config = types.GenerateContentConfig(
-        tools=[types.Tool(function_declarations=ferramentas)],
-        system_instruction=instrucao_sistema,
-    )
-
-    conteudos = []
+    linhas_conversa = []
     for m in historico_conversa[-40:]:
-        papel = "model" if m.get("role") in ("model", "assistant") else "user"
+        papel = "Assistente" if m.get("role") in ("model", "assistant") else "Usuário"
         texto = m.get("content", "")
         if texto:
-            conteudos.append(types.Content(role=papel, parts=[types.Part(text=texto)]))
+            linhas_conversa.append(f"{papel}: {texto}")
     if not chat_id:
-        conteudos.append(types.Content(role="user", parts=[types.Part(text=mensagem)]))
+        linhas_conversa.append(f"Usuário: {mensagem}")
 
-    modelos = gemini_client.listar_modelos()
-    ultimo_erro = ""
-    ultimo_modelo = ""
+    execucoes_registradas = []
     texto_final = None
-    for modelo in modelos:
-        for _ in range(6):
-            try:
-                resposta = gemini_client.gerar(modelo, conteudos, config)
-            except Exception as e:
-                ultimo_erro = str(e)
-                ultimo_modelo = modelo
-                break
-            chamadas = resposta.function_calls or []
-            if not chamadas:
-                texto_final = resposta.text or "Não consegui gerar uma resposta."
-                break
-            conteudos.append(resposta.candidates[0].content)
-            for fc in chamadas:
-                resultado = _executar_ferramenta(fc.name, dict(fc.args or {}))
-                conteudos.append(types.Content(
-                    role="user",
-                    parts=[types.Part(function_response=types.FunctionResponse(
-                        name=fc.name, response={"resultado": resultado}
-                    ))],
-                ))
-        if texto_final is not None:
+    ultimo_erro = ""
+
+    for _iteracao in range(6):
+        prompt_completo = (
+            instrucao_sistema
+            + "\n\n## Conversa até agora\n" + "\n".join(linhas_conversa)
+            + ("\n\n## Resultados de ferramentas já chamadas nesta resposta\n" + "\n".join(execucoes_registradas)
+               if execucoes_registradas else "")
+            + "\n\nResponda agora como Assistente (texto normal, ou o JSON de ferramenta se precisar)."
+        )
+        resposta, erro = gemini_client.chamar_texto(prompt_completo)
+        if resposta is None:
+            ultimo_erro = erro or "sem resposta do Gemini"
             break
 
+        texto_resp = (resposta.text or "").strip()
+        dados = gemini_client.extrair_json(texto_resp)
+        if dados and isinstance(dados, dict) and dados.get("ferramenta"):
+            nome_func = dados.get("ferramenta")
+            args = dados.get("argumentos") or {}
+            resultado = _executar_ferramenta(nome_func, args)
+            execucoes_registradas.append(f"- {nome_func}({args}) → {resultado}")
+            continue
+
+        texto_final = texto_resp or "Não consegui gerar uma resposta."
+        break
+
     if texto_final is None:
-        texto_final = f"Erro ao chamar a Laranjinha (modelo: {ultimo_modelo}): {ultimo_erro[:200]}"
+        texto_final = (
+            f"Erro ao chamar a Laranjinha: {ultimo_erro[:200]}" if ultimo_erro
+            else "Não consegui completar essa ação (várias etapas seguidas sem uma resposta final)."
+        )
 
     if chat_id:
         chats.salvar_mensagem(chat_id, "model", texto_final)
