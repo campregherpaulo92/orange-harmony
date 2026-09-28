@@ -17,8 +17,8 @@ except Exception:
     types = None
     _cliente = None
 
-MODELOS_PADRAO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-3.1-pro"]
-MODELOS_COM_AUDIO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-3.8-flash"]
+MODELOS_PADRAO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-3.1-pro"]
+MODELOS_COM_AUDIO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash"]
 
 _modelos_cache = None
 
@@ -47,8 +47,15 @@ def listar_modelos():
                 continue
             encontrados.append(nome)
         if encontrados:
-            ordem = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3-flash",
-                     "gemini-3.1-pro", "gemini-2.5-flash", "gemini-2.5-pro"]
+            # "gemini-3.8-flash" propositalmente NÃO entra nessa ordem de
+            # preferência — modelos novíssimos da Google às vezes só funcionam
+            # pela "Interactions API" (lançada em 2026), separada da chamada
+            # padrão (generateContent) que este app usa. Preferimos modelos
+            # já estabelecidos, que sabidamente continuam suportando
+            # generateContent sem essa exigência nova.
+            ordem = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash",
+                     "gemini-3.1-pro", "gemini-2.5-pro", "gemini-2.0-flash"]
+            encontrados = [n for n in encontrados if n != "gemini-3.8-flash"]
             encontrados.sort(key=lambda n: ordem.index(n) if n in ordem else 99)
             _modelos_cache = encontrados
             return encontrados
@@ -78,6 +85,9 @@ def chamar_texto(prompt):
             ultimo_erro = "Resposta vazia"
         except Exception as e:
             ultimo_erro = str(e)
+            # "Interactions API" = esse modelo específico não aceita a chamada
+            # padrão de forma alguma — não adianta tentar de novo, já pula pro
+            # próximo modelo da lista imediatamente.
             continue
     return None, ultimo_erro
 
