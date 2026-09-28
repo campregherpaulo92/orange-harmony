@@ -51,15 +51,12 @@ def analisar(
     nota_ref: str = Form(None),
     base_devolutiva: str = Form("detectada"),
 ):
-    """Recebe um áudio (multipart/form-data) e devolve a análise em JSON.
-    - modo: "completa" ou "cover"
-    - calibracao: 440 ou 442
-    - nota_ref: ex. "C4" (opcional, só usado no modo "completa")
-    - base_devolutiva: "detectada" (voz natural) ou "referencia" (seguir nota_ref)
-
-    Rota síncrona de propósito: análise de áudio + chamada ao Gemini são
-    operações bloqueantes: como rota 'def' comum, o FastAPI roda isso numa
-    threadpool à parte, sem travar o resto do app.
+    """Recebe um áudio (multipart/form-data) e devolve a análise numérica em
+    JSON — RÁPIDO de propósito (não chama o Gemini aqui). A devolutiva do
+    professor é gerada numa segunda chamada, separada (/api/analyze/devolutiva),
+    porque a soma "análise de áudio + chamada de IA" numa CPU limitada (plano
+    grátis de hospedagem) corria risco real de exceder o tempo limite da
+    conexão e cortar a resposta no meio (erro de JSON incompleto no navegador).
     """
     dados = arquivo.file.read()
     resultado = analisar_audio_completo(
@@ -70,30 +67,46 @@ def analisar(
         nota_ref=nota_ref,
     )
 
-    devolutiva = None
+    historico_id = None
     if modo == "completa" and "erro" not in resultado:
         try:
-            devolutiva, erro_devolutiva = professor.gerar_devolutiva(
-                resultado["resultado"],
-                nota_ref=nota_ref,
-                base_devolutiva=base_devolutiva,
-                sequencia_notas=resultado.get("sequencia_notas"),
-            )
-            if devolutiva is None:
-                resultado["aviso_devolutiva"] = erro_devolutiva
-        except Exception as e:
-            resultado["aviso_devolutiva"] = f"Falha ao gerar devolutiva: {e}"
-
-        resultado["devolutiva"] = devolutiva
-
-        try:
-            historico.registrar_analise(
-                resultado["resultado"], modo="completa", tom_ref=nota_ref, devolutiva=devolutiva
+            historico_id = historico.registrar_analise(
+                resultado["resultado"], modo="completa", tom_ref=nota_ref, devolutiva=None
             )
         except Exception:
             pass
 
+    resultado["historico_id"] = historico_id
     return resultado
+
+
+@app.post("/api/analyze/devolutiva")
+def gerar_devolutiva_rota(
+    resultado: str = Form(...),
+    nota_ref: str = Form(None),
+    base_devolutiva: str = Form("detectada"),
+    sequencia_notas: str = Form(None),
+    historico_id: str = Form(None),
+):
+    """Segunda etapa da análise: gera a devolutiva do professor IA (chamada
+    ao Gemini) separada da análise numérica, e atualiza o registro do
+    histórico já salvo com o texto, se um historico_id foi passado."""
+    import json as _json
+    resultado_dict = _json.loads(resultado)
+    sequencia_dict = _json.loads(sequencia_notas) if sequencia_notas else None
+
+    devolutiva, erro = professor.gerar_devolutiva(
+        resultado_dict, nota_ref=nota_ref, base_devolutiva=base_devolutiva,
+        sequencia_notas=sequencia_dict,
+    )
+
+    if devolutiva and historico_id:
+        try:
+            historico.atualizar_devolutiva(historico_id, devolutiva)
+        except Exception:
+            pass
+
+    return {"devolutiva": devolutiva, "erro": erro}
 
 
 # ══════════════════════════════════════════════════════════════
