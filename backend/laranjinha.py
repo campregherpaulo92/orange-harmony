@@ -458,6 +458,7 @@ def conversar(mensagem, chat_id=None):
 
     modelos = gemini_client.listar_modelos()
     ultimo_erro = ""
+    ultimo_modelo = ""
     texto_final = None
     for modelo in modelos:
         for _ in range(6):
@@ -465,6 +466,7 @@ def conversar(mensagem, chat_id=None):
                 resposta = gemini_client.gerar(modelo, conteudos, config)
             except Exception as e:
                 ultimo_erro = str(e)
+                ultimo_modelo = modelo
                 break
             chamadas = resposta.function_calls or []
             if not chamadas:
@@ -483,7 +485,7 @@ def conversar(mensagem, chat_id=None):
             break
 
     if texto_final is None:
-        texto_final = f"Erro ao chamar a Laranjinha: {ultimo_erro[:200]}"
+        texto_final = f"Erro ao chamar a Laranjinha (modelo: {ultimo_modelo}): {ultimo_erro[:200]}"
 
     if chat_id:
         chats.salvar_mensagem(chat_id, "model", texto_final)
