@@ -46,6 +46,20 @@ def listar_historico():
     return resultado
 
 
+def atualizar_devolutiva(doc_id, texto):
+    """Atualiza o campo devolutiva de um registro já salvo — usado quando a
+    devolutiva é gerada numa chamada separada (depois da análise numérica,
+    pra deixar a resposta principal rápida e evitar timeout no host)."""
+    db = get_db()
+    if db is None:
+        return False
+    doc_ref = db.collection(COLECAO).document(doc_id)
+    if not doc_ref.get().exists:
+        return False
+    doc_ref.update({"devolutiva": texto or ""})
+    return True
+
+
 def renomear_analise(doc_id, novo_nome):
     db = get_db()
     if db is None:
