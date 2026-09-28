@@ -11,17 +11,19 @@
 import io
 import os
 import tempfile
-
-_modelo_cache = None
+import gc
 
 
 def _carregar_modelo():
-    global _modelo_cache
-    if _modelo_cache is None:
-        from demucs.pretrained import get_model
-        _modelo_cache = get_model("htdemucs")
-        _modelo_cache.eval()
-    return _modelo_cache
+    # Propositalmente SEM cache entre chamadas — em um host com pouca memória
+    # (512MB), manter o modelo carregado pra sempre economiza tempo mas nunca
+    # libera essa memória de volta, mesmo quando ninguém está usando o
+    # Estúdio. Recarregar a cada vez custa alguns segundos extras, mas evita
+    # que o processo inteiro seja reiniciado por estourar o limite de RAM.
+    from demucs.pretrained import get_model
+    modelo = get_model("htdemucs")
+    modelo.eval()
+    return modelo
 
 
 def separar(dados_audio, nome_arquivo):
@@ -93,3 +95,8 @@ def separar(dados_audio, nome_arquivo):
     finally:
         if caminho_temp and os.path.exists(caminho_temp):
             os.remove(caminho_temp)
+        # Solta as referências aos tensores/modelo pesados e força a coleta de
+        # lixo — em host com pouca RAM, isso é a diferença entre o processo
+        # sobreviver ou ser reiniciado por estourar o limite de memória.
+        modelo = wav = wav_normalizado = fontes = voz = instrumental = referencia = None
+        gc.collect()
