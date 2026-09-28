@@ -30,7 +30,10 @@ def f0_para_freq(nota, calibracao=440.0):
 def carregar_audio_bytes(dados: bytes, nome_arquivo: str = "audio.wav"):
     """Lê bytes de áudio (upload) e devolve (audio, sr) em 22050 Hz mono.
     Aceita WAV, MP3, M4A, OGG, FLAC, AAC, WEBM — qualquer formato que o
-    soundfile/librosa reconheçam."""
+    soundfile/librosa/pydub reconheçam. WebM/Opus (o formato padrão do
+    MediaRecorder do navegador) não é lido nem por soundfile nem por
+    librosa.load — só o pydub (via ffmpeg) decodifica; por isso ele é a
+    terceira tentativa, não a primeira (é mais lento que as outras duas)."""
     if not dados:
         return None, None
     ext = os.path.splitext(nome_arquivo)[1] or ".wav"
@@ -49,8 +52,15 @@ def carregar_audio_bytes(dados: bytes, nome_arquivo: str = "audio.wav"):
         try:
             audio, sr = librosa.load(tmp_path, sr=22050, mono=True)
         except Exception:
-            os.unlink(tmp_path)
-            return None, None
+            try:
+                from pydub import AudioSegment
+                segmento = AudioSegment.from_file(tmp_path).set_frame_rate(22050).set_channels(1)
+                amostras = np.array(segmento.get_array_of_samples(), dtype=np.float32)
+                amostras /= float(1 << (8 * segmento.sample_width - 1))
+                audio, sr = amostras, 22050
+            except Exception:
+                os.unlink(tmp_path)
+                return None, None
     os.unlink(tmp_path)
     return audio.astype(np.float32), int(sr)
 
