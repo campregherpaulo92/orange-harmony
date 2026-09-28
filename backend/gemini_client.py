@@ -17,8 +17,8 @@ except Exception:
     types = None
     _cliente = None
 
-MODELOS_PADRAO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-3.1-pro"]
-MODELOS_COM_AUDIO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash"]
+MODELOS_PADRAO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-3.1-pro", "gemini-2.0-flash"]
+MODELOS_COM_AUDIO = ["gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-2.0-flash"]
 
 _modelos_cache = None
 
@@ -57,6 +57,12 @@ def listar_modelos():
                      "gemini-3.1-pro", "gemini-2.5-pro", "gemini-2.0-flash"]
             encontrados = [n for n in encontrados if n != "gemini-3.8-flash"]
             encontrados.sort(key=lambda n: ordem.index(n) if n in ordem else 99)
+            # Rede de segurança: "gemini-2.0-flash" é um modelo bem mais antigo
+            # e estabelecido, de antes da Interactions API existir — se TODOS
+            # os modelos descobertos acima falharem por essa exigência nova,
+            # ainda tentamos esse aqui por último, como garantia.
+            if "gemini-2.0-flash" not in encontrados:
+                encontrados.append("gemini-2.0-flash")
             _modelos_cache = encontrados
             return encontrados
     except Exception:
