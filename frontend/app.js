@@ -1,3 +1,21 @@
+// Traduz erros de rede/servidor pra algo que faça sentido pro usuário.
+// "Unexpected end of JSON" / "Failed to fetch" = o servidor demorou demais ou
+// acabou de reiniciar (plano gratuito: dorme após 15 min parado e tem 512 MB).
+function mensagemDeErroDeRede(err) {
+  const m = (err && err.message) || String(err);
+  if (/JSON|Failed to fetch|NetworkError|Load failed|network/i.test(m)) {
+    return "O servidor demorou demais ou acabou de reiniciar (o plano gratuito dorme quando fica parado). Espere cerca de 1 minuto e tente de novo.";
+  }
+  return m;
+}
+
+// Texto do aviso de corte de duração (header X-Aviso: "cortado_120s")
+function textoAvisoDuracao(aviso) {
+  if (!aviso) return "";
+  const seg = String(aviso).replace(/\D/g, "");
+  return ` · Áudio longo: usei só os primeiros ${seg} s (limite do servidor gratuito)`;
+}
+
 // ══════════════════════════════════════════════════════════════
 // app.js — Orange Harmony (shell com navegação + Análise Vocal)
 // ══════════════════════════════════════════════════════════════
@@ -256,7 +274,7 @@ function inicializarAnaliseVocal() {
 
   btnAnalisar.addEventListener("click", async () => {
     const arquivo = inputArquivo.files[0] || (blobGravado
-      ? new File([blobGravado], "gravacao.webm", { type: "audio/webm" })
+      ? arquivoDeGravacao(blobGravado, "gravacao")
       : null);
 
     if (!arquivo) {
@@ -357,9 +375,9 @@ function inicializarAnaliseVocal() {
 
       resultadosSection.hidden = false;
       desenharCurvaPitch(dados.curva_pitch);
-      statusMsg.textContent = "";
+      statusMsg.textContent = dados.aviso_duracao ? `ℹ️ ${dados.aviso_duracao}` : "";
     } catch (err) {
-      statusMsg.textContent = `Erro ao conectar com a API: ${err.message}`;
+      statusMsg.textContent = `Erro: ${mensagemDeErroDeRede(err)}`;
     } finally {
       btnAnalisar.disabled = false;
     }
@@ -499,7 +517,7 @@ function inicializarGravador() {
     form.append("nome", nome);
     const arquivoFinal = arquivoInput?.files[0]
       ? arquivoInput.files[0]
-      : new File([blobAtual], "gravacao.webm", { type: "audio/webm" });
+      : arquivoDeGravacao(blobAtual, "gravacao");
     form.append("arquivo", arquivoFinal);
 
     try {

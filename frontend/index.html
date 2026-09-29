@@ -566,6 +566,25 @@
 
     <!-- Configuração inicial: áudio de entrada -->
     <div class="oh-studio-setup" id="studioSetup">
+      <!-- Card do separador: só aparece quando este servidor não tem o Demucs (Render grátis).
+           A separação roda no Colab; o app descobre sozinho se ele está ligado. -->
+      <div class="oh-colab-card" id="studioColabCard" hidden>
+        <div class="oh-colab-arte"><svg viewBox="0 0 240 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Uma música sendo separada em voz e instrumental"><rect x="8" y="44" width="5" height="21" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="16" y="34" width="5" height="43" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="24" y="35" width="5" height="40" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="32" y="48" width="5" height="14" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="40" y="40" width="5" height="29" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="48" y="33" width="5" height="44" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="56" y="37" width="5" height="36" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="64" y="32" width="5" height="46" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="72" y="34" width="5" height="43" rx="2.5" fill="#9ca3af" opacity="1.0"/><path d="M92 55 C 110 55, 108 30, 128 30 M92 55 C 110 55, 108 80, 128 80" stroke="#f97316" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".85"/><path d="M92 55 C 110 55, 108 80, 128 80" stroke="#22d3ee" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".85"/><rect x="136" y="26" width="5" height="8" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="144" y="18" width="5" height="25" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="152" y="27" width="5" height="6" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="160" y="14" width="5" height="32" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="168" y="20" width="5" height="21" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="176" y="23" width="5" height="14" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="184" y="18" width="5" height="23" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="192" y="24" width="5" height="13" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="200" y="24" width="5" height="12" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="208" y="16" width="5" height="28" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="216" y="20" width="5" height="21" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="224" y="18" width="5" height="23" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="136" y="64" width="5" height="32" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="144" y="68" width="5" height="23" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="152" y="70" width="5" height="21" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="160" y="71" width="5" height="18" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="168" y="67" width="5" height="26" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="176" y="64" width="5" height="33" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="184" y="75" width="5" height="10" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="192" y="74" width="5" height="13" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="200" y="67" width="5" height="26" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="208" y="75" width="5" height="10" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="216" y="64" width="5" height="33" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="224" y="69" width="5" height="22" rx="2.5" fill="#22d3ee" opacity="1.0"/><text x="136" y="10" font-size="9" fill="#f97316" font-family="Baloo 2,sans-serif" font-weight="700">VOZ</text><text x="136" y="108" font-size="9" fill="#22d3ee" font-family="Baloo 2,sans-serif" font-weight="700">INSTRUMENTAL</text></svg></div>
+        <div class="oh-colab-corpo">
+          <div class="oh-colab-titulo">
+            <strong>Separador de stems</strong>
+            <span id="studioColabPill" class="oh-pill oh-pill-off">⚪ Desligado</span>
+          </div>
+          <p id="studioColabTexto" class="oh-hint"></p>
+          <ol id="studioColabPassos" class="oh-colab-passos">
+            <li><b>1</b> Abra o separador no Colab</li>
+            <li><b>2</b> Menu <em>Ambiente de execução → Executar tudo</em></li>
+            <li><b>3</b> Volte aqui — o card fica verde sozinho</li>
+          </ol>
+          <a id="studioColabLink" class="oh-btn oh-btn-link" href="#" target="_blank" rel="noopener">🚀 Abrir o separador no Colab</a>
+        </div>
+      </div>
+
       <p class="oh-label-campo">Áudio pra separar</p>
       <label class="oh-dropzone">
         <input type="file" id="studioArquivo" accept=".wav,.mp3,.m4a,.ogg,.flac,.webm">
@@ -577,6 +596,14 @@
 
       <button id="btnSepararStems" class="oh-btn" style="margin-top:14px;">🎵 Separar stems</button>
       <p id="studioStatus" class="oh-status"></p>
+
+      <!-- Progresso da separação via Colab -->
+      <ol class="oh-progresso" id="studioProgresso" hidden>
+        <li data-etapa="enviando"><i></i>Enviando</li>
+        <li data-etapa="fila"><i></i>Na fila</li>
+        <li data-etapa="separando"><i></i>Separando</li>
+        <li data-etapa="baixando"><i></i>Baixando</li>
+      </ol>
     </div>
 
     <!-- Timeline com as faixas (aparece depois da separação) -->

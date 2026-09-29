@@ -52,7 +52,7 @@ function inicializarEdicaoVocal() {
 
   btnAplicar.addEventListener("click", async () => {
     const arquivo = inputArquivo.files[0] || (blobGravado
-      ? new File([blobGravado], "gravacao.webm", { type: "audio/webm" })
+      ? arquivoDeGravacao(blobGravado, "gravacao")
       : null);
     if (!arquivo) {
       statusEl.textContent = "Envie ou grave um áudio para editar.";
@@ -84,13 +84,13 @@ function inicializarEdicaoVocal() {
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
 
-      document.getElementById("edicaoAcoesTexto").textContent = `Edição aplicada: ${traduzirAcoesEdicao(acoesBruto)}.`;
+      document.getElementById("edicaoAcoesTexto").textContent = `Edição aplicada: ${traduzirAcoesEdicao(acoesBruto)}.${textoAvisoDuracao(resp.headers.get("X-Aviso"))}`;
       criarPlayer(document.getElementById("edicaoPlayerContainer"), { src: url, nomeArquivo: "editado.wav" });
 
       resultadoEl.hidden = false;
       statusEl.textContent = "";
     } catch (err) {
-      statusEl.textContent = `Erro ao aplicar edição: ${err.message}`;
+      statusEl.textContent = `Erro ao aplicar edição: ${mensagemDeErroDeRede(err)}`;
     } finally {
       btnAplicar.disabled = false;
     }
@@ -101,7 +101,7 @@ function inicializarEdicaoVocal() {
   if (btnComandoIA) {
     btnComandoIA.addEventListener("click", async () => {
       const arquivo = inputArquivo.files[0] || (blobGravado
-        ? new File([blobGravado], "gravacao.webm", { type: "audio/webm" })
+        ? arquivoDeGravacao(blobGravado, "gravacao")
         : null);
       const comando = (comandoInput.value || "").trim();
       if (!arquivo) {
@@ -132,13 +132,13 @@ function inicializarEdicaoVocal() {
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);
 
-        document.getElementById("edicaoAcoesTexto").textContent = `Edição aplicada: ${traduzirAcoesEdicao(acoesBruto)}.`;
+        document.getElementById("edicaoAcoesTexto").textContent = `Edição aplicada: ${traduzirAcoesEdicao(acoesBruto)}.${textoAvisoDuracao(resp.headers.get("X-Aviso"))}`;
         criarPlayer(document.getElementById("edicaoPlayerContainer"), { src: url, nomeArquivo: "editado.wav" });
 
         resultadoEl.hidden = false;
         statusEl.textContent = "";
       } catch (err) {
-        statusEl.textContent = `Erro ao aplicar edição: ${err.message}`;
+        statusEl.textContent = `Erro ao aplicar edição: ${mensagemDeErroDeRede(err)}`;
       } finally {
         btnComandoIA.disabled = false;
       }

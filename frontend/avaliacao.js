@@ -47,7 +47,7 @@ function inicializarAvaliacao() {
       onGravado: async (blob) => {
         statusExercicio.textContent = "Analisando…";
         const form = new FormData();
-        form.append("arquivo", new File([blob], "exercicio.webm", { type: "audio/webm" }));
+        form.append("arquivo", arquivoDeGravacao(blob, "exercicio"));
         try {
           const resp = await fetch(`${API_BASE}/api/avaliacao/exercicio`, { method: "POST", body: form });
           if (!resp.ok) {

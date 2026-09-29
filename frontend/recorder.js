@@ -6,6 +6,61 @@
 // (player.js) para mostrar a revisão da gravação com o visual da marca.
 // ══════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════
+// Utilitários globais de gravação
+// ══════════════════════════════════════════════════════════════
+
+// Codifica um AudioBuffer (mono) como WAV 16-bit PCM.
+function _bufferParaWavBlob(buffer) {
+  const n = buffer.length;
+  const canal = buffer.getChannelData(0);
+  const ab = new ArrayBuffer(44 + n * 2);
+  const v = new DataView(ab);
+  const txt = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  txt(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); txt(8, "WAVE"); txt(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, buffer.sampleRate, true); v.setUint32(28, buffer.sampleRate * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true); txt(36, "data"); v.setUint32(40, n * 2, true);
+  for (let i = 0, o = 44; i < n; i++, o += 2) {
+    const x = Math.max(-1, Math.min(1, canal[i]));
+    v.setInt16(o, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+  }
+  return new Blob([ab], { type: "audio/wav" });
+}
+
+// O navegador grava em formatos diferentes (Chrome: WebM/Opus, Safari/iPhone:
+// MP4/AAC, Firefox: OGG) e o servidor gratuito nem sempre consegue ler todos.
+// Aqui o próprio navegador decodifica o que ele mesmo gravou e reenvia como WAV
+// mono de 22050 Hz (a taxa que a análise usa) — leve, universal, sem depender do servidor.
+async function converterGravacaoParaWav(blob, taxaAlvo = 22050) {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new Ctx();
+  try {
+    const bruto = await blob.arrayBuffer();
+    const decodificado = await new Promise((ok, erro) => ctx.decodeAudioData(bruto, ok, erro));
+    const OffCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const off = new OffCtx(1, Math.max(1, Math.ceil(decodificado.duration * taxaAlvo)), taxaAlvo);
+    const fonte = off.createBufferSource();
+    fonte.buffer = decodificado;
+    fonte.connect(off.destination);
+    fonte.start();
+    const pronto = await new Promise((ok, erro) => {
+      const r = off.startRendering();
+      if (r && r.then) r.then(ok, erro); else off.oncomplete = (e) => ok(e.renderedBuffer);
+    });
+    return _bufferParaWavBlob(pronto);
+  } finally {
+    try { ctx.close(); } catch (e) { /* ignora */ }
+  }
+}
+
+// Empacota a gravação como arquivo com nome/tipo coerentes com o conteúdo.
+function arquivoDeGravacao(blob, base = "gravacao") {
+  const tipo = blob.type || "audio/webm";
+  const ext = tipo.includes("wav") ? "wav" : tipo.includes("mp4") ? "m4a" : tipo.includes("ogg") ? "ogg" : "webm";
+  return new File([blob], `${base}.${ext}`, { type: tipo });
+}
+
 /**
  * Monta o gravador dentro de `container` (um elemento DOM).
  * @param {HTMLElement} container
@@ -120,9 +175,18 @@ function criarGravador(container, opcoes = {}) {
     chunks = [];
     mediaRecorder = new MediaRecorder(stream);
     mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(chunks, { type: "audio/webm" });
+    mediaRecorder.onstop = async () => {
+      const tipoBruto = (mediaRecorder && mediaRecorder.mimeType) || "audio/webm";
+      let blob = new Blob(chunks, { type: tipoBruto });
       const duracaoSegundos = (Date.now() - inicioMs) / 1000;
+      statusEl.textContent = "Preparando o áudio…";
+      try {
+        blob = await converterGravacaoParaWav(blob);
+      } catch (e) {
+        // se o navegador não conseguir converter, segue com o original
+        // (o servidor ainda tenta ler WebM/MP4 por conta própria)
+      }
+      statusEl.textContent = "Toque para gravar de novo";
       mostrarRevisao(blob);
       onGravado(blob, duracaoSegundos);
     };
@@ -158,7 +222,7 @@ function criarGravador(container, opcoes = {}) {
 
   function mostrarRevisao(blob) {
     const url = URL.createObjectURL(blob);
-    playerAtual = criarPlayer(playerContainer, { src: url, cor, semDownload: false, nomeArquivo: "gravacao.webm" });
+    playerAtual = criarPlayer(playerContainer, { src: url, cor, semDownload: false, nomeArquivo: "gravacao.wav" });
     playerContainer.hidden = false;
     btnExcluir.hidden = false;
   }

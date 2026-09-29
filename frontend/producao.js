@@ -101,7 +101,7 @@ function inicializarProducao() {
 
   btnGerar.addEventListener("click", async () => {
     const arquivo = inputArquivo.files[0] || (blobGravado
-      ? new File([blobGravado], "gravacao.webm", { type: "audio/webm" })
+      ? arquivoDeGravacao(blobGravado, "gravacao")
       : null);
 
     if (!arquivo) {
@@ -135,13 +135,13 @@ function inicializarProducao() {
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
 
-      document.getElementById("producaoInfo").textContent = `Detectado: ${bpm} BPM · Tom: ${tom} · Estilo: ${select.value}`;
+      document.getElementById("producaoInfo").textContent = `Detectado: ${bpm} BPM · Tom: ${tom} · Estilo: ${select.value}${textoAvisoDuracao(resp.headers.get("X-Aviso"))}`;
       criarPlayer(document.getElementById("producaoPlayerContainer"), { src: url, nomeArquivo: "producao_orange_harmony.wav" });
 
       resultadoEl.hidden = false;
       statusEl.textContent = "";
     } catch (err) {
-      statusEl.textContent = `Erro ao gerar produção: ${err.message}`;
+      statusEl.textContent = `Erro ao gerar produção: ${mensagemDeErroDeRede(err)}`;
     } finally {
       btnGerar.disabled = false;
     }

@@ -95,9 +95,9 @@ async function enviarMensagemLaranjinha() {
   try {
     const resp = await fetch(`${API_BASE}/api/laranjinha/mensagem`, { method: "POST", body: form });
     const dados = await resp.json();
-    bolhaCarregando.textContent = dados.resposta;
+    bolhaCarregando.textContent = dados.resposta || dados.detail || "Não recebi resposta. Tente de novo.";
   } catch (err) {
-    bolhaCarregando.textContent = `Erro ao conectar: ${err.message}`;
+    bolhaCarregando.textContent = `Erro: ${mensagemDeErroDeRede(err)}`;
   }
   mensagens.scrollTop = mensagens.scrollHeight;
 }

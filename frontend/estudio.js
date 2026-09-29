@@ -423,6 +423,152 @@ function montarDownloads() {
   }).join("");
 }
 
+// ══════════════════════════════════════════════════════════════
+// Separação de stems: local (servidor com Demucs) ou via Colab (fila no Firebase)
+// ══════════════════════════════════════════════════════════════
+const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
+let configEstudio = null;      // {modo: "local"|"fila", colab: {online, gpu}, colab_url}
+let timerColab = null;
+
+async function carregarConfigEstudio() {
+  try {
+    const r = await fetch(`${API_BASE}/api/estudio/config`);
+    configEstudio = await r.json();
+  } catch (e) {
+    configEstudio = configEstudio || { modo: "fila", colab: { online: false }, colab_url: "#" };
+  }
+  atualizarCardColab();
+  return configEstudio;
+}
+
+// Desenha o card: verde quando o Colab está ligado, cinza com botão quando não está.
+function atualizarCardColab() {
+  const card = document.getElementById("studioColabCard");
+  if (!card || !configEstudio) return;
+  if (configEstudio.modo !== "fila") { card.hidden = true; return; }   // servidor tem Demucs próprio
+  card.hidden = false;
+  const on = !!(configEstudio.colab && configEstudio.colab.online);
+  card.classList.toggle("oh-colab-online", on);
+  const pill = document.getElementById("studioColabPill");
+  pill.className = `oh-pill ${on ? "oh-pill-on" : "oh-pill-off"}`;
+  pill.textContent = on ? (configEstudio.colab.gpu ? "🟢 Ligado · GPU" : "🟢 Ligado") : "⚪ Desligado";
+  document.getElementById("studioColabTexto").textContent = on
+    ? "Pronto! Escolha um áudio abaixo e clique em Separar stems."
+    : "A separação roda no Google Colab (o servidor gratuito não tem memória pro Demucs). Ligue o separador uma vez e use à vontade.";
+  document.getElementById("studioColabLink").href = configEstudio.colab_url || "#";
+  // Tira o aviso "Ligue o separador…" assim que o Colab liga
+  const status = document.getElementById("studioStatus");
+  if (on && status && status.textContent.startsWith("Ligue o separador")) status.textContent = "";
+}
+
+function iniciarMonitoramentoColab() {
+  carregarConfigEstudio();
+  clearInterval(timerColab);
+  timerColab = setInterval(carregarConfigEstudio, 8000);
+}
+function pararMonitoramentoColab() { clearInterval(timerColab); timerColab = null; }
+
+// Marca no indicador de progresso em qual etapa a separação está.
+function definirEtapaSeparacao(etapa) {
+  const ordem = ["enviando", "fila", "separando", "baixando"];
+  const lista = document.getElementById("studioProgresso");
+  lista.hidden = false;
+  const atual = ordem.indexOf(etapa);
+  lista.querySelectorAll("li").forEach((li) => {
+    const i = ordem.indexOf(li.dataset.etapa);
+    li.classList.toggle("oh-feita", i < atual);
+    li.classList.toggle("oh-ativa", i === atual);
+  });
+}
+
+const TEXTO_ETAPA = {
+  enviando: "Enviando o áudio pro separador…",
+  fila: "Na fila — esperando o Colab pegar o seu áudio…",
+  separando: "Separando no Colab… (com GPU leva ~30 s; sem GPU, alguns minutos)",
+  baixando: "Baixando voz e instrumental…",
+};
+
+// Caminho 1: o próprio servidor tem Demucs (ex: rodando no Colab ou no seu PC)
+async function separarLocal(arquivo) {
+  const form = new FormData();
+  form.append("arquivo", arquivo);
+  const controlador = new AbortController();
+  const tempoLimite = setTimeout(() => controlador.abort(), 6 * 60 * 1000);
+  try {
+    const resp = await fetch(`${API_BASE}/api/estudio/separar`, { method: "POST", body: form, signal: controlador.signal });
+    if (!resp.ok) {
+      const erro = await resp.json().catch(() => ({}));
+      throw new Error(erro.detail || "Não foi possível separar os stems.");
+    }
+    const dados = await resp.json();
+    return {
+      vozBlob: base64ParaBlob(dados.voz_base64, "audio/mpeg"),
+      instBlob: base64ParaBlob(dados.instrumental_base64, "audio/mpeg"),
+      bpm: dados.bpm, tom: dados.tom,
+    };
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("Isso demorou demais (mais de 6 min) e foi cancelado.");
+    throw err;
+  } finally {
+    clearTimeout(tempoLimite);
+  }
+}
+
+// Caminho 2: manda pra fila (Firebase) e acompanha até o Colab devolver os stems
+async function separarViaColab(arquivo, aoMudarEtapa) {
+  aoMudarEtapa("enviando");
+  const form = new FormData();
+  form.append("arquivo", arquivo);
+  const envio = await fetch(`${API_BASE}/api/estudio/fila`, { method: "POST", body: form });
+  if (!envio.ok) {
+    const erro = await envio.json().catch(() => ({}));
+    throw new Error(erro.detail || "Não consegui enviar o áudio pro separador.");
+  }
+  const { job_id } = await envio.json();
+  aoMudarEtapa("fila");
+
+  const inicio = Date.now();
+  let falhasSeguidas = 0;
+  let semColabDesde = null;
+  while (true) {
+    await esperar(3000);
+    if (Date.now() - inicio > 20 * 60 * 1000) throw new Error("A separação demorou mais de 20 minutos e foi cancelada.");
+
+    let info;
+    try {
+      const r = await fetch(`${API_BASE}/api/estudio/fila/${job_id}`);
+      if (r.status === 404) throw new Error("Perdi o trabalho no servidor. Tente de novo.");
+      info = await r.json();
+      falhasSeguidas = 0;
+    } catch (err) {
+      if (String(err.message).startsWith("Perdi")) throw err;
+      if (++falhasSeguidas >= 6) throw new Error(mensagemDeErroDeRede(err));   // servidor reiniciando: tenta algumas vezes
+      continue;
+    }
+
+    if (info.status === "erro") throw new Error(info.erro || "O separador falhou.");
+    if (info.status === "processando") { aoMudarEtapa("separando"); semColabDesde = null; }
+    if (info.status === "pendente") {
+      aoMudarEtapa("fila");
+      if (info.colab_online === false) {
+        semColabDesde = semColabDesde || Date.now();
+        if (Date.now() - semColabDesde > 60000) throw new Error("O Colab foi desligado antes de pegar o seu áudio. Ligue de novo e tente outra vez.");
+      } else { semColabDesde = null; }
+    }
+    if (info.status === "pronto") {
+      aoMudarEtapa("baixando");
+      const [rv, ri] = await Promise.all([
+        fetch(`${API_BASE}/api/estudio/fila/${job_id}/voz`),
+        fetch(`${API_BASE}/api/estudio/fila/${job_id}/instrumental`),
+      ]);
+      if (!rv.ok || !ri.ok) throw new Error("Não consegui baixar os stems prontos.");
+      const resultado = { vozBlob: await rv.blob(), instBlob: await ri.blob(), bpm: info.bpm, tom: info.tom };
+      fetch(`${API_BASE}/api/estudio/fila/${job_id}`, { method: "DELETE" }).catch(() => {});   // limpa o Firebase
+      return resultado;
+    }
+  }
+}
+
 function inicializarEstudio() {
   const fab = document.getElementById("fabEstudio");
   const painel = document.getElementById("studioPainel");
@@ -447,8 +593,11 @@ function inicializarEstudio() {
     });
   }
 
-  fab.addEventListener("click", () => { painel.hidden = !painel.hidden; });
-  btnFechar.addEventListener("click", () => { painel.hidden = true; pausarTudo(); });
+  fab.addEventListener("click", () => {
+    painel.hidden = !painel.hidden;
+    if (painel.hidden) pararMonitoramentoColab(); else iniciarMonitoramentoColab();
+  });
+  btnFechar.addEventListener("click", () => { painel.hidden = true; pausarTudo(); pararMonitoramentoColab(); });
 
   arquivoInput.addEventListener("change", () => {
     if (arquivoInput.files[0]) {
@@ -459,33 +608,32 @@ function inicializarEstudio() {
 
   btnSeparar.addEventListener("click", async () => {
     const arquivoOriginal = arquivoInput.files[0] || (blobGravado
-      ? new File([blobGravado], "gravacao.webm", { type: "audio/webm" })
+      ? arquivoDeGravacao(blobGravado, "gravacao")
       : null);
-
     if (!arquivoOriginal) { statusEl.textContent = "Grave ou suba um áudio primeiro."; return; }
 
+    const cfg = configEstudio || await carregarConfigEstudio();
+    const viaColab = cfg.modo === "fila";
+
+    // Colab desligado: em vez de falhar, destaca o card e explica o que fazer
+    if (viaColab && !(cfg.colab && cfg.colab.online)) {
+      const card = document.getElementById("studioColabCard");
+      card.classList.add("oh-colab-destaque");
+      setTimeout(() => card.classList.remove("oh-colab-destaque"), 2500);
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      statusEl.textContent = "Ligue o separador no Colab primeiro (botão laranja acima) — o card fica verde sozinho.";
+      return;
+    }
+
     btnSeparar.disabled = true;
-    statusEl.textContent = "Separando… pode levar de dezenas de segundos a alguns minutos (a 1ª vez baixa o modelo).";
-
-    const form = new FormData();
-    form.append("arquivo", arquivoOriginal);
-
-    const controlador = new AbortController();
-    const tempoLimite = setTimeout(() => controlador.abort(), 6 * 60 * 1000);
+    const progresso = document.getElementById("studioProgresso");
+    const aoMudarEtapa = (etapa) => { definirEtapaSeparacao(etapa); statusEl.textContent = TEXTO_ETAPA[etapa]; };
+    statusEl.textContent = "Separando… pode levar de dezenas de segundos a alguns minutos.";
 
     try {
-      const resp = await fetch(`${API_BASE}/api/estudio/separar`, {
-        method: "POST", body: form, signal: controlador.signal,
-      });
-      clearTimeout(tempoLimite);
-      if (!resp.ok) {
-        const erro = await resp.json();
-        statusEl.textContent = erro.detail || "Não foi possível separar os stems.";
-        return;
-      }
-      const dados = await resp.json();
-      const vozBlob = base64ParaBlob(dados.voz_base64, "audio/mpeg");
-      const instBlob = base64ParaBlob(dados.instrumental_base64, "audio/mpeg");
+      const { vozBlob, instBlob, bpm, tom } = viaColab
+        ? await separarViaColab(arquivoOriginal, aoMudarEtapa)
+        : await separarLocal(arquivoOriginal);
 
       // A timeline precisa ficar visível ANTES de desenhar as formas de onda —
       // senão o canvas tem largura 0 (ainda escondido) e desenha em branco.
@@ -503,22 +651,17 @@ function inicializarEstudio() {
       atualizarOpcoesFaixaSelect();
       montarDownloads();
 
-      const infoTexto = [
-        dados.bpm ? `${dados.bpm} BPM` : null,
-        dados.tom ? `Tom ${dados.tom}` : null,
+      infoProjetoEl.textContent = [
+        bpm ? `${bpm} BPM` : null,
+        tom ? `Tom ${tom}` : null,
         "3 faixas",
       ].filter(Boolean).join(" · ");
-      infoProjetoEl.textContent = infoTexto;
-
       statusEl.textContent = "";
+      pararMonitoramentoColab();
     } catch (err) {
-      clearTimeout(tempoLimite);
-      if (err.name === "AbortError") {
-        statusEl.textContent = "Isso demorou demais (mais de 6 min) e foi cancelado. Tente um trecho mais curto, ou verifique se o servidor ainda está de pé.";
-      } else {
-        statusEl.textContent = `Erro: ${err.message}`;
-      }
+      statusEl.textContent = `Erro: ${err.message}`;
     } finally {
+      progresso.hidden = true;
       btnSeparar.disabled = false;
     }
   });

@@ -54,7 +54,7 @@ function inicializarSongwriter() {
 
   function arquivoReferenciaAtual() {
     return arquivoRefInput.files[0] || (blobGravadoReferencia
-      ? new File([blobGravadoReferencia], "referencia.webm", { type: "audio/webm" })
+      ? arquivoDeGravacao(blobGravadoReferencia, "referencia")
       : null);
   }
 
