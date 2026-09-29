@@ -4,6 +4,10 @@
 # ações de verdade (gerar produção, aplicar edição vocal, salvar composição,
 # renomear/excluir gravação), sempre em cima de dados reais do Firestore/Storage.
 # ══════════════════════════════════════════════════════════════
+import re
+import json
+import time
+import threading
 import gemini_client
 import gravacoes
 import historico
@@ -261,8 +265,10 @@ def _executar_ferramenta(nome_func, args):
         if conteudo is None:
             return {"erro": "Não consegui carregar o áudio dessa gravação."}
         audio, sr = audio_analysis.carregar_audio_bytes(conteudo, nome_real)
+        del conteudo
         if audio is None:
             return {"erro": "Não consegui ler esse áudio."}
+        audio, _ = audio_analysis.limitar_duracao(audio, sr)
         bpm, beat_times = audio_analysis.detectar_bpm_e_beats(audio, sr)
         tom = audio_analysis.detectar_tom(audio, sr)
         estilo = args.get("estilo", "Pop")
@@ -285,6 +291,8 @@ def _executar_ferramenta(nome_func, args):
         if args.get("qualidade_pro", True):
             mix = producao_dsp.aplicar_reverb(mix, sr, 0.08)
         wav_bytes = converter_audio.audio_para_wav_bytes(mix, sr)
+        del mix, baixo, bateria, acordes, audio
+        audio_analysis.liberar_memoria()
         novo_nome = f"{g['nome']} (Produção {estilo})"
         doc_id, erro = gravacoes.salvar_gravacao(novo_nome, wav_bytes, "producao.wav", "audio/wav")
         if erro:
@@ -299,14 +307,18 @@ def _executar_ferramenta(nome_func, args):
         if conteudo is None:
             return {"erro": "Não consegui carregar o áudio dessa gravação."}
         audio, sr = audio_analysis.carregar_audio_bytes(conteudo, nome_real)
+        del conteudo
         if audio is None:
             return {"erro": "Não consegui ler esse áudio."}
+        audio, _ = audio_analysis.limitar_duracao(audio, sr)
         flags = interpretar_comando_edicao(args.get("comando", ""))
         audio_editado, acoes = edicao_dsp.aplicar_efeitos(
             audio, sr, flags["reduzir_ruido"], flags["normalizar"], flags["ajustar_tom"],
             flags["eq_presenca"], flags["compressao"], flags["remover_sibilancia"], flags["reverb_leve"],
         )
         wav_bytes = converter_audio.audio_para_wav_bytes(audio_editado, sr)
+        del audio, audio_editado
+        audio_analysis.liberar_memoria()
         novo_nome = f"{g['nome']} (Editado)"
         doc_id, erro = gravacoes.salvar_gravacao(novo_nome, wav_bytes, "editado.wav", "audio/wav")
         if erro:
@@ -349,11 +361,73 @@ def _executar_ferramenta(nome_func, args):
     return {"erro": f"Ferramenta desconhecida: {nome_func}"}
 
 
+# ── Cache em memória: evita reler o Firestore inteiro a cada mensagem ──
+# Antes, CADA mensagem lia do Firestore todas as mensagens desta conversa e
+# ainda todas as mensagens de TODAS as outras conversas (uma consulta por
+# conversa) — e numa CPU de 0.1 vCPU isso demorava dezenas de segundos.
+_cache_historico = {}          # chat_id -> últimas mensagens (dicts role/content)
+_cache_outras = {}             # chat_id -> (instante, resumo das outras conversas)
+_trava_cache = threading.Lock()
+_MAX_MSGS_POR_CHAT = 60
+_MAX_CHATS_EM_CACHE = 12
+_TTL_OUTRAS_S = 300            # resumo das outras conversas vale por 5 min
+_MAX_OUTRAS_CONVERSAS = 3      # só as 3 conversas mais recentes entram no resumo
+
+
+def _historico_do_chat(chat_id):
+    """Lista viva de mensagens do chat — vem do Firestore só na 1ª vez."""
+    with _trava_cache:
+        if chat_id not in _cache_historico:
+            _cache_historico[chat_id] = chats.carregar_mensagens(chat_id, limite=_MAX_MSGS_POR_CHAT)
+            while len(_cache_historico) > _MAX_CHATS_EM_CACHE:
+                _cache_historico.pop(next(iter(_cache_historico)))
+        return _cache_historico[chat_id]
+
+
+def _resumo_outras_conversas(chat_id):
+    agora = time.monotonic()
+    guardado = _cache_outras.get(chat_id)
+    if guardado and agora - guardado[0] < _TTL_OUTRAS_S:
+        return guardado[1]
+    resumo = []
+    try:
+        outras = [c for c in chats.listar_chats() if c["id"] != chat_id][:_MAX_OUTRAS_CONVERSAS]
+        for c in outras:
+            msgs = chats.carregar_mensagens(c["id"], limite=6)
+            if msgs:
+                resumo.append({
+                    "chat": c.get("nome", "Conversa"),
+                    "ultimas_mensagens": [f"{m.get('role')}: {(m.get('content') or '')[:200]}" for m in msgs],
+                })
+    except Exception:
+        resumo = []
+    _cache_outras[chat_id] = (agora, resumo)
+    return resumo
+
+
+def _extrair_chamada_ferramenta(texto):
+    """Acha um JSON {"ferramenta": ..., "argumentos": {...}} dentro da resposta,
+    mesmo que o modelo tenha escrito uma frase antes/depois ou usado ```json."""
+    if not texto or "ferramenta" not in texto:
+        return None
+    dados = gemini_client.extrair_json(texto)
+    if isinstance(dados, dict) and dados.get("ferramenta"):
+        return dados
+    ini, fim = texto.find("{"), texto.rfind("}")
+    if 0 <= ini < fim:
+        try:
+            dados = json.loads(texto[ini:fim + 1])
+            if isinstance(dados, dict) and dados.get("ferramenta"):
+                return dados
+        except Exception:
+            pass
+    return None
+
+
 def conversar(mensagem, chat_id=None):
     """Roda o loop de "ferramentas via JSON em texto" e devolve o texto de
-    resposta final. Se chat_id for passado, o histórico completo vem do
-    Firestore (não do navegador) — o servidor é a fonte da verdade — e a
-    mensagem do usuário e a resposta final são salvas nesse chat automaticamente.
+    resposta final. Se chat_id for passado, a mensagem do usuário e a resposta
+    final são salvas nesse chat (Firestore) automaticamente.
 
     Não usa function calling nativo do Gemini (tools=[...]) de propósito —
     alguns modelos novos (ex: gemini-3.7/3.8-flash) exigem a Interactions API
@@ -364,15 +438,18 @@ def conversar(mensagem, chat_id=None):
     if not gemini_client.gemini_disponivel():
         return "A Laranjinha está indisponível no momento (chave do Gemini não configurada no servidor)."
 
+    inicio = time.monotonic()
+
     if chat_id:
+        historico_conversa = _historico_do_chat(chat_id)          # antes de gravar a nova
         chats.salvar_mensagem(chat_id, "user", mensagem)
-        historico_conversa = chats.carregar_mensagens(chat_id)
+        historico_conversa.append({"role": "user", "content": mensagem})
     else:
         historico_conversa = [{"role": "user", "content": mensagem}]
 
     instrucao_sistema = CONHECIMENTO_APP + "\n\n" + _catalogo_ferramentas_texto()
     try:
-        outras = chats.ler_outras_conversas_resumo(chat_id) if chat_id else []
+        outras = _resumo_outras_conversas(chat_id) if chat_id else []
         if outras:
             linhas = []
             for o in outras:
@@ -386,19 +463,20 @@ def conversar(mensagem, chat_id=None):
         pass
 
     linhas_conversa = []
-    for m in historico_conversa[-40:]:
+    for m in historico_conversa[-30:]:
         papel = "Assistente" if m.get("role") in ("model", "assistant") else "Usuário"
         texto = m.get("content", "")
         if texto:
             linhas_conversa.append(f"{papel}: {texto}")
-    if not chat_id:
-        linhas_conversa.append(f"Usuário: {mensagem}")
 
     execucoes_registradas = []
     texto_final = None
     ultimo_erro = ""
 
-    for _iteracao in range(6):
+    for _iteracao in range(5):
+        if time.monotonic() - inicio > 85:
+            ultimo_erro = "a resposta demorou demais"
+            break
         prompt_completo = (
             instrucao_sistema
             + "\n\n## Conversa até agora\n" + "\n".join(linhas_conversa)
@@ -412,10 +490,10 @@ def conversar(mensagem, chat_id=None):
             break
 
         texto_resp = (resposta.text or "").strip()
-        dados = gemini_client.extrair_json(texto_resp)
-        if dados and isinstance(dados, dict) and dados.get("ferramenta"):
-            nome_func = dados.get("ferramenta")
-            args = dados.get("argumentos") or {}
+        chamada = _extrair_chamada_ferramenta(texto_resp)
+        if chamada:
+            nome_func = chamada.get("ferramenta")
+            args = chamada.get("argumentos") or {}
             resultado = _executar_ferramenta(nome_func, args)
             execucoes_registradas.append(f"- {nome_func}({args}) → {resultado}")
             continue
@@ -425,11 +503,14 @@ def conversar(mensagem, chat_id=None):
 
     if texto_final is None:
         texto_final = (
-            f"Erro ao chamar a Laranjinha: {ultimo_erro[:200]}" if ultimo_erro
-            else "Não consegui completar essa ação (várias etapas seguidas sem uma resposta final)."
+            f"A Laranjinha não conseguiu responder agora ({ultimo_erro[:160]}). Tente de novo em instantes."
+            if ultimo_erro else "Não consegui completar essa ação (várias etapas seguidas sem uma resposta final)."
         )
 
     if chat_id:
         chats.salvar_mensagem(chat_id, "model", texto_final)
+        with _trava_cache:
+            historico_conversa.append({"role": "model", "content": texto_final})
+            del historico_conversa[:-_MAX_MSGS_POR_CHAT]
 
     return texto_final

@@ -10,10 +10,7 @@ lameenc
 pydub
 noisereduce
 google-genai
-demucs
-torch
-torchaudio
-torchcodec
 huggingface_hub
 requests
+imageio-ffmpeg
 gradio_client

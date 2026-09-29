@@ -26,6 +26,15 @@ def _carregar_modelo():
     return modelo
 
 
+def _dispositivo():
+    """GPU se houver (Colab com GPU é bem mais rápido); senão CPU."""
+    try:
+        import torch
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except Exception:
+        return "cpu"
+
+
 def separar(dados_audio, nome_arquivo):
     """Retorna (voz_bytes, instrumental_bytes, None) em sucesso,
     ou (None, None, mensagem_de_erro) em falha."""
@@ -37,7 +46,11 @@ def separar(dados_audio, nome_arquivo):
         import torchaudio
         from demucs.apply import apply_model
     except Exception as e:
-        return None, None, f"Dependências de separação (torch/demucs) não disponíveis: {e}"
+        return None, None, (
+            "A separação de stems não está disponível nesta hospedagem gratuita "
+            "(o Demucs precisa de mais memória do que os 512 MB do plano). "
+            "Use o notebook do Colab para separar os stems, ou hospede num plano com mais RAM."
+        )
 
     caminho_temp = None
     try:
@@ -61,7 +74,13 @@ def separar(dados_audio, nome_arquivo):
         wav_normalizado = (wav - media) / desvio
 
         with torch.no_grad():
-            fontes = apply_model(modelo, wav_normalizado[None], device="cpu", progress=False)[0]
+            dispositivo = _dispositivo()
+            try:
+                fontes = apply_model(modelo, wav_normalizado[None], device=dispositivo, progress=False)[0]
+            except Exception:
+                if dispositivo == "cpu":
+                    raise
+                fontes = apply_model(modelo, wav_normalizado[None], device="cpu", progress=False)[0]
         fontes = fontes * desvio + media
 
         nomes_fontes = modelo.sources  # ex.: ['drums', 'bass', 'other', 'vocals']

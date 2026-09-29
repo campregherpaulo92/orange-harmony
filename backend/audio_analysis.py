@@ -4,10 +4,52 @@
 # só numpy/librosa. Pode ser testado e usado de qualquer front-end.
 # ══════════════════════════════════════════════════════════════
 import io
+import gc
+import shutil
+import subprocess
 import tempfile
 import os
+import threading
 import numpy as np
 import librosa
+
+# ── Limites de recurso ──
+# O plano grátis do Render tem só 512 MB de RAM e 0.1 CPU. Medido: sem esses
+# limites, um áudio de 3 min pedia ~670 MB (o servidor era morto e reiniciava,
+# derrubando até as mensagens de texto da Laranjinha).
+LIMITE_ANALISE_S = 120      # analisa no máximo os primeiros 120 s do áudio
+BLOCO_PITCH_S = 20          # o pyin roda em blocos de 20 s (memória constante)
+JANELA_TOM_BPM_S = 60       # tom/BPM são estáveis: 60 s do meio bastam
+
+
+def liberar_memoria():
+    """Devolve memória ao sistema operacional depois de uma análise pesada.
+    O Python solta os arrays, mas o alocador do Linux costuma ficar com a
+    memória reservada — malloc_trim faz ela voltar (senão o pico vira permanente)."""
+    gc.collect()
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
+
+
+def limitar_duracao(audio, sr, max_s=LIMITE_ANALISE_S):
+    """Corta o áudio em `max_s` segundos. Devolve (audio, aviso) — aviso em ASCII
+    (vai em header HTTP) ou None."""
+    if audio is not None and len(audio) > int(max_s * sr):
+        return audio[: int(max_s * sr)], f"cortado_{max_s}s"
+    return audio, None
+
+
+def _trecho_central(audio, sr, segundos):
+    """Devolve até `segundos` do meio do áudio (evita intro/silêncio no começo)."""
+    n = int(segundos * sr)
+    if len(audio) <= n:
+        return audio
+    ini = (len(audio) - n) // 2
+    return audio[ini:ini + n]
+
 
 # ── Constantes musicais ──
 NOMES_NOTAS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -27,31 +69,72 @@ def f0_para_freq(nota, calibracao=440.0):
     return calibracao * 2 ** ((midi - 69) / 12)
 
 
+def _caminho_ffmpeg():
+    """ffmpeg embutido via pip (imageio-ffmpeg) — não depende de o servidor ter
+    ffmpeg instalado. Se não houver, tenta o ffmpeg do sistema."""
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return shutil.which("ffmpeg")
+
+
+def _decodificar_com_ffmpeg(caminho, sr_alvo=22050):
+    """Decodifica QUALQUER formato (WebM/Opus do Chrome, MP4/AAC do Safari, M4A...)
+    direto pro ffmpeg, já em mono e 22050 Hz. Devolve (audio, sr) ou (None, None)."""
+    exe = _caminho_ffmpeg()
+    if not exe:
+        return None, None
+    try:
+        proc = subprocess.run(
+            [exe, "-v", "error", "-i", caminho, "-vn", "-ac", "1", "-ar", str(sr_alvo), "-f", "f32le", "-"],
+            capture_output=True, timeout=90,
+        )
+        if proc.returncode != 0 or len(proc.stdout) < 8:
+            return None, None
+        return np.frombuffer(proc.stdout, dtype="<f4").copy(), sr_alvo
+    except Exception:
+        return None, None
+
+
 def carregar_audio_bytes(dados: bytes, nome_arquivo: str = "audio.wav"):
     """Lê bytes de áudio (upload) e devolve (audio, sr) em 22050 Hz mono.
-    Aceita WAV, MP3, M4A, OGG, FLAC, AAC, WEBM — qualquer formato que o
-    soundfile/librosa/pydub reconheçam. WebM/Opus (o formato padrão do
-    MediaRecorder do navegador) não é lido nem por soundfile nem por
-    librosa.load — só o pydub (via ffmpeg) decodifica; por isso ele é a
-    terceira tentativa, não a primeira (é mais lento que as outras duas)."""
+    Cadeia de tentativas, da mais rápida pra mais abrangente:
+      1) soundfile — WAV, FLAC, OGG, MP3 (rápido, sem processo externo)
+      2) ffmpeg embutido — WebM/Opus (gravador do Chrome), MP4/AAC (Safari/iPhone), M4A
+      3) librosa.load  4) pydub
+    O gravador do navegador já manda WAV (ver recorder.js), então na prática o
+    passo 1 resolve; os outros cobrem arquivos enviados em outros formatos."""
     if not dados:
         return None, None
     ext = os.path.splitext(nome_arquivo)[1] or ".wav"
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
         tmp.write(dados)
         tmp_path = tmp.name
+
+    audio, sr = None, None
     try:
-        import soundfile as sf
-        audio, sr = sf.read(tmp_path, dtype="float32")
-        if audio.ndim > 1:
-            audio = audio.mean(axis=1)
-        if sr != 22050:
-            audio = librosa.resample(audio, orig_sr=sr, target_sr=22050)
-            sr = 22050
-    except Exception:
         try:
-            audio, sr = librosa.load(tmp_path, sr=22050, mono=True)
+            import soundfile as sf
+            audio, sr = sf.read(tmp_path, dtype="float32")
+            if audio.ndim > 1:
+                audio = audio.mean(axis=1)
+            if sr != 22050:
+                audio = librosa.resample(audio, orig_sr=sr, target_sr=22050)
+                sr = 22050
         except Exception:
+            audio, sr = None, None
+
+        if audio is None:
+            audio, sr = _decodificar_com_ffmpeg(tmp_path)
+
+        if audio is None:
+            try:
+                audio, sr = librosa.load(tmp_path, sr=22050, mono=True)
+            except Exception:
+                audio, sr = None, None
+
+        if audio is None:
             try:
                 from pydub import AudioSegment
                 segmento = AudioSegment.from_file(tmp_path).set_frame_rate(22050).set_channels(1)
@@ -59,16 +142,48 @@ def carregar_audio_bytes(dados: bytes, nome_arquivo: str = "audio.wav"):
                 amostras /= float(1 << (8 * segmento.sample_width - 1))
                 audio, sr = amostras, 22050
             except Exception:
-                os.unlink(tmp_path)
-                return None, None
-    os.unlink(tmp_path)
+                audio, sr = None, None
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    if audio is None or len(audio) == 0:
+        return None, None
     return audio.astype(np.float32), int(sr)
 
 
 # ══════════════════ PITCH ══════════════════
 def extrair_pitch(audio, sr):
-    f0, voiced, _ = librosa.pyin(audio, fmin=80, fmax=1000, sr=sr, frame_length=2048, hop_length=512)
-    tempos = librosa.times_like(f0, sr=sr, hop_length=512)
+    """Pitch (F0) via pyin, processado em blocos de BLOCO_PITCH_S segundos.
+    O pyin rodando no áudio inteiro gasta memória proporcional à duração
+    (medido: 180 s -> 671 MB). Em blocos, o pico fica constante. Cada bloco tem
+    um múltiplo exato do hop (512), então os tempos batem com a versão sem blocos;
+    o último quadro de cada bloco (duplicado pelo `center=True`) é descartado."""
+    hop = 512
+    bloco = (int(BLOCO_PITCH_S * sr) // hop) * hop
+    n = len(audio)
+
+    limites = [(ini, min(ini + bloco, n)) for ini in range(0, n, bloco)]
+    # um resto minúsculo no fim não dá pro pyin (precisa de > frame_length/2): funde no bloco anterior
+    if len(limites) > 1 and (limites[-1][1] - limites[-1][0]) < 4096:
+        ini_ult, fim_ult = limites.pop()
+        ini_ant, _ = limites.pop()
+        limites.append((ini_ant, fim_ult))
+
+    f0_partes, voz_partes = [], []
+    for i, (ini, fim) in enumerate(limites):
+        f0_b, voiced_b, _ = librosa.pyin(audio[ini:fim], fmin=80, fmax=1000, sr=sr,
+                                         frame_length=2048, hop_length=hop)
+        if i < len(limites) - 1:          # quadro final = início do próximo bloco
+            f0_b, voiced_b = f0_b[:-1], voiced_b[:-1]
+        f0_partes.append(f0_b)
+        voz_partes.append(voiced_b)
+
+    f0 = np.concatenate(f0_partes)
+    voiced = np.concatenate(voz_partes)
+    tempos = librosa.times_like(f0, sr=sr, hop_length=hop)
     f0 = np.where(voiced & ~np.isnan(f0), f0, 0.0)
     return tempos, f0
 
@@ -213,19 +328,32 @@ def classificar_vibrato_v4(taxa, extensao, deslize, periodicidade):
 # ══════════════════ BPM / TOM / COVER ══════════════════
 def detectar_bpm_e_beats(audio, sr):
     try:
-        tempo, beat_frames = librosa.beat.beat_track(y=audio, sr=sr)
+        # BPM é estável ao longo da música: analisa até JANELA_TOM_BPM_S*2 segundos
+        # (as batidas depois disso são extrapoladas pela grade do BPM abaixo).
+        trecho = audio[: int(JANELA_TOM_BPM_S * 2 * sr)]
+        tempo, beat_frames = librosa.beat.beat_track(y=trecho, sr=sr)
         bpm = float(np.atleast_1d(tempo)[0])
         if bpm < 50 or bpm > 200 or np.isnan(bpm):
             bpm = 90.0
-        beat_times = librosa.frames_to_time(beat_frames, sr=sr)
-        return round(bpm, 1), np.asarray(beat_times, dtype=np.float64)
+        beat_times = np.asarray(librosa.frames_to_time(beat_frames, sr=sr), dtype=np.float64)
+        # Se o áudio é mais longo que a janela analisada, continua a grade de
+        # batidas até o fim com o intervalo mediano (a Produção usa as batidas
+        # pra posicionar baixo/bateria na música toda).
+        duracao = len(audio) / sr
+        if len(beat_times) >= 2 and duracao > len(trecho) / sr + 0.5:
+            intervalo = float(np.median(np.diff(beat_times)))
+            if intervalo > 0:
+                extras = np.arange(beat_times[-1] + intervalo, duracao, intervalo)
+                beat_times = np.concatenate([beat_times, extras])
+        return round(bpm, 1), beat_times
     except Exception:
         return 90.0, np.array([])
 
 
 def detectar_tom(audio, sr):
     try:
-        chroma = librosa.feature.chroma_cqt(y=audio, sr=sr, hop_length=1024)
+        chroma = librosa.feature.chroma_cqt(y=_trecho_central(audio, sr, JANELA_TOM_BPM_S),
+                                            sr=sr, hop_length=1024)
         chroma_mean = chroma.mean(axis=1)
         idx = int(np.argmax(chroma_mean))
         return NOMES_NOTAS[idx]
@@ -284,6 +412,13 @@ def analisar_audio_completo(dados: bytes, nome_arquivo: str, modo: str = "comple
     if audio is None:
         return {"erro": "Não foi possível ler o áudio. Tente outro formato (WAV ou MP3)."}
 
+    aviso_duracao = None
+    duracao_total = len(audio) / sr
+    if duracao_total > LIMITE_ANALISE_S:
+        audio = audio[: int(LIMITE_ANALISE_S * sr)]
+        aviso_duracao = (f"Gravação de {duracao_total:.0f}s: analisei os primeiros "
+                         f"{LIMITE_ANALISE_S}s (limite do servidor gratuito).")
+
     tempos, f0 = extrair_pitch(audio, sr)
     f0_limpo = np.where((f0 >= 80) & (f0 <= 1000), f0, 0.0)
 
@@ -299,7 +434,9 @@ def analisar_audio_completo(dados: bytes, nome_arquivo: str, modo: str = "comple
 
     if modo == "cover":
         cover = analisar_cover(audio, sr, calibracao)
-        return {"modo": "cover", "resultado": cover, "curva_pitch": curva_pitch}
+        liberar_memoria()
+        return {"modo": "cover", "resultado": cover, "curva_pitch": curva_pitch,
+                "aviso_duracao": aviso_duracao}
 
     resultado = analisar_afinacao(f0_limpo, tempos, calibracao, nota_ref=nota_ref)
     seq_notas = extrair_sequencia_notas(f0_limpo, tempos)
@@ -308,10 +445,34 @@ def analisar_audio_completo(dados: bytes, nome_arquivo: str, modo: str = "comple
         {**v, "classificacao": classificar_vibrato_v4(v["taxa_hz"], v["extensao_cents"], v["deslize_cents"], v["periodicidade"])}
         for v in vibratos
     ]
+    liberar_memoria()
     return {
         "modo": "completa",
         "resultado": resultado,
         "sequencia_notas": [{"nota": n, "duracao_s": d} for n, d in seq_notas[:20]],
         "vibratos": vibratos_json,
         "curva_pitch": curva_pitch,
+        "aviso_duracao": aviso_duracao,
     }
+
+
+
+# ══════════════════ AQUECIMENTO (só no Render) ══════════════════
+def aquecer_bibliotecas():
+    """A 1ª análise depois de o servidor ligar gasta a maior parte do tempo
+    carregando/compilando numba, scipy e cia (medido: 18 s de 19 s). Rodando uma
+    análise mínima em segundo plano logo na inicialização, quem chegar depois
+    já encontra tudo pronto."""
+    try:
+        t = np.linspace(0, 1.5, int(22050 * 1.5), endpoint=False)
+        tom = (0.3 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+        for passo in (lambda: extrair_pitch(tom, 22050),
+                      lambda: detectar_tom(tom, 22050),
+                      lambda: detectar_bpm_e_beats(tom, 22050)):
+            try:
+                passo()
+            except Exception:
+                pass
+    finally:
+        liberar_memoria()
+

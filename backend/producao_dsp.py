@@ -5,7 +5,7 @@
 # ══════════════════════════════════════════════════════════════
 import numpy as np
 import librosa
-from audio_analysis import NOMES_NOTAS
+from audio_analysis import NOMES_NOTAS, extrair_pitch
 
 ESTILOS_MUSICAIS = {
     "Pop": "Leve e dançante — acordes a cada compasso, clima pop radiofônico.",
@@ -126,8 +126,8 @@ def gerar_baixo_melodico(audio, sr, tom, bpm, beat_times):
     trilha = np.zeros(n_total + sr, dtype=np.float32)
     raiz_midi = nota_para_midi(tom, 1)
     escala = [raiz_midi + i for i in [0, 2, 4, 5, 7, 9, 11]]
-    f0, voiced, _ = librosa.pyin(audio, fmin=80, fmax=1000, sr=sr, frame_length=2048, hop_length=512)
-    tempos_f0 = librosa.times_like(f0, sr=sr, hop_length=512)
+    # pitch em blocos (memória constante) — o pyin no áudio inteiro custava ~100 MB extras
+    tempos_f0, f0 = extrair_pitch(audio, sr)
 
     if beat_times is None or len(beat_times) == 0:
         seg_compasso = 60.0 / bpm * 4
@@ -319,53 +319,69 @@ def gerar_acordes_musicais(audio, sr, tom, bpm, beat_times, estilo="Pop"):
     return trilha[:n_total]
 
 
-def mixar(audio, baixo, bateria, acordes=None, teclado=None, solo=None):
-    """Mistura com níveis calibrados por trilha e limitador suave (sem distorção)."""
+def iniciar_mix(audio):
+    """Começa a mixagem com a voz normalizada. As trilhas são somadas uma a uma
+    (somar_trilha) e liberadas logo depois — segurar todas ao mesmo tempo na
+    memória custava ~50 MB a mais numa música de 2 min."""
     total = audio.astype(np.float32).copy()
-    pico = np.max(np.abs(total)) + 1e-9
-    total *= 0.70 / pico
+    total *= 0.70 / (float(np.max(np.abs(total))) + 1e-9)
+    return total
 
-    def adicionar(trilha, ganho):
-        if trilha is None:
-            return
-        t = np.asarray(trilha, dtype=np.float32)
-        pico_t = np.max(np.abs(t)) + 1e-9
-        t = t / pico_t
-        n = min(len(total), len(t))
-        total[:n] += ganho * t[:n]
 
-    adicionar(baixo, 0.28)
-    adicionar(bateria, 0.32)
-    adicionar(acordes, 0.16)
-    adicionar(teclado, 0.14)
-    adicionar(solo, 0.12)
+def somar_trilha(total, trilha, ganho):
+    """Soma UMA trilha (normalizada pelo próprio pico) na mixagem, no lugar."""
+    if trilha is None:
+        return
+    t = np.asarray(trilha, dtype=np.float32)
+    pico_t = float(np.max(np.abs(t))) + 1e-9
+    n = min(len(total), len(t))
+    total[:n] += (ganho / pico_t) * t[:n]
 
+
+def finalizar_mix(total):
+    """Limitador suave (sem distorção) e trava final de segurança."""
     limite = 0.95
     acima = np.abs(total) > limite
     if np.any(acima):
         sinal = np.sign(total[acima])
         excesso = np.abs(total[acima]) - limite
         total[acima] = sinal * (limite + excesso * 0.15)
-
-    pico_final = np.max(np.abs(total)) + 1e-9
+    pico_final = float(np.max(np.abs(total))) + 1e-9
     if pico_final > 1.0:
-        total = total / pico_final
+        total /= pico_final
     return total.astype(np.float32)
+
+
+def mixar(audio, baixo, bateria, acordes=None, teclado=None, solo=None):
+    """Mistura com níveis calibrados por trilha e limitador suave (sem distorção)."""
+    total = iniciar_mix(audio)
+    for trilha, ganho in ((baixo, 0.28), (bateria, 0.32), (acordes, 0.16), (teclado, 0.14), (solo, 0.12)):
+        somar_trilha(total, trilha, ganho)
+    return finalizar_mix(total)
 
 
 def aplicar_ducking(trilha, audio_referencia, sr, intensidade=0.35):
     """Reduz o volume da trilha (baixo/acordes) quando a voz de referência está mais forte —
-    simula o efeito de sidechain usado em produções profissionais."""
+    simula o efeito de sidechain usado em produções profissionais.
+    Envelope calculado em float32 e por blocos: a versão antiga criava ~4 arrays
+    float64 do tamanho da música inteira a cada chamada (~84 MB para 2 min)."""
     if trilha is None:
         return None
     try:
         hop = 512
         rms = librosa.feature.rms(y=audio_referencia, frame_length=2048, hop_length=hop)[0]
-        rms_norm = rms / (np.max(rms) + 1e-9)
+        rms_norm = (rms / (np.max(rms) + 1e-9)).astype(np.float32)
         n = len(trilha)
-        env = np.interp(np.linspace(0, len(rms_norm) - 1, n), np.arange(len(rms_norm)), rms_norm)
-        ganho = 1.0 - intensidade * env
-        return (trilha * ganho).astype(np.float32)
+        xp = np.arange(len(rms_norm), dtype=np.float32)
+        escala = (len(rms_norm) - 1) / max(1, n - 1)
+        saida = np.empty(n, dtype=np.float32)
+        bloco = 1 << 19
+        for i in range(0, n, bloco):
+            j = min(n, i + bloco)
+            x = np.arange(i, j, dtype=np.float32) * np.float32(escala)
+            env = np.interp(x, xp, rms_norm).astype(np.float32)
+            saida[i:j] = trilha[i:j] * (np.float32(1.0) - np.float32(intensidade) * env)
+        return saida
     except Exception:
         return trilha
 
@@ -381,17 +397,20 @@ def gerar_reverb_ir(sr, duracao=1.2, decaimento=3.5):
 
 
 def aplicar_reverb(sinal, sr, quantidade=0.12):
-    """Aplica um reverb de master sutil por convolução (wet/dry), dando ar e coesão à mixagem."""
+    """Aplica um reverb de master sutil por convolução (wet/dry), dando ar e coesão à mixagem.
+    Usa oaconvolve (overlap-add): a convolução por FFT do sinal inteiro de uma vez
+    alocava blocos enormes de memória."""
     if quantidade <= 0 or sinal is None:
         return sinal
     try:
-        from scipy.signal import fftconvolve
+        from scipy.signal import oaconvolve
         ir = gerar_reverb_ir(sr)
-        molhado = fftconvolve(sinal, ir)[:len(sinal)]
-        pico_molhado = np.max(np.abs(molhado)) + 1e-9
-        pico_seco = np.max(np.abs(sinal)) + 1e-9
-        molhado = molhado / pico_molhado * pico_seco
-        return (sinal * (1 - quantidade) + molhado * quantidade).astype(np.float32)
+        molhado = oaconvolve(sinal, ir)[:len(sinal)].astype(np.float32)
+        pico_molhado = float(np.max(np.abs(molhado))) + 1e-9
+        pico_seco = float(np.max(np.abs(sinal))) + 1e-9
+        molhado *= np.float32(pico_seco / pico_molhado * quantidade)
+        molhado += sinal * np.float32(1 - quantidade)
+        return molhado
     except Exception:
         return sinal
 

@@ -6,10 +6,14 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 import os
+import time
+import threading
+from contextlib import asynccontextmanager
 
-from audio_analysis import analisar_audio_completo, carregar_audio_bytes, detectar_bpm_e_beats, detectar_tom
+from audio_analysis import analisar_audio_completo, carregar_audio_bytes, detectar_bpm_e_beats, detectar_tom, liberar_memoria
+import audio_analysis
 import gravacoes
 import historico
 import composicoes
@@ -22,10 +26,34 @@ import professor
 import laranjinha
 import estudio_agente
 import stems
+import estudio_fila
 import chats
 import songwriter
 
-app = FastAPI(title="Orange Harmony API", version="0.1.0")
+@asynccontextmanager
+async def _ciclo_de_vida(_app):
+    """Aquecimento das bibliotecas de áudio — só no Render, e só DEPOIS que o
+    servidor já está no ar (rodar isso durante a inicialização disputava a CPU
+    de 0.1 vCPU com o próprio boot e atrasava a detecção da porta pelo Render)."""
+    if os.environ.get("RENDER") or os.environ.get("AQUECER_LIBS"):
+        def _aquecer():
+            time.sleep(20)
+            audio_analysis.aquecer_bibliotecas()
+        threading.Thread(target=_aquecer, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="Orange Harmony API", version="0.1.0", lifespan=_ciclo_de_vida)
+
+
+@app.exception_handler(Exception)
+async def _erro_inesperado(request, exc):
+    """Qualquer erro não tratado vira JSON legível (antes virava texto puro
+    'Internal Server Error', e o navegador mostrava um erro confuso de JSON)."""
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Erro interno do servidor ({type(exc).__name__}). Tente de novo."},
+    )
 
 # CORS liberado para desenvolvimento local (ajustar para o domínio real em produção)
 app.add_middleware(
@@ -186,6 +214,60 @@ def separar_stems_rota(arquivo: UploadFile = File(...)):
         "bpm": round(bpm, 1) if bpm else None,
         "tom": tom,
     }
+
+
+# ── Separação de stems via Colab (fila no Firebase) ──
+# Link do notebook no Colab (abre direto do GitHub). Dá pra trocar pela variável
+# de ambiente COLAB_SEPARADOR_URL no Render, se você mover o notebook de lugar.
+COLAB_SEPARADOR_URL = os.environ.get(
+    "COLAB_SEPARADOR_URL",
+    "https://colab.research.google.com/github/campregherpaulo92/orange-harmony/blob/main/notebooks/separador_stems.ipynb",
+)
+
+
+@app.get("/api/estudio/config")
+def estudio_config():
+    """Diz ao front-end COMO separar: 'local' (este servidor tem Demucs) ou
+    'fila' (manda pro Colab), e se o Colab está ligado agora."""
+    modo = estudio_fila.modo_separacao()
+    resp = {"modo": modo, "colab_url": COLAB_SEPARADOR_URL}
+    if modo == "fila":
+        resp["colab"] = estudio_fila.status_colab()
+    return resp
+
+
+@app.post("/api/estudio/fila")
+def estudio_fila_criar(arquivo: UploadFile = File(...)):
+    if not estudio_fila.status_colab().get("online"):
+        raise HTTPException(
+            status_code=409,
+            detail="O separador do Colab está desligado. Abra o notebook no Colab e execute-o.",
+        )
+    job_id, erro = estudio_fila.criar_job(arquivo.file, arquivo.filename, arquivo.content_type)
+    if erro:
+        raise HTTPException(status_code=502, detail=erro)
+    return {"job_id": job_id}
+
+
+@app.get("/api/estudio/fila/{job_id}")
+def estudio_fila_status(job_id: str):
+    info = estudio_fila.consultar_job(job_id)
+    if info is None:
+        raise HTTPException(status_code=404, detail="Trabalho não encontrado (talvez já tenha sido apagado).")
+    return info
+
+
+@app.get("/api/estudio/fila/{job_id}/{stem}")
+def estudio_fila_baixar(job_id: str, stem: str):
+    dados = estudio_fila.baixar_stem(job_id, stem)
+    if dados is None:
+        raise HTTPException(status_code=404, detail="Stem não encontrado.")
+    return Response(content=dados, media_type="audio/mpeg")
+
+
+@app.delete("/api/estudio/fila/{job_id}")
+def estudio_fila_apagar(job_id: str):
+    return {"apagado": estudio_fila.apagar_job(job_id)}
 
 
 @app.post("/api/estudio/comando")
@@ -364,8 +446,12 @@ def converter_rota(arquivo: UploadFile = File(...), formato: str = Form(...)):
     )
 
 
+def _limitar_duracao(audio, sr, max_s=120):
+    return audio_analysis.limitar_duracao(audio, sr, max_s)
+
+
 # ══════════════════════════════════════════════════════════════
-# PRODUÇÃO (backing track: baixo, bateria, acordes)
+# PRODUÇÃO (backing track: baixo, bateria, acordes, teclado, solo)
 # ══════════════════════════════════════════════════════════════
 @app.post("/api/producao")
 def gerar_producao_rota(
@@ -380,51 +466,51 @@ def gerar_producao_rota(
 ):
     dados = arquivo.file.read()
     audio, sr = carregar_audio_bytes(dados, arquivo.filename or "audio.wav")
+    del dados                       # solta os bytes do upload (até ~16 MB)
     if audio is None:
         raise HTTPException(status_code=400, detail="Não foi possível ler o áudio. Tente outro formato.")
+    audio, aviso = _limitar_duracao(audio, sr)
 
     bpm, beat_times = detectar_bpm_e_beats(audio, sr)
     tom = detectar_tom(audio, sr)
 
-    baixo = bateria = acordes = teclado = solo = None
+    # Cada trilha é gerada, (opcionalmente) passa pelo ducking, é SOMADA à mixagem e
+    # liberada na hora — em vez de segurar todas ao mesmo tempo na memória.
+    mix = producao_dsp.iniciar_mix(audio)
     try:
-        if com_baixo:
-            baixo = producao_dsp.gerar_baixo_melodico(audio, sr, tom, bpm, beat_times)
-        if com_bateria:
-            bateria = producao_dsp.gerar_bateria_ritmica(audio, sr, bpm, beat_times)
-        if com_acordes:
-            acordes = producao_dsp.gerar_acordes_musicais(audio, sr, tom, bpm, beat_times, estilo)
-        if com_teclado:
-            teclado = producao_dsp.gerar_teclado_musical(audio, sr, tom, bpm, beat_times, estilo)
-        if com_solo:
-            solo = producao_dsp.gerar_solo_musical(audio, sr, tom, bpm, beat_times, estilo)
+        camadas = [
+            (com_baixo,   lambda: producao_dsp.gerar_baixo_melodico(audio, sr, tom, bpm, beat_times),          0.30, 0.28),
+            (com_bateria, lambda: producao_dsp.gerar_bateria_ritmica(audio, sr, bpm, beat_times),               None, 0.32),
+            (com_acordes, lambda: producao_dsp.gerar_acordes_musicais(audio, sr, tom, bpm, beat_times, estilo), 0.40, 0.16),
+            (com_teclado, lambda: producao_dsp.gerar_teclado_musical(audio, sr, tom, bpm, beat_times, estilo),  0.35, 0.14),
+            (com_solo,    lambda: producao_dsp.gerar_solo_musical(audio, sr, tom, bpm, beat_times, estilo),     0.30, 0.12),
+        ]
+        for ativa, gerar, ducking, ganho in camadas:
+            if not ativa:
+                continue
+            trilha = gerar()
+            if qualidade_pro and ducking is not None:
+                trilha = producao_dsp.aplicar_ducking(trilha, audio, sr, intensidade=ducking)
+            producao_dsp.somar_trilha(mix, trilha, ganho)
+            del trilha
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar produção: {e}")
 
-    if qualidade_pro:
-        if baixo is not None:
-            baixo = producao_dsp.aplicar_ducking(baixo, audio, sr, intensidade=0.30)
-        if acordes is not None:
-            acordes = producao_dsp.aplicar_ducking(acordes, audio, sr, intensidade=0.40)
-        if teclado is not None:
-            teclado = producao_dsp.aplicar_ducking(teclado, audio, sr, intensidade=0.35)
-        if solo is not None:
-            solo = producao_dsp.aplicar_ducking(solo, audio, sr, intensidade=0.30)
-
-    mix = producao_dsp.mixar(audio, baixo, bateria, acordes, teclado, solo)
+    mix = producao_dsp.finalizar_mix(mix)
     if qualidade_pro:
         mix = producao_dsp.aplicar_reverb(mix, sr, quantidade=0.08)
 
     wav_bytes = converter_audio.audio_para_wav_bytes(mix, sr)
-    return Response(
-        content=wav_bytes,
-        media_type="audio/wav",
-        headers={
-            "X-BPM": f"{bpm:.1f}",
-            "X-Tom": tom,
-            "Access-Control-Expose-Headers": "X-BPM, X-Tom",
-        },
-    )
+    del mix, audio
+    liberar_memoria()
+    cabecalhos = {
+        "X-BPM": f"{bpm:.1f}",
+        "X-Tom": tom,
+        "Access-Control-Expose-Headers": "X-BPM, X-Tom, X-Aviso",
+    }
+    if aviso:
+        cabecalhos["X-Aviso"] = aviso
+    return Response(content=wav_bytes, media_type="audio/wav", headers=cabecalhos)
 
 
 @app.post("/api/producao/interpretar")
@@ -454,20 +540,20 @@ def aplicar_edicao_rota(
     audio, sr = carregar_audio_bytes(dados, arquivo.filename or "audio.wav")
     if audio is None:
         raise HTTPException(status_code=400, detail="Não foi possível ler o áudio. Tente outro formato.")
+    audio, aviso = _limitar_duracao(audio, sr)
+    del dados
 
     audio_editado, acoes = edicao_dsp.aplicar_efeitos(
         audio, sr, reduzir_ruido, normalizar, ajustar_tom,
         eq_presenca, compressao, remover_sibilancia, reverb_leve,
     )
     wav_bytes = converter_audio.audio_para_wav_bytes(audio_editado, sr)
-    return Response(
-        content=wav_bytes,
-        media_type="audio/wav",
-        headers={
-            "X-Acoes": ", ".join(acoes),
-            "Access-Control-Expose-Headers": "X-Acoes",
-        },
-    )
+    del audio, audio_editado
+    liberar_memoria()
+    cabecalhos = {"X-Acoes": ", ".join(acoes), "Access-Control-Expose-Headers": "X-Acoes, X-Aviso"}
+    if aviso:
+        cabecalhos["X-Aviso"] = aviso
+    return Response(content=wav_bytes, media_type="audio/wav", headers=cabecalhos)
 
 
 @app.post("/api/edicao/comando")
@@ -479,6 +565,8 @@ def aplicar_edicao_por_comando_rota(arquivo: UploadFile = File(...), comando: st
     audio, sr = carregar_audio_bytes(dados, arquivo.filename or "audio.wav")
     if audio is None:
         raise HTTPException(status_code=400, detail="Não foi possível ler o áudio. Tente outro formato.")
+    audio, aviso = _limitar_duracao(audio, sr)
+    del dados
 
     flags = laranjinha.interpretar_comando_edicao(comando)
     audio_editado, acoes = edicao_dsp.aplicar_efeitos(
@@ -486,14 +574,12 @@ def aplicar_edicao_por_comando_rota(arquivo: UploadFile = File(...), comando: st
         flags["eq_presenca"], flags["compressao"], flags["remover_sibilancia"], flags["reverb_leve"],
     )
     wav_bytes = converter_audio.audio_para_wav_bytes(audio_editado, sr)
-    return Response(
-        content=wav_bytes,
-        media_type="audio/wav",
-        headers={
-            "X-Acoes": ", ".join(acoes),
-            "Access-Control-Expose-Headers": "X-Acoes",
-        },
-    )
+    del audio, audio_editado
+    liberar_memoria()
+    cabecalhos = {"X-Acoes": ", ".join(acoes), "Access-Control-Expose-Headers": "X-Acoes, X-Aviso"}
+    if aviso:
+        cabecalhos["X-Aviso"] = aviso
+    return Response(content=wav_bytes, media_type="audio/wav", headers=cabecalhos)
 
 
 # ══════════════════════════════════════════════════════════════

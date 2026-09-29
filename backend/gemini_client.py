@@ -11,14 +11,18 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 try:
     from google import genai
     from google.genai import types
-    _cliente = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+    # timeout de 40 s por chamada: uma resposta lenta falha rápido e cai pro próximo
+    # modelo, em vez de ficar pendurada até o servidor/proxy derrubar a conexão
+    # (o que aparecia no navegador como "Unexpected end of JSON input").
+    _cliente = (genai.Client(api_key=GEMINI_API_KEY, http_options=types.HttpOptions(timeout=40000))
+                if GEMINI_API_KEY else None)
 except Exception:
     genai = None
     types = None
     _cliente = None
 
-MODELOS_PADRAO = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash"]
-MODELOS_COM_AUDIO = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash"]
+MODELOS_PADRAO = ["gemini-3.5-flash-lite", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash"]
+MODELOS_COM_AUDIO = ["gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-2.5-flash"]
 
 _modelos_cache = None
 
@@ -52,7 +56,9 @@ def listar_modelos():
             # do Gemini (só texto simples via generateContent), então não há
             # mais razão pra evitar os modelos novos por causa da Interactions
             # API — essa exigência era só para tool-use nativo.
-            ordem = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite",
+            # Ordem = do mais rápido/barato pro mais capaz. O "lite" era o modelo do
+            # app Streamlit (rápido); os "flash" maiores "pensam" mais e demoram mais.
+            ordem = ["gemini-3.5-flash-lite", "gemini-3.7-flash", "gemini-3.8-flash",
                      "gemini-3.5-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-2.5-pro"]
             encontrados.sort(key=lambda n: ordem.index(n) if n in ordem else 99)
             _modelos_cache = encontrados
@@ -70,13 +76,18 @@ def gerar(modelo, contents, config=None):
     return _cliente.models.generate_content(model=modelo, contents=contents, config=config)
 
 
-def chamar_texto(prompt):
-    """Chamada simples só de texto, com fallback entre modelos.
+def chamar_texto(prompt, orcamento_s=70):
+    """Chamada simples só de texto, com fallback entre modelos e um ORÇAMENTO
+    total de tempo (não fica tentando modelo após modelo pra sempre).
     Retorna (resposta_do_sdk, None) ou (None, mensagem_de_erro)."""
     if _cliente is None:
         return None, "Gemini não configurado (falta GEMINI_API_KEY)."
+    inicio = time.monotonic()
     ultimo_erro = ""
     for modelo in listar_modelos():
+        if time.monotonic() - inicio > orcamento_s:
+            ultimo_erro = ultimo_erro or "tempo esgotado"
+            break
         try:
             resposta = _cliente.models.generate_content(model=modelo, contents=prompt)
             if resposta and resposta.text and resposta.text.strip():
@@ -84,9 +95,6 @@ def chamar_texto(prompt):
             ultimo_erro = "Resposta vazia"
         except Exception as e:
             ultimo_erro = str(e)
-            # "Interactions API" = esse modelo específico não aceita a chamada
-            # padrão de forma alguma — não adianta tentar de novo, já pula pro
-            # próximo modelo da lista imediatamente.
             continue
     return None, ultimo_erro
 

@@ -61,6 +61,49 @@ def compressor_dinamico(audio, sr, threshold_db=-18.0, ratio=3.0,
     return saida.astype(np.float32)
 
 
+def amostra_de_ruido(audio, sr, janela_s=0.4):
+    """Acha o trecho mais quieto da própria gravação (ex: pausa entre frases) pra
+    servir de "amostra de ruído". É a prática recomendada pelo noisereduce: sem
+    amostra, ele estima o ruído a partir do áudio inteiro — voz incluída — e acaba
+    apagando parte da voz. Só devolve a amostra se ela for realmente bem mais
+    quieta que o resto; senão (canto contínuo, sem pausas), devolve None."""
+    n = int(janela_s * sr)
+    passo = max(1, n // 2)
+    if len(audio) < 4 * n:
+        return None
+    rms = np.array([np.sqrt(np.mean(audio[i:i + n] ** 2)) for i in range(0, len(audio) - n, passo)])
+    mediana = float(np.median(rms))
+    k = int(np.argmin(rms))
+    if rms[k] < 1e-5 or rms[k] > 0.4 * mediana:
+        return None
+    return audio[k * passo:k * passo + n]
+
+
+def pitch_shift_em_blocos(audio, sr, n_steps, bloco_s=20.0, sobreposicao_s=0.5):
+    """Ajuste de tom em blocos de ~20 s, com mistura suave (crossfade) nas emendas.
+    O pitch_shift do librosa no áudio inteiro gastava memória proporcional à
+    duração (medido: +134 MB com 120 s, o que estourava os 512 MB do plano grátis)."""
+    n = len(audio)
+    bloco = int(bloco_s * sr)
+    sob = int(sobreposicao_s * sr)
+    if n <= bloco + 2 * sob:
+        return librosa.effects.pitch_shift(audio, sr=sr, n_steps=n_steps)
+    saida = np.zeros(n, dtype=np.float32)
+    ini = 0
+    while ini < n:
+        a = max(0, ini - sob)
+        b = min(n, ini + bloco + sob)
+        trecho = librosa.effects.pitch_shift(audio[a:b], sr=sr, n_steps=n_steps).astype(np.float32)
+        peso = np.ones(len(trecho), dtype=np.float32)
+        if a > 0:                       # emenda com o bloco anterior: entra suave
+            peso[:2 * sob] = np.linspace(0.0, 1.0, 2 * sob, dtype=np.float32)
+        if b < n:                       # emenda com o próximo bloco: sai suave
+            peso[-2 * sob:] = np.linspace(1.0, 0.0, 2 * sob, dtype=np.float32)
+        saida[a:a + len(trecho)] += trecho * peso
+        ini += bloco
+    return saida
+
+
 def aplicar_efeitos(audio, sr, reduzir_ruido=False, normalizar=False, ajustar_tom=0.0,
                      eq_presenca=False, compressao=False, remover_sibilancia=False,
                      reverb_leve=False):
@@ -80,13 +123,20 @@ def aplicar_efeitos(audio, sr, reduzir_ruido=False, normalizar=False, ajustar_to
             # prop_decrease mais conservador (0.7 em vez do padrão ~1.0) — o padrão
             # tende a introduzir "ruído musical" (artefatos) numa gravação de voz
             # sem trecho de silêncio puro pra calibrar o perfil de ruído.
-            audio = nr.reduce_noise(y=audio, sr=sr, stationary=True, prop_decrease=0.7)
+            # chunk_size menor = bem menos memória (medido: +164 MB -> +42 MB com 120 s)
+            amostra = amostra_de_ruido(audio, sr)
+            if amostra is not None:
+                audio = nr.reduce_noise(y=audio, sr=sr, stationary=True, y_noise=amostra,
+                                        prop_decrease=0.7, chunk_size=100000, padding=5000)
+            else:
+                audio = nr.reduce_noise(y=audio, sr=sr, stationary=True, prop_decrease=0.7,
+                                        chunk_size=100000, padding=5000)
         except Exception:
             pass
 
     if ajustar_tom:
         try:
-            audio = librosa.effects.pitch_shift(audio, sr=sr, n_steps=float(ajustar_tom))
+            audio = pitch_shift_em_blocos(audio, sr, float(ajustar_tom))
             acoes.append(f"ajuste_tom:{float(ajustar_tom):+.1f}")
         except Exception:
             pass
