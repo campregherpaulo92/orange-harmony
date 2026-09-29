@@ -69,85 +69,128 @@ function freqDeNota(nota, calibracao) {
   return calibracao * Math.pow(2, (midi - 69) / 12);
 }
 
-function tocarTom(freq, duracao = 1.2) {
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const master = ctx.createGain();
-  master.gain.value = 0.32;
+// ── Piano sintetizado (soma de harmônicos) ─────────────────────────────────
+// Modelo simples de corda de piano:
+//  • parciais levemente "esticados" (inarmonicidade) — é o brilho típico do piano;
+//  • 2 cordas por parcial, ligeiramente desafinadas — dá o batimento/vida da nota
+//    e o decaimento em dois estágios (queda rápida + cauda longa);
+//  • os agudos morrem antes dos graves, e o timbre vai escurecendo enquanto soa;
+//  • martelada no ataque e um reverb de sala. Sem vibrato (piano de verdade não tem).
+// Quanto a nota "vive": 1.0 = versão longa anterior; menor = nota mais curta. Ajuste fino aqui.
+const PIANO_SUSTENTO = 0.66;
+const PIANO_PARCIAIS = [1.0, 0.78, 0.52, 0.36, 0.26, 0.19, 0.14, 0.10, 0.075, 0.055, 0.04, 0.03, 0.02, 0.015];
 
-  const agora = ctx.currentTime;
-
-  // Reverb sutil (convolução com uma resposta ao impulso curta sintetizada
-  // na hora) — dá "ar" e espaço à nota, tirando o efeito seco de antes.
-  const convolver = ctx.createConvolver();
-  const duracaoIR = 1.4;
-  const bufferIR = ctx.createBuffer(2, Math.floor(ctx.sampleRate * duracaoIR), ctx.sampleRate);
-  for (let canal = 0; canal < 2; canal++) {
-    const dados = bufferIR.getChannelData(canal);
-    for (let i = 0; i < dados.length; i++) {
-      dados[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / dados.length, 2.5);
+// Resposta ao impulso de uma sala média (cauda ~2 s que vai escurecendo), gerada 1 vez.
+function gerarReverbSala(ctx, duracaoS = 2.4) {
+  const sr = ctx.sampleRate;
+  const n = Math.floor(sr * duracaoS);
+  const buf = ctx.createBuffer(2, n, sr);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    let y = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      const alfa = 0.9 - 0.72 * Math.min(1, t / 1.3);           // cauda cada vez mais escura
+      y += alfa * ((Math.random() * 2 - 1) - y);
+      d[i] = t < 0.012 ? 0 : y * Math.exp(-t * 4.6);            // 12 ms de pré-atraso, queda ~1,5 s (RT60)
     }
+    [[0.017, 0.55], [0.029, -0.4], [0.043, 0.3]].forEach(([tt, a]) => { d[Math.floor(sr * (tt + c * 0.003))] += a; });   // primeiras reflexões
   }
-  convolver.buffer = bufferIR;
+  return buf;
+}
 
+// Cadeia de saída do piano: seco + reverb → compressor suave. Devolve o nó de entrada.
+function montarCadeiaPiano(ctx) {
+  const entrada = ctx.createGain();
+  entrada.gain.value = 0.2;      // medido: com valores maiores o ataque (e a escala, com notas sobrepostas) estourava
+  const comp = ctx.createDynamicsCompressor();   // funciona como limitador: segura os picos quando várias notas soam juntas
+  comp.threshold.value = -20; comp.knee.value = 10; comp.ratio.value = 8; comp.attack.value = 0.002; comp.release.value = 0.2;
+  const reverb = ctx.createConvolver();
+  reverb.buffer = gerarReverbSala(ctx);
   const molhado = ctx.createGain();
-  molhado.gain.value = 0.16; // sutil — dá espaço sem "afogar" a afinação
-  master.connect(ctx.destination);
-  master.connect(convolver).connect(molhado).connect(ctx.destination);
+  molhado.gain.value = 0.3;
+  entrada.connect(comp);
+  entrada.connect(reverb).connect(molhado).connect(comp);
+  comp.connect(ctx.destination);
+  return entrada;
+}
 
-  // Vibrato sutil (LFO modulando a frequência de cada harmônico) — tira o
-  // efeito "robótico" de uma nota perfeitamente estática, dando mais
-  // musicalidade, como um instrumento/voz de verdade sustentando a nota.
-  const lfo = ctx.createOscillator();
-  lfo.frequency.value = 5.2;
-  const lfoGain = ctx.createGain();
-  lfoGain.gain.value = freq * 0.006;
-  lfo.connect(lfoGain);
-  lfo.start(agora);
-  lfo.stop(agora + duracao + 0.6);
+// Uma nota de piano. `quando` em segundos do relógio do ctx; `duracao` = quanto ela "vive".
+function sintetizarNotaPiano(ctx, destino, freq, quando, duracao = 4, forca = 1) {
+  const oitavas = Math.log2(freq / 261.63);                        // 0 = dó central
+  const B = 0.00018 + 0.00016 * Math.max(0, oitavas + 1);          // inarmonicidade: sobe nos agudos
+  const tau1 = PIANO_SUSTENTO * Math.min(2.6, Math.max(0.8, 1.5 * Math.pow(261.63 / freq, 0.4)));   // decaimento do fundamental
+  const saida = ctx.createGain();
+  const filtro = ctx.createBiquadFilter();                         // brilho que vai fechando
+  filtro.type = "lowpass"; filtro.Q.value = 0.6;
+  filtro.frequency.setValueAtTime(Math.min(15000, freq * 18), quando);
+  filtro.frequency.setTargetAtTime(Math.max(freq * 3.4, 1100), quando + 0.02, 1.2);
+  filtro.connect(saida);
+  saida.connect(destino);
+  saida.gain.setValueAtTime(1, quando);
+  saida.gain.setValueAtTime(1, quando + duracao - 0.4);
+  saida.gain.linearRampToValueAtTime(0, quando + duracao);        // sai suave, sem clique
 
-  // Harmônicos com leve inarmonicidade (as cordas de piano de verdade têm um
-  // pouquinho de rigidez, então os parciais ficam levemente mais agudos que
-  // múltiplos exatos — isso é o que dá o "brilho" característico do piano,
-  // em vez do tom liso e "quadrado" de uma onda senoidal pura).
-  const harmonicos = [
-    { mult: 1.000, ganho: 1.00, decaimento: duracao * 0.95 },
-    { mult: 2.001, ganho: 0.55, decaimento: duracao * 0.75 },
-    { mult: 3.005, ganho: 0.30, decaimento: duracao * 0.60 },
-    { mult: 4.012, ganho: 0.18, decaimento: duracao * 0.46 },
-    { mult: 5.022, ganho: 0.10, decaimento: duracao * 0.35 },
-    { mult: 6.038, ganho: 0.06, decaimento: duracao * 0.26 },
-  ];
-
-  harmonicos.forEach((h) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = freq * h.mult;
-    lfoGain.connect(osc.frequency); // aplica o mesmo vibrato em todos os harmônicos
-    gain.gain.setValueAtTime(0.0001, agora);
-    gain.gain.exponentialRampToValueAtTime(Math.max(h.ganho, 0.001), agora + 0.006); // ataque rápido, tipo martelada
-    gain.gain.exponentialRampToValueAtTime(0.0001, agora + h.decaimento);
-    osc.connect(gain).connect(master);
-    osc.start(agora);
-    osc.stop(agora + h.decaimento + 0.05);
+  PIANO_PARCIAIS.forEach((amp, idx) => {
+    const n = idx + 1;
+    const f = n * freq * Math.sqrt(1 + B * n * n);
+    if (f > 9000 || f > ctx.sampleRate * 0.45) return;
+    const tau = tau1 / (1 + 0.55 * idx);                           // agudos morrem antes
+    [[-0.9, 1.0, 1.0], [+1.3, 0.5, 1.7]].forEach(([cents, ganhoCorda, mult]) => {   // 2 cordas: rápida e "cauda"
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = f * Math.pow(2, cents / 1200);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, quando);
+      g.gain.linearRampToValueAtTime(amp * ganhoCorda * forca, quando + 0.004);
+      g.gain.setTargetAtTime(0, quando + 0.004, tau * mult);
+      osc.connect(g).connect(filtro);
+      osc.start(quando);
+      osc.stop(quando + duracao + 0.05);
+    });
   });
 
-  // Transiente curto de "martelada" (ruído filtrado nos primeiros ~20ms) —
-  // completa a textura percussiva do ataque de um piano de verdade.
-  const tamanhoBuffer = Math.floor(ctx.sampleRate * 0.02);
-  const buffer = ctx.createBuffer(1, tamanhoBuffer, ctx.sampleRate);
-  const dados = buffer.getChannelData(0);
-  for (let i = 0; i < tamanhoBuffer; i++) dados[i] = (Math.random() * 2 - 1) * (1 - i / tamanhoBuffer);
+  // martelada: sopro curtinho de ruído filtrado no ataque
+  const tam = Math.floor(ctx.sampleRate * 0.035);
+  const buf = ctx.createBuffer(1, tam, ctx.sampleRate);
+  const dados = buf.getChannelData(0);
+  for (let i = 0; i < tam; i++) dados[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / tam, 2);
   const ruido = ctx.createBufferSource();
-  ruido.buffer = buffer;
-  const filtroRuido = ctx.createBiquadFilter();
-  filtroRuido.type = "bandpass";
-  filtroRuido.frequency.value = freq * 2;
-  filtroRuido.Q.value = 0.7;
-  const ganhoRuido = ctx.createGain();
-  ganhoRuido.gain.value = 0.15;
-  ruido.connect(filtroRuido).connect(ganhoRuido).connect(master);
-  ruido.start(agora);
+  ruido.buffer = buf;
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass"; bp.frequency.value = Math.min(6000, freq * 2.6); bp.Q.value = 0.8;
+  const gr = ctx.createGain();
+  gr.gain.value = 0.16 * forca;
+  ruido.connect(bp).connect(gr).connect(saida);
+  ruido.start(quando);
+}
+
+// Um contexto de áudio só (reutilizado) — antes cada nota criava um novo.
+let _pianoCtx = null;
+let _pianoEntrada = null;
+function obterPiano() {
+  if (!_pianoCtx) {
+    _pianoCtx = new (window.AudioContext || window.webkitAudioContext)();
+    _pianoEntrada = montarCadeiaPiano(_pianoCtx);
+  }
+  if (_pianoCtx.state === "suspended") _pianoCtx.resume();
+  return { ctx: _pianoCtx, entrada: _pianoEntrada };
+}
+
+// Nota de referência (~3 s, com cauda natural)
+function tocarTom(freq, duracao = 3) {
+  const { ctx, entrada } = obterPiano();
+  sintetizarNotaPiano(ctx, entrada, freq, ctx.currentTime + 0.03, duracao, 1);
+}
+
+// Escala: as notas se sobrepõem (o pedal do piano), como tocada de verdade
+function tocarEscalaPiano(freqs) {
+  const { ctx, entrada } = obterPiano();
+  const t0 = ctx.currentTime + 0.05;
+  freqs.forEach((freq, i) => {
+    const ultima = i === freqs.length - 1;
+    sintetizarNotaPiano(ctx, entrada, freq, t0 + i * 0.62, ultima ? 3.4 : 1.8, 0.9 + 0.1 * (i / (freqs.length - 1)));
+  });
 }
 
 function calibracaoAtual() {
@@ -172,13 +215,7 @@ function inicializarTomReferencia() {
     const midiBase = 12 * (oitavaBase + 1) + NOMES_NOTAS.indexOf(nomeBase);
     const escalaMaior = [0, 2, 4, 5, 7, 9, 11, 12];
     const calib = calibracaoAtual();
-    let atraso = 0;
-    escalaMaior.forEach((intervalo) => {
-      const midi = midiBase + intervalo;
-      const freq = calib * Math.pow(2, (midi - 69) / 12);
-      setTimeout(() => tocarTom(freq, 0.5), atraso);
-      atraso += 550;
-    });
+    tocarEscalaPiano(escalaMaior.map((intervalo) => calib * Math.pow(2, (midiBase + intervalo - 69) / 12)));
   });
 }
 
