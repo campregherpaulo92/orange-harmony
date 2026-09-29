@@ -10,7 +10,10 @@
 #   Face (YuE2-3B) que o app original usava — não a API genérica da HF.
 # ══════════════════════════════════════════════════════════════
 import os
+import re
+import time
 import tempfile
+import unicodedata
 import numpy as np
 
 import gemini_client
@@ -119,37 +122,133 @@ def gerar_prompt_musical(letra, estilo, tema=None, descricao_referencia=None):
     return None, erro or "Resposta vazia do Gemini."
 
 
+# ── Adaptação da letra pro formato que o YuE2 entende ──────────────────────
+# O modelo espera seções entre colchetes ([Verse], [Chorus]…). A nossa letra vem
+# do Gemini com títulos "# Verso 1 / # Refrão" e cifras entre colchetes ([Am] [F]),
+# que o modelo confundiria com nomes de seção.
+_CIFRA = re.compile(r"\[\s*[A-G][#b♯♭]?(?:maj|min|dim|aug|sus|add|m|M)?\d*(?:/[A-G][#b♯♭]?)?\s*\]")
+_SECOES = [                       # (palavras-chave sem acento, rótulo do YuE2) — ordem importa
+    (("pre-refrao", "pre refrao", "pre-chorus", "pre chorus", "prechorus"), "[Pre-Chorus]"),
+    (("refrao", "chorus", "coro", "estribilho"), "[Chorus]"),
+    (("verso", "verse", "estrofe", "strofe"), "[Verse]"),
+    (("ponte", "bridge"), "[Bridge]"),
+    (("intro",), "[Intro]"),
+    (("solo", "instrumental", "interludio"), "[Instrumental]"),
+    (("outro", "final", "encerramento", "fim"), "[Outro]"),
+]
+
+
+def _sem_acento(texto):
+    return "".join(c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn").lower()
+
+
+def preparar_letra_para_yue(letra, limite=12000):
+    """Troca '# Verso 1' por '[Verse]', '# Refrão' por '[Chorus]' etc., tira as cifras
+    e respeita o limite de 12.000 caracteres do Space."""
+    linhas_saida = []
+    for bruta in (letra or "").splitlines():
+        linha = _CIFRA.sub("", bruta).strip()
+        linha = re.sub(r"[ \t]{2,}", " ", linha)
+        eh_titulo = linha.startswith("#") or (linha.startswith("[") and linha.endswith("]")) or bool(
+            re.fullmatch(r"[A-Za-zÀ-ú\- ]{3,20}\s*\d*\s*:", linha))
+        if eh_titulo:
+            chave = _sem_acento(linha.strip("#[]: ").strip())
+            rotulo = next((r for palavras, r in _SECOES if any(chave.startswith(w) for w in palavras)), None)
+            if rotulo:
+                if linhas_saida and linhas_saida[-1] != "":
+                    linhas_saida.append("")
+                linhas_saida.append(rotulo)
+                continue
+            if linha.startswith("#"):      # título qualquer (ex: "# Minha Música") não é letra
+                continue
+        linhas_saida.append(linha)
+    texto = re.sub(r"\n{3,}", "\n\n", "\n".join(linhas_saida)).strip()
+    if texto and not texto.lstrip().startswith("["):
+        texto = "[Verse]\n" + texto
+    return texto[:limite]
+
+
+# ── Conexão com o Space da Hugging Face ────────────────────────────────────
+def _token_hf():
+    """O token só vale se foi mesmo preenchido (não o texto de exemplo do notebook)."""
+    t = (os.environ.get("HF_TOKEN") or HF_TOKEN or "").strip()
+    return t if len(t) >= 10 and t != "SENHA_CHAVE_HF" else ""
+
+
+def _conectar_space(tentativas=3, espera_s=8):
+    """Cria o cliente do Space. Usa o token (o parâmetro chama `token` nas versões novas
+    do gradio_client e `hf_token` nas antigas — antes o código errava o nome e conectava
+    SEM token, em silêncio) e tenta de novo se o Space estiver iniciando."""
+    import inspect
+    from gradio_client import Client
+
+    parametros = inspect.signature(Client.__init__).parameters
+    argumentos = {}
+    token = _token_hf()
+    if token:
+        argumentos["token" if "token" in parametros else "hf_token"] = token
+    if "httpx_kwargs" in parametros:
+        argumentos["httpx_kwargs"] = {"timeout": 60}
+
+    ultimo_erro = None
+    for n in range(tentativas):
+        try:
+            return Client(ESPACO_YUE2, **argumentos), None
+        except Exception as e:
+            ultimo_erro = e
+            if n < tentativas - 1:
+                time.sleep(espera_s * (n + 1))
+    return None, ultimo_erro
+
+
+def _explicar_erro(erro, etapa):
+    """Traduz o erro técnico da Hugging Face pra uma frase que diz o que fazer."""
+    bruto = str(erro)
+    b = bruto.lower()
+    sem_token = "" if _token_hf() else " (O HF_TOKEN não está configurado no Render — configure pra ter cota de GPU.)"
+    if "quota" in b or "exceeded" in b and "gpu" in b:
+        return ("Acabou a cota de GPU grátis da Hugging Face por hoje — contas gratuitas têm só alguns "
+                "minutos de GPU por dia, e cada música consome 2 a 5. Tente amanhã, ou use uma conta PRO." + sem_token)
+    if "401" in b or "unauthorized" in b or "invalid" in b and "token" in b or "credentials" in b:
+        return "A Hugging Face recusou o seu HF_TOKEN (inválido ou sem permissão). Gere um novo em huggingface.co/settings/tokens."
+    if etapa == "conectar" or "gradio config" in b or "connect" in b or "timed out" in b or "502" in b or "503" in b:
+        return ("O estúdio de música da Hugging Face não respondeu — o Space costuma estar reiniciando ou "
+                "sobrecarregado (é um Space público e disputado). Tentei 3 vezes; tente de novo em alguns minutos." + sem_token)
+    return f"Erro na geração da música: {bruto[:250]}" + sem_token
+
+
 def gerar_musica_ia(prompt_musical, letra):
     """Gera a música completa (com voz e letra) via YuE2-3B, no Hugging Face,
     usando gradio_client — o mesmo espaço/API que o app original usava (não a
     API genérica de Inference da Hugging Face, que não tem esse modelo)."""
     try:
-        from gradio_client import Client
+        import gradio_client  # noqa: F401
     except ImportError:
         return None, "Biblioteca ausente no servidor (gradio_client)."
-
-    try:
-        try:
-            cliente = Client(ESPACO_YUE2, hf_token=HF_TOKEN or None)
-        except TypeError:
-            cliente = Client(ESPACO_YUE2)
-    except Exception as e:
-        return None, f"Não consegui conectar ao estúdio da IA (Hugging Face): {str(e)[:300]}"
 
     if not letra or not letra.strip():
         return None, "Gere a letra primeiro (botão 'Gerar letra') — ela é usada na composição."
 
+    cliente, erro = _conectar_space()
+    if cliente is None:
+        return None, _explicar_erro(erro, "conectar")
+
+    estilo = (prompt_musical or "").strip()[:1000]          # limite do Space: 1.000 caracteres
+    letra_yue = preparar_letra_para_yue(letra)
+    if not estilo:
+        estilo = "Pop, warm vocal, acoustic guitar, steady drums"
+
     try:
         resultado = cliente.predict(
-            prompt_musical,
-            letra,
-            "full",
-            16,
-            42,
+            estilo,        # style
+            letra_yue,     # lyrics (com seções [Verse]/[Chorus])
+            "full",        # planning_mode: melodia + acordes
+            16,            # render_quality: rápido (16 passos)
+            42,            # seed
             api_name="/generate_song",
         )
     except Exception as e:
-        return None, f"Erro na geração da música: {str(e)[:300]}"
+        return None, _explicar_erro(e, "gerar")
 
     try:
         caminho = resultado
@@ -164,4 +263,4 @@ def gerar_musica_ia(prompt_musical, letra):
         wav_bytes = converter_audio.audio_para_wav_bytes(audio_ia.astype(np.float32), int(sr_ia))
         return wav_bytes, None
     except Exception as e:
-        return None, f"Resposta inesperada da IA: {str(e)[:300]}"
+        return None, f"A música foi gerada, mas não consegui ler o arquivo devolvido: {str(e)[:250]}"
