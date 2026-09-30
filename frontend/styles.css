@@ -108,6 +108,8 @@ body {
   position: relative;
   padding: 24px 32px 60px;
   max-width: 980px;
+  overflow-x: hidden;
+  overflow-x: clip;             /* o brilho decorativo pulsa e passava 1-3 px da tela (rolagem lateral no celular) */
 }
 
 .oh-glow {
@@ -115,7 +117,7 @@ body {
   top: -40px;
   left: 50%;
   transform: translateX(-50%);
-  width: 480px;
+  width: min(480px, 100%);      /* em telas estreitas não passa da largura do conteúdo (antes gerava rolagem lateral) */
   height: 220px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(249,115,22,0.24) 0%, transparent 70%);
@@ -239,6 +241,9 @@ select option {
 .oh-radio-group { display: flex; gap: 16px; align-items: center; }
 .oh-radio { flex-direction: row !important; align-items: center; gap: 6px !important; font-weight: 400 !important; color: #f2f2f2 !important; }
 .oh-radio input { accent-color: var(--oh-orange); }
+/* botões de rádio (ex: 440 / 442) não devem herdar a largura mínima dos campos da linha — estouravam telas estreitas */
+.oh-row .oh-radio-group .oh-radio { flex: 0 1 auto; min-width: 0; }
+.oh-radio-group { flex-wrap: wrap; }
 
 /* Dropzone de upload — botão + hint, empilhados, sem sobreposição */
 .oh-dropzone {
@@ -1104,3 +1109,70 @@ canvas#curvaPitch { width: 100%; background: #0d0d0d; border-radius: 12px; }
 .oh-escala-pct { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 2.4rem; color: var(--oh-orange); }
 .oh-barra { height: 10px; border-radius: 10px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 8px; }
 .oh-barra-cheia { height: 100%; background: linear-gradient(90deg, var(--oh-orange-dark), var(--oh-orange)); border-radius: 10px; transition: width .4s ease; }
+
+
+/* ══════════ Orange News (jornal) ══════════ */
+.oh-jornal {
+  --tinta: #1d1b18; --papel: #f3ecd9; --laranja: #d9580a; --linha: rgba(29,27,24,0.28);
+  max-width: 1040px; margin: 0 auto; padding: 26px 34px 28px; color: var(--tinta);
+  background: radial-gradient(1200px 500px at 20% -10%, rgba(255,255,255,0.55), transparent 60%), linear-gradient(180deg, #f6f0de, var(--papel));
+  border-radius: 6px; box-shadow: 0 18px 60px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(0,0,0,0.06);
+  font-family: Georgia, 'Times New Roman', serif;
+}
+.oh-jornal-cabeca { text-align: center; border-bottom: 4px double var(--tinta); padding-bottom: 12px; }
+.oh-jornal-linha-topo { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; padding-bottom: 6px; border-bottom: 1px solid var(--linha); }
+.oh-jornal-titulo { font-family: 'Playfair Display', Georgia, serif; font-weight: 900; font-size: clamp(2.6rem, 8vw, 5rem); line-height: 1; margin: 12px 0 4px; letter-spacing: -0.02em; color: var(--tinta); }
+.oh-jornal-titulo span { color: var(--laranja); font-style: italic; }
+.oh-jornal-lema { font-style: italic; font-size: 0.95rem; color: #4d463c; }
+.oh-jornal-secao { display: block; font-family: 'Nunito', sans-serif; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--laranja); margin-bottom: 4px; }
+.oh-jornal-manchete { padding: 20px 0 18px; border-bottom: 1px solid var(--linha); }
+.oh-jornal-manchete-titulo { font-family: 'Playfair Display', Georgia, serif; font-weight: 900; font-size: clamp(1.7rem, 4.2vw, 2.7rem); line-height: 1.1; margin: 2px 0 10px; }
+.oh-jornal-manchete-texto { font-size: 1.1rem; line-height: 1.65; margin: 0 0 12px; max-width: 78ch; }
+.oh-jornal-manchete-texto::first-letter { font-family: 'Playfair Display', Georgia, serif; font-weight: 900; font-size: 3.3rem; float: left; line-height: 0.85; padding: 4px 8px 0 0; color: var(--laranja); }
+.oh-jornal-colunas { display: grid; grid-template-columns: repeat(3, 1fr); }
+.oh-jornal-artigo { padding: 16px 18px; border-bottom: 1px solid var(--linha); border-right: 1px solid var(--linha); }
+.oh-jornal-artigo:nth-child(3n) { border-right: none; }
+.oh-jornal-artigo:nth-child(3n+1) { padding-left: 0; }
+.oh-jornal-artigo:nth-child(3n) { padding-right: 0; }
+@media (max-width: 900px) {
+  .oh-jornal-colunas { grid-template-columns: repeat(2, 1fr); }
+  .oh-jornal-artigo, .oh-jornal-artigo:nth-child(3n), .oh-jornal-artigo:nth-child(3n+1) { padding: 16px 14px; border-right: 1px solid var(--linha); }
+  .oh-jornal-artigo:nth-child(2n) { border-right: none; padding-right: 0; }
+  .oh-jornal-artigo:nth-child(2n+1) { padding-left: 0; }
+}
+@media (max-width: 600px) {
+  .oh-jornal { padding: 46px 16px 22px; }          /* espaço pro botão ☰ do menu, que fica por cima no celular */
+  .oh-jornal-colunas { grid-template-columns: 1fr; }
+  .oh-jornal-artigo, .oh-jornal-artigo:nth-child(2n), .oh-jornal-artigo:nth-child(2n+1) { padding: 14px 0; border-right: none; }
+}
+.oh-jornal-manchete-menor { font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: 1.25rem; line-height: 1.2; margin: 2px 0 8px; }
+.oh-jornal-texto { font-size: 0.97rem; line-height: 1.6; margin: 0 0 10px; color: #2b2823; }
+.oh-jornal-legenda { font-size: 0.75rem; font-style: italic; color: #6b6255; margin: 4px 0 8px; }
+.oh-jornal-botao { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.78rem; background: transparent; color: var(--tinta); border: 1.5px solid var(--tinta); border-radius: 4px; padding: 6px 12px; cursor: pointer; transition: background .15s ease, color .15s ease; }
+.oh-jornal-botao:hover { background: var(--laranja); border-color: var(--laranja); color: #fff; }
+.oh-jornal-botao-mini { padding: 3px 10px; font-size: 0.72rem; }
+.oh-jornal-levada { margin: 20px 0; padding: 16px 20px 14px; border: 2px solid var(--tinta); border-radius: 4px; background: rgba(29,27,24,0.04); }
+.oh-levada-grade { display: grid; gap: 4px; margin: 10px 0 8px; }
+.oh-levada-tempo { text-align: center; font-size: 0.78rem; color: #6b6255; font-family: 'Nunito', sans-serif; font-weight: 700; }
+.oh-levada-golpe { text-align: center; min-height: 44px; line-height: 44px; border: 1px dashed var(--linha); border-radius: 6px; font-size: 1.5rem; font-weight: 800; font-family: 'Nunito', sans-serif; overflow: hidden; }
+.oh-levada-golpe-ativo { background: var(--tinta); color: #f3ecd9; border-style: solid; border-color: var(--tinta); }
+.oh-levada-golpe-ativo:not(:empty) { font-size: clamp(0.62rem, 1.6vw, 1.5rem); }
+.oh-jornal-fora { margin-top: 22px; padding-top: 14px; border-top: 4px double var(--tinta); }
+.oh-jornal-fora-cab { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.oh-jornal-fora-titulo { font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: 1.35rem; margin: 0; }
+.oh-jornal-fora-lista { display: grid; grid-template-columns: repeat(2, 1fr); column-gap: 30px; margin-top: 8px; }
+@media (max-width: 760px) { .oh-jornal-fora-lista { grid-template-columns: 1fr; } }
+.oh-jornal-noticia { padding: 12px 0; border-bottom: 1px dotted var(--linha); }
+.oh-jornal-noticia-titulo { font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: 1.08rem; line-height: 1.25; margin: 2px 0 6px; }
+.oh-jornal-link { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.8rem; color: #b34708; text-decoration: underline; text-underline-offset: 3px; }
+.oh-jornal-link:hover { color: var(--laranja); }
+.oh-jornal-vazio, .oh-jornal-carregando { grid-column: 1 / -1; font-style: italic; color: #5b5346; margin: 10px 0; }
+.oh-jornal-carregando { animation: oh-piscar 1.4s ease-in-out infinite; }
+@keyframes oh-piscar { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+.oh-jornal-rodape { margin: 20px 0 0; padding-top: 10px; border-top: 1px solid var(--linha); font-size: 0.74rem; font-style: italic; color: #6b6255; line-height: 1.5; }
+
+
+/* tabelas largas (ex: Histórico) rolam dentro do cartão em vez de estourar a tela do celular */
+@media (max-width: 800px) {
+  .oh-table { display: block; max-width: 100%; overflow-x: auto; }
+}

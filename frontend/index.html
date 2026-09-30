@@ -7,7 +7,7 @@
 <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -31,6 +31,7 @@
       <button class="oh-nav-item" data-page="producao">🎛️ <span>Produtor</span></button>
       <button class="oh-nav-item" data-page="edicao">✨ <span>Edição Vocal Inteligente</span></button>
       <button class="oh-nav-item" data-page="songwriter">🤖 <span>Songwriter</span></button>
+      <button class="oh-nav-item" data-page="news">📰 <span>Newsletter</span></button>
     </nav>
     <div class="oh-sidebar-resize" id="sidebarResize"></div>
   </aside>
@@ -383,6 +384,22 @@
         </div>
         <p id="acordeBuscaInfo" class="oh-hint"></p>
         <div id="acordePosicoes" class="oh-acorde-posicoes"></div>
+      </div>
+    </section>
+
+    <!-- ── PÁGINA: NEWSLETTER (Orange News) ── -->
+    <section class="oh-page" id="page-news">
+      <div class="oh-jornal">
+        <header class="oh-jornal-cabeca">
+          <div class="oh-jornal-linha-topo">
+            <span id="jornalEdicao">Edição nº —</span>
+            <span id="jornalData">—</span>
+            <span>Orange Harmony</span>
+          </div>
+          <h1 class="oh-jornal-titulo">Orange <span>News</span></h1>
+          <div class="oh-jornal-lema">O jornal de quem estuda, canta, toca e compõe</div>
+        </header>
+        <div id="jornalCorpo"><p class="oh-jornal-carregando">Preparando a edição de hoje…</p></div>
       </div>
     </section>
 
@@ -792,5 +809,6 @@
 <script src="estudio.js"></script>
 <script src="songwriter.js"></script>
 <script src="acordes.js"></script>
+<script src="news.js"></script>
 </body>
 </html>
