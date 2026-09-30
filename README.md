@@ -1,9 +1,18 @@
 # 🍊 Orange Harmony — Coaching Vocal com IA
 
-Aplicação completa de coaching vocal: analisa sua voz em tempo real, detecta afinação, vibrato, sustentação e pausas respiratórias, gera devolutiva pedagógica com IA, monta produções musicais, separa stems num mini-estúdio (DAW) e compõe músicas do zero com o Songwriter — tudo isso com a Laranjinha, uma assistente de IA que enxerga e age sobre qualquer parte do app.
+Aplicação completa de coaching vocal e composição: analisa sua voz, detecta afinação, vibrato e sustentação, gera devolutiva pedagógica com IA, identifica acordes no braço do violão, monta produções musicais, separa stems num mini-estúdio (DAW) e compõe músicas do zero com o Songwriter — tudo isso com a **Laranjinha**, uma assistente de IA que enxerga e age sobre qualquer parte do app.
 
-🔗 Versão antiga (Streamlit, mantida como referência): [orange-harmony.streamlit.app](https://orange-harmony.streamlit.app)
-🖥️ Versão atual: FastAPI + HTML/JS puro, rodando via Google Colab (guia completo mais abaixo)
+🌐 **App no ar:** [orange-harmony.onrender.com](https://orange-harmony.onrender.com) *(plano gratuito — se ficar parado, a primeira abertura pode levar cerca de 1 minuto)*
+🕰️ **Versão antiga (Streamlit, mantida como referência):** [orange-harmony.streamlit.app](https://orange-harmony.streamlit.app)
+
+---
+
+## 📸 Telas
+
+| Acordes | Orange Studio |
+|---|---|
+| ![Aba Acordes identificando um Am7](screenshots/acordes.png) | ![Card do separador de stems no Estúdio](screenshots/estudio-separador.png) |
+| Monte o acorde no braço e veja o nome, as notas, as tonalidades e as escalas | O separador de stems roda no Colab; o card mostra sozinho se ele está ligado |
 
 ---
 
@@ -11,90 +20,174 @@ Aplicação completa de coaching vocal: analisa sua voz em tempo real, detecta a
 
 | Módulo | Descrição |
 |---|---|
-| 🎵 **Análise de Voz** | Pitch (F0), nota predominante, desvio em cents, % de afinação, BPM e tom |
-| 🎸 **Afinador** | Multi-instrumento, 11 afinações (violão, 7 cordas, ukulele, drop tunings), 440/442Hz |
-| 🎯 **Vibrato** | Taxa (Hz), extensão (cents), periodicidade e classificação |
-| 🤖 **Professor de IA** | Devolutiva pedagógica via Google Gemini (pontos fortes, melhorias, exercício) |
-| 📊 **Histórico** | Evolução salva no Firebase Firestore, com filtro por análise |
-| 🎼 **Composições** | Letra com cifras, prévia colorida, versionamento |
-| ✨ **Edição Vocal** | EQ, compressão, redução de ruído, tom, reverb — por checkbox ou por comando em português interpretado por IA |
-| 🎛️ **Produção** | Backing track completo (baixo, bateria, acordes, teclado, solo) em 20 estilos, com assistente de IA que sugere a configuração a partir de uma descrição |
-| 🎚️ **Orange Studio** | Mini-DAW: separação de stems (voz/instrumental), forma de onda + espectro ao vivo, mute/solo/volume, corte e deslocamento por faixa (com desfazer), renomear faixas, upload/download individual por faixa |
-| 🖋️ **Songwriter** | Letra original em português (Gemini), referência sonora analisada por IA (grava/sobe áudio e a IA descreve o estilo), prompt musical rico, geração de música completa via Hugging Face (YuE2) |
-| 🍊 **Laranjinha** | Assistente de IA multi-chat, com memória entre conversas e capacidade de agir: avalia gravações, gera produções, aplica edições, salva composições, renomeia/exclui — tudo por comando de texto |
+| 📋 **Avaliação** | 5 exercícios vocais (nota grave, aguda, confortável, glissando, frase) que geram o perfil: classificação, extensão e tessitura. O professor usa esse perfil nas análises |
+| 🎵 **Estudo** | Análise de voz: pitch (F0), nota predominante, desvio em cents, % de afinação, vibrato (taxa, extensão, periodicidade), curva de pitch, BPM e tom. Devolutiva do **Professor de IA** (Gemini). Tom de referência e escala maior em **piano sintetizado** |
+| 🎸 **Afinador** | 11 afinações (violão, 7 cordas, ukulele, drop tunings, open tunings), calibração 440/442 Hz, agulha em tempo real |
+| 🎶 **Acordes** | Braço de violão clicável: você marca as notas e o app diz o **nome do acorde** (com alternativas), as **notas**, as **tonalidades** onde ele é diatônico (com o grau, ex: vi7) e as **escalas** que dá pra tocar por cima. Também **procura por nome** (Am7, C7M, F#m, G/B…) e mostra posições no braço. Toca o acorde (violão sintetizado), insere na composição e leva a pergunta pra Laranjinha |
+| 🎙️ **Biblioteca** | Grava ou sobe áudios, salva no Firebase Storage e lista as gravações |
+| 📊 **Histórico** | Evolução das análises salvas no Firestore, com filtro por análise e devolutiva |
+| 🎼 **Composições** | Letra com cifras `[Am]` e seções `#`, prévia colorida, versionamento |
+| 🔄 **Conversor** | WAV, MP3, FLAC, OGG e M4A, vários formatos de uma vez |
+| 🎛️ **Produtor** | Backing track com baixo, bateria, acordes, teclado e solo em **20 estilos** (Pop, Rock, Balada, Sertanejo, Funk, MPB, Gospel, Reggae, Blues, Jazz, Forró, Eletrônica, Samba, Pagode, Axé, Bossa Nova, Country, R&B, Trap e Metal). Um assistente de IA sugere a configuração a partir de uma frase |
+| ✨ **Edição Vocal Inteligente** | EQ de presença, compressão, redução de ruído, sibilância, ajuste de tom e reverb — por checkbox ou por **comando em português** interpretado por IA |
+| 🤖 **Songwriter** | Letra original em português (Gemini), referência sonora analisada por IA, prompt musical e geração da música completa via Hugging Face (YuE2) |
+| 🍊 **Laranjinha** | Assistente de IA multi-chat, com memória entre conversas, que **age**: avalia gravações, gera produções, aplica edições, salva composições, renomeia e exclui, e consulta o motor de acordes |
+| 🎚️ **Orange Studio** | Mini-DAW: separação de stems (voz e instrumental), forma de onda e espectro ao vivo, mute/solo/volume, corte e deslocamento por faixa (com desfazer), renomear faixas, substituir e baixar por faixa, e um agente de IA que aplica ajustes por texto |
+
+---
+
+## 🏗️ Como as peças se encaixam
+
+```
+ Navegador ──► Render (FastAPI + front-end) ──► Firebase (Firestore + Storage)
+                    │                                   ▲
+                    ├──► Google Gemini                  │  fila de trabalhos
+                    └──► Hugging Face (YuE2)            │  + batida de coração
+                                                Google Colab (Demucs) ─┘
+```
+
+- **Render** hospeda o app (front-end e API no mesmo endereço). Um monitor gratuito (UptimeRobot) checa o endereço a cada 5 minutos para o serviço não dormir.
+- **Firebase** guarda histórico, composições, chats e gravações.
+- **Separação de stems:** o Demucs não cabe nos 512 MB do plano gratuito, então roda no **Google Colab**. O app e o Colab conversam pelo Firebase: o app deixa o áudio no Storage e cria um trabalho no Firestore; o Colab (ligado) pega, separa e devolve os stems em MP3. O card do Estúdio descobre sozinho se o Colab está ligado (ele avisa a cada ~20 s). **Não há link para copiar e colar.**
+
+---
+
+## ⚠️ Limites do plano gratuito
+
+| Assunto | O que acontece |
+|---|---|
+| **Memória e CPU** (512 MB, 0,1 vCPU) | Análise, Produção e Edição processam no máximo os **primeiros 120 segundos** do áudio, e a tela avisa quando corta. Em testes locais, os picos ficaram em torno de 374 MB (análise), 435 MB (produção) e 460 MB (edição) com áudios de 3 min |
+| **Servidor dorme** | Depois de 15 min sem acesso. O monitor de 5 min evita isso |
+| **Separar stems** | Precisa do Colab ligado (veja abaixo). Sem ele, o Estúdio mostra o card explicando o que fazer |
+| **Songwriter (música)** | A geração roda numa GPU compartilhada da Hugging Face, cuja cota diária é pequena no nível gratuito — conta grátis rende poucas músicas por dia. O modelo lista apenas inglês e chinês, então letras em português podem sair menos naturais |
+| **Gemini** | Uma chave do nível gratuito tem limites de uso por minuto e por dia |
 
 ---
 
 ## 🛠️ Stack Tecnológica
 
-- **Backend**: Python 3.10+, FastAPI, Uvicorn
-- **Frontend**: HTML/CSS/JavaScript puro (sem framework), Web Audio API
-- **Áudio**: Librosa, NumPy, SciPy, Soundfile, Noisereduce, Pydub
-- **Separação de stems**: Demucs (modelo `htdemucs`, local)
-- **IA de texto/áudio**: Google Gemini (`google-genai`) — devolutiva, Laranjinha, Songwriter, interpretação de comandos
-- **IA de geração musical**: Hugging Face (`gradio_client`, espaço `mrfakename/yue2-3b`)
-- **Persistência**: Firebase Firestore (histórico, composições, chats) + Firebase Storage (gravações, plano Blaze)
-- **Execução**: Google Colab (notebook com todas as células prontas — veja "Como rodar")
+- **Backend:** Python, FastAPI, Uvicorn
+- **Frontend:** HTML, CSS e JavaScript puro (sem framework), Web Audio API
+- **Áudio:** Librosa, NumPy, SciPy, Soundfile, Noisereduce, Pydub, `imageio-ffmpeg` (ffmpeg embutido)
+- **Separação de stems:** Demucs (`htdemucs`), no Colab (ou local, se o servidor tiver torch e demucs instalados)
+- **IA de texto e áudio:** Google Gemini (`google-genai`) — devolutiva, Laranjinha, Songwriter e interpretação de comandos. O app descobre os modelos disponíveis na chave e tenta do mais rápido ao mais capaz
+- **IA de geração musical:** Hugging Face (`gradio_client`, espaço `mrfakename/yue2-3b`)
+- **Persistência:** Firebase Firestore e Storage (plano Blaze)
+- **Hospedagem:** Render (serviço web) + Google Colab (separador de stems)
 
 ---
 
-## 🆕 Atualizações mais recentes
+## 🚀 Publicar no Render
 
-**Edição Vocal — bug de qualidade corrigido**
-O "EQ de presença" e a "Compressão" antigos estavam degradando o som em vez de melhorar (medido: o EQ derrubava 91% do pico e 93% da frequência fundamental da voz; a compressão introduzia 12.6% de distorção harmônica espúria). Foram reescritos com processamento de áudio de verdade — um EQ paramétrico peaking e um compressor com envelope (attack/release/ratio) — e a normalização final agora sempre roda no fim da cadeia, então a edição nunca mais deixa o resultado mais baixo que o original.
+1. Crie um **Web Service** apontando para este repositório.
+2. Configure:
+   - **Root Directory:** `backend`
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
+3. Em **Environment**, adicione as variáveis:
 
-**Songwriter reescrito**
-Passou a usar `gradio_client` conectando no espaço `mrfakename/yue2-3b` na Hugging Face — a mesma integração que o app original usava, em vez de uma API genérica incompatível. A letra em português (gerada pelo Gemini, considerando o perfil vocal do usuário) virou a fonte principal da composição. Foi adicionada a análise de referência sonora: um trecho gravado ou enviado é ouvido pelo Gemini, que descreve estilo, clima e instrumentação — isso entra automaticamente no prompt de geração.
+| Variável | Para quê |
+|---|---|
+| `GEMINI_API_KEY` | Chave do [Google AI Studio](https://aistudio.google.com/apikey) (Professor, Laranjinha, Songwriter) |
+| `HF_TOKEN` | Token da [Hugging Face](https://huggingface.co/settings/tokens), só para gerar música no Songwriter |
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | Conteúdo **inteiro** do `firebase_service_account.json` |
+| `FIREBASE_STORAGE_BUCKET` | Nome do bucket do Firebase Storage |
+| `COLAB_SEPARADOR_URL` | *(opcional)* endereço do notebook, se você mover ele de lugar |
 
-**Produção musical expandida**
-Foram adicionados 8 estilos musicais novos (total de 20, incluindo Samba, Pagode, Axé, Bossa Nova, Trap, entre outros), duas camadas de instrumento novas (Teclado, com acordes arpejados, e Solo, com linha melódica), e um assistente de IA que sugere toda a configuração (estilo e instrumentos) a partir de uma frase descrevendo o resultado desejado.
-
-**Tom de referência mais musical**
-A síntese do tom de referência (aba Estudo) ganhou vibrato sutil e reverb leve, saindo de um som seco e sintético pra algo mais próximo de um instrumento de verdade.
-
-**Orange Studio — recursos de DAW**
-- Espectro de frequências ao vivo durante a reprodução (antes só existia a forma de onda estática)
-- Nomes de faixa editáveis — a Laranjinha reconhece o nome mencionado na mensagem (ex: "abaixa o volume da guitarra") sem precisar trocar de menu
-- Corte (início/fim) e deslocamento (adiantar/atrasar) por faixa, com desfazer de 1 nível
-- Upload de substituição e download individual por faixa
+> 🔒 **Nunca** coloque chaves ou o JSON do Firebase no repositório. Elas vivem só nas variáveis de ambiente.
 
 ---
 
-## 🚀 Como rodar (Google Colab)
+## 🎚️ Ligar o separador de stems (Colab)
 
-O app roda inteiro dentro do Google Colab, sem precisar de instalação local:
+O botão do card do Estúdio abre o notebook direto do GitHub. Na primeira vez:
 
-1. Abra o notebook `orange_harmony_backend_colab.ipynb` no Google Colab
-2. Execute as células na ordem (▶️ em cada uma)
-3. Na célula de credenciais, cole sua chave do [Google AI Studio](https://aistudio.google.com/apikey) (Gemini) e, opcionalmente, um token da [Hugging Face](https://huggingface.co/settings/tokens) (necessário só pra gerar música de verdade no Songwriter)
-4. Suba o arquivo `firebase_service_account.json` quando solicitado
-5. Ao rodar a célula do servidor, um link público aparece — é o app rodando
+1. *(opcional, bem mais rápido)* **Ambiente de execução → Alterar tipo → GPU T4**
+2. **Ambiente de execução → Executar tudo**
+3. Escolha o arquivo `firebase_service_account.json` quando pedir
+4. Quando aparecer **🟢 Separador ligado**, volte ao app: o card fica verde sozinho
 
-**Importante**: se você trocar uma chave depois de já ter iniciado o servidor, precisa rodar a célula do servidor de novo — ele só lê as chaves no momento em que é iniciado.
+Deixe a última célula rodando enquanto usar o Estúdio. O notebook fica em [`notebooks/separador_stems.ipynb`](notebooks/separador_stems.ipynb).
+
+---
+
+## 💻 Rodar localmente
+
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+export GEMINI_API_KEY="..."
+export GOOGLE_APPLICATION_CREDENTIALS_JSON="$(cat firebase_service_account.json)"
+export FIREBASE_STORAGE_BUCKET="seu-bucket.firebasestorage.app"
+
+uvicorn main:app --reload --port 8000
+# abra http://localhost:8000
+```
+
+Para separar stems na própria máquina (sem Colab), instale também `demucs torch torchaudio torchcodec` — o app detecta e passa a usar o Demucs local.
 
 ---
 
 ## 📁 Estrutura do projeto
 
 ```
-orange-harmony-web/
+orange-harmony/
 ├── backend/
 │   ├── main.py                 # rotas da API (FastAPI)
-│   ├── audio_analysis.py       # pitch, BPM, tom, vibrato
-│   ├── edicao_dsp.py           # EQ, compressor, redução de ruído
+│   ├── audio_analysis.py       # pitch, BPM, tom, vibrato (em blocos, memória constante)
+│   ├── acordes.py              # teoria de acordes: identificar, procurar, escalas e tonalidades
+│   ├── edicao_dsp.py           # EQ, compressor, redução de ruído, ajuste de tom
 │   ├── producao_dsp.py         # baixo, bateria, acordes, teclado, solo
 │   ├── songwriter.py           # letra, referência sonora, geração via YuE2
 │   ├── stems.py                # separação de stems (Demucs)
-│   ├── laranjinha.py           # assistente de IA com function calling
+│   ├── estudio_fila.py         # fila app <-> Colab (Firestore + Storage)
 │   ├── estudio_agente.py       # agente embutido no Estúdio
+│   ├── laranjinha.py           # assistente de IA com ferramentas
 │   ├── gemini_client.py        # cliente Google Gemini
 │   ├── firebase_config.py      # Firestore + Storage
 │   └── ...
-└── frontend/
-    ├── index.html
-    ├── app.js, estudio.js, songwriter.js, producao.js, edicao.js, ...
-    └── styles.css
+├── frontend/
+│   ├── index.html
+│   ├── app.js, estudio.js, acordes.js, songwriter.js, producao.js, edicao.js, ...
+│   └── styles.css
+├── notebooks/
+│   ├── separador_stems.ipynb   # separador de stems (abre pelo botão do app)
+│   └── separador_worker.py     # código que o notebook executa
+└── screenshots/
 ```
+
+*(Os arquivos `app.py` e `requirements.txt` na raiz são da versão antiga em Streamlit.)*
+
+---
+
+## 🗺️ Próximos passos
+
+- [ ] **Produção com IA:** gerar baixo, bateria e backing track via Hugging Face, com um campo de prompt (ex: "respeitar o padrão da música", "solo de contrabaixo no meio", "pausa na bateria")
+- [ ] **Estúdio:** quando o agente gerar uma faixa nova, criar e abrir ela como nova track
+- [ ] **Estúdio:** arrastar na linha do tempo para avançar e voltar a música
+- [ ] **Acordes:** campo para digitar as notas ("Lá, Dó, Mi, Sol") e descobrir o acorde
+- [ ] **Colab:** guardar o JSON do Firebase nos Segredos, para não escolher o arquivo toda vez
+
+---
+
+## 📝 Histórico de versões
+
+**v9 — hospedagem e acordes**
+- Migração para o Render, com monitor de 5 min contra o sono do servidor
+- Separador de stems via Colab, comunicando pelo Firebase (card visual, detecção automática)
+- Nova aba **Acordes**, com ferramentas na Laranjinha
+- Análise, produção e edição em blocos e limitadas a 120 s, para caber em 512 MB
+- Gravador converte para WAV no navegador (Chrome, Safari/iPhone e Firefox)
+- Novo piano sintetizado no tom de referência e na escala
+- Aba Gravador renomeada para **Biblioteca**, e ícone da aba do navegador
+
+**Versões anteriores**
+- Edição Vocal: EQ paramétrico e compressor com envelope reescritos (o EQ antigo derrubava 91% do pico da voz)
+- Songwriter: passou a usar `gradio_client` com o espaço `mrfakename/yue2-3b`, mais análise de referência sonora
+- Produção: 20 estilos, camadas de teclado e solo, assistente de IA
+- Orange Studio: espectro ao vivo, corte, deslocamento, desfazer, nomes de faixa editáveis, substituir e baixar por faixa
 
 ---
 
