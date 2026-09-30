@@ -405,8 +405,11 @@ def analisar_cover(audio, sr, calibracao=440.0):
 
 # ══════════════════ FUNÇÃO PRINCIPAL (usada pela rota /api/analyze) ══════════════════
 def analisar_audio_completo(dados: bytes, nome_arquivo: str, modo: str = "completa",
-                             calibracao: float = 440.0, nota_ref: str | None = None):
+                             calibracao: float = 440.0, nota_ref: str | None = None,
+                             escala: dict | None = None):
     """Roda a análise completa (ou de cover) e devolve um dicionário pronto pra virar JSON.
+    `escala` = {"tonica": "G#", "tipo": "lidio"} (opcional): avalia também quantas notas cantadas
+    caíram dentro dessa escala (bloco "avaliacao_escala" na resposta).
     Inclui a curva de pitch já decimada (no máx. 300 pontos) para o gráfico do front-end."""
     audio, sr = carregar_audio_bytes(dados, nome_arquivo)
     if audio is None:
@@ -440,6 +443,13 @@ def analisar_audio_completo(dados: bytes, nome_arquivo: str, modo: str = "comple
 
     resultado = analisar_afinacao(f0_limpo, tempos, calibracao, nota_ref=nota_ref)
     seq_notas = extrair_sequencia_notas(f0_limpo, tempos)
+    avaliacao_escala = None
+    if escala and escala.get("tonica") and escala.get("tipo"):
+        try:
+            import escalas
+            avaliacao_escala = escalas.avaliar_canto(seq_notas, escala["tonica"], escala["tipo"])
+        except Exception as e:
+            avaliacao_escala = {"erro": f"Não consegui avaliar na escala: {e}"}
     vibratos = detectar_vibrato_v4(f0_limpo, tempos, calibracao_a4=calibracao)
     vibratos_json = [
         {**v, "classificacao": classificar_vibrato_v4(v["taxa_hz"], v["extensao_cents"], v["deslize_cents"], v["periodicidade"])}
@@ -450,6 +460,7 @@ def analisar_audio_completo(dados: bytes, nome_arquivo: str, modo: str = "comple
         "modo": "completa",
         "resultado": resultado,
         "sequencia_notas": [{"nota": n, "duracao_s": d} for n, d in seq_notas[:20]],
+        "avaliacao_escala": avaliacao_escala,
         "vibratos": vibratos_json,
         "curva_pitch": curva_pitch,
         "aviso_duracao": aviso_duracao,

@@ -30,7 +30,7 @@ def montar_prompt_base(resultado):
     )
 
 
-def gerar_devolutiva(resultado, nota_ref=None, base_devolutiva="detectada", sequencia_notas=None):
+def gerar_devolutiva(resultado, nota_ref=None, base_devolutiva="detectada", sequencia_notas=None, escala=None):
     """Gera a devolutiva do professor. Retorna (texto, None) ou (None, motivo_do_erro)."""
     if not gemini_client.gemini_disponivel():
         return None, "Gemini não configurado no servidor (falta GEMINI_API_KEY)."
@@ -59,6 +59,24 @@ def gerar_devolutiva(resultado, nota_ref=None, base_devolutiva="detectada", sequ
             "transições foram limpas ou arrastadas? Houve notas fora da linha melódica esperada?"
         )
 
+    if escala and "erro" not in escala:
+        fora = "; ".join(f"{f['nota']} ×{f['vezes']} ({f['dica']})" for f in escala.get("fora", [])[:6]) or "nenhuma"
+        prompt += (
+            f"\n\nESCALA EM TREINO: o aluno estava praticando {escala['escala']}"
+            + (f" (ele escolheu {escala['escala_pedida']}; são as mesmas notas, escritas de outro jeito)"
+               if escala.get("escala_pedida") and escala["escala_pedida"] != escala["escala"] else "") + " "
+            f"(notas: {escala['notas_da_escala']}; fórmula {escala['formula']}). "
+            f"Caráter: {escala['carater']} Desafio vocal típico: {escala['desafio_vocal']}\n"
+            f"- Notas cantadas DENTRO da escala: {escala['dentro']} de {escala['total_notas']} "
+            f"({escala['pct_dentro']}% das notas, {escala['pct_dentro_tempo']}% do tempo).\n"
+            f"- Notas FORA da escala: {fora}.\n"
+            f"- Graus da escala que NÃO apareceram: {', '.join(escala['graus_nao_cantados']) or 'todos apareceram'}.\n"
+            "Avalie o desempenho NESSA escala: quais graus foram difíceis, se as notas fora foram "
+            "aproximações (semitom acima ou abaixo) ou erro de percurso, e termine com um exercício "
+            "curto de treino específico dessa escala (ex: cantar em graus, saltos de terça, ida e volta). "
+            "Cite os números."
+        )
+
     try:
         historico_recente = historico_mod.listar_historico()[:5]
         if historico_recente:
@@ -68,6 +86,7 @@ def gerar_devolutiva(resultado, nota_ref=None, base_devolutiva="detectada", sequ
                     f"- {a.get('nome', '')}: nota {a.get('nota_predominante', '—')}, "
                     f"desvio {a.get('desvio_medio_cents', 0)} cents, {a.get('pct_afinado', 0)}% afinado, "
                     f"tendência {a.get('tendencia', '—')}"
+                    + (f", treinando {a['escala']} ({a.get('pct_na_escala', '—')}% dentro)" if a.get("escala") else "")
                 )
             prompt += (
                 "\n\nHISTÓRICO RECENTE DO ALUNO (mais recente primeiro):\n" + "\n".join(linhas)

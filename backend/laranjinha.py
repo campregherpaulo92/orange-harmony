@@ -18,6 +18,7 @@ import producao_dsp
 import edicao_dsp
 import converter_audio
 import chats
+import escalas as teoria_escalas
 import acordes as teoria_acordes   # (não chamar de 'acordes': já existe uma variável local com esse nome)
 
 CONHECIMENTO_APP = """
@@ -25,13 +26,13 @@ Você é a Laranjinha, assistente oficial do Orange Harmony — um app de coachi
 Você conhece TODO o aplicativo e tem ferramentas reais para LER dados E EXECUTAR AÇÕES de verdade.
 
 ## Módulos do app (e o que você sabe sobre cada um)
-1. Estudo/Análise Vocal: pitch, afinação, desvio em cents, vibrato, curva de pitch, devolutiva do professor.
+1. Estudo/Análise Vocal: pitch, afinação, desvio em cents, vibrato, curva de pitch, devolutiva do professor. Também tem o TREINO DE ESCALAS: o aluno escolhe a nota e a escala (maior, menor, modos gregos, pentatônicas, blues…), ouve no piano e pode pedir pra avaliar a gravação dele NAQUELA escala (quantas notas cantadas caíram dentro dela).
 2. Afinador: 11 afinações, calibração 440/442, detecção de pitch em tempo real no navegador.
 3. Biblioteca (antes chamada Gravador): grava/sobe áudio, salva no Firebase Storage e lista as gravações.
 4. Histórico: evolução das análises salvas, com devolutiva do professor.
 5. Composições: letras com cifras [Am] e seções (#), versionamento.
 6. Conversor: WAV/MP3/FLAC/OGG/M4A.
-7. Produção: gera baixo, bateria e acordes a partir de uma gravação, em 12 estilos musicais.
+7. Produção: gera baixo, bateria, acordes, teclado e solo a partir de uma gravação, em 20 estilos musicais.
 8. Edição Vocal: redução de ruído, normalização, tom, EQ, compressão, sibilância, reverb.
 9. Avaliação: 5 exercícios que geram o perfil vocal (classificação, extensão, tessitura).
 10. Orange Studio: separação de stems (voz/instrumental) via Demucs no Colab.
@@ -74,7 +75,8 @@ neste formato, sem nenhum texto antes ou depois:
 Ferramentas disponíveis:
 - listar_gravacoes(limite?: int) — lista as gravações salvas, mais recentes primeiro.
 - avaliar_gravacao(nome: str) — ouve uma gravação salva de verdade e dá parecer vocal.
-- analisar_gravacao(nome: str, modo?: "completa"|"cover") — roda análise técnica e registra no histórico.
+- analisar_gravacao(nome: str, modo?: "completa"|"cover", escala?: str) — roda análise técnica e registra no histórico. Com `escala` (ex: "G# lídio", "Lá menor pentatônica") avalia também quantas notas cantadas caíram DENTRO dessa escala, quais ficaram fora e os graus que não apareceram.
+- consultar_escala(nome: str) — explica uma escala (ex: "G# lídio", "D dórico", "Lá menor pentatônica"): notas, graus, fórmula, caráter, desafio de canto e os acordes que nascem dela.
 - ler_historico(limite?: int) — lê o resumo das últimas análises salvas.
 - ler_perfil_vocal() — lê o perfil vocal do usuário (classificação, extensão, tessitura).
 - listar_composicoes(limite?: int) — lista as composições salvas.
@@ -241,7 +243,32 @@ def _resumo_acorde(info):
     return saida
 
 
+def _resumo_escala(d):
+    """Versão enxuta de escalas.descrever (poupa tokens da conversa)."""
+    if "erro" in d:
+        return d
+    saida = {
+        "escala": d["nome"], "notas_com_graus": " ".join(f"{n['letra']}({n['grau']})" for n in d["notas"]),
+        "formula": d["formula"], "semitons_entre_notas": d["semitons"],
+        "carater": d["carater"], "desafio_vocal": d["desafio_vocal"],
+    }
+    if d.get("enarmonico"):
+        saida["observacao"] = f"{d['nome_pedido']} escreve-se com notas dobradas; por isso aparece como {d['enarmonico']} (mesmas notas)."
+    if d.get("acordes_triades"):
+        saida["acordes_triades"] = " · ".join(f"{x['grau']} {x['acorde']}" for x in d["acordes_triades"] if x)
+        saida["acordes_com_setima"] = " · ".join(f"{x['grau']} {x['acorde']}" for x in d["acordes_setimas"] if x)
+    else:
+        saida["acordes"] = "Escala de 5 ou 6 notas: não é harmonizada em acordes por grau."
+    return saida
+
+
 def _executar_ferramenta(nome_func, args):
+    if nome_func == "consultar_escala":
+        par = teoria_escalas.interpretar_escala(str(args.get("nome", "")))
+        if par is None:
+            return {"erro": f"Não entendi a escala '{args.get('nome', '')}'. Exemplos: 'G# lídio', 'D dórico', 'Lá menor pentatônica', 'C menor harmônica'."}
+        return _resumo_escala(teoria_escalas.descrever(*par))
+
     if nome_func == "identificar_acorde":
         cordas = _ler_cordas(args.get("cordas"))
         if cordas is None:
@@ -281,14 +308,21 @@ def _executar_ferramenta(nome_func, args):
         if conteudo is None:
             return {"erro": "Não consegui carregar o áudio dessa gravação."}
         modo = args.get("modo", "completa")
-        resultado = audio_analysis.analisar_audio_completo(conteudo, nome_real, modo=modo)
+        escala = None
+        if args.get("escala"):
+            par = teoria_escalas.interpretar_escala(str(args["escala"]))
+            if par is None:
+                return {"erro": f"Não entendi a escala '{args['escala']}'. Exemplos: 'G# lídio', 'Lá menor pentatônica', 'D dórico'."}
+            escala = {"tonica": par[0], "tipo": par[1]}
+        resultado = audio_analysis.analisar_audio_completo(conteudo, nome_real, modo=modo, escala=escala)
         if "erro" in resultado:
             return resultado
         if modo == "completa":
             try:
-                historico.registrar_analise(resultado["resultado"], modo="completa")
+                historico.registrar_analise(resultado["resultado"], modo="completa", escala=resultado.get("avaliacao_escala"))
             except Exception:
                 pass
+        resultado.pop("curva_pitch", None)            # pontos do gráfico: a Laranjinha não precisa (poupa tokens)
         return resultado
 
     if nome_func == "ler_historico":

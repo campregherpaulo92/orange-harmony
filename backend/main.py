@@ -28,6 +28,7 @@ import estudio_agente
 import stems
 import estudio_fila
 import acordes
+import escalas
 import chats
 import songwriter
 
@@ -79,6 +80,8 @@ def analisar(
     calibracao: float = Form(440.0),
     nota_ref: str = Form(None),
     base_devolutiva: str = Form("detectada"),
+    escala_tonica: str = Form(None),
+    escala_tipo: str = Form(None),
 ):
     """Recebe um áudio (multipart/form-data) e devolve a análise numérica em
     JSON — RÁPIDO de propósito (não chama o Gemini aqui). A devolutiva do
@@ -94,13 +97,15 @@ def analisar(
         modo=modo,
         calibracao=calibracao,
         nota_ref=nota_ref,
+        escala={"tonica": escala_tonica, "tipo": escala_tipo} if escala_tonica and escala_tipo else None,
     )
 
     historico_id = None
     if modo == "completa" and "erro" not in resultado:
         try:
             historico_id = historico.registrar_analise(
-                resultado["resultado"], modo="completa", tom_ref=nota_ref, devolutiva=None
+                resultado["resultado"], modo="completa", tom_ref=nota_ref, devolutiva=None,
+                escala=resultado.get("avaliacao_escala"),
             )
         except Exception:
             pass
@@ -116,6 +121,7 @@ def gerar_devolutiva_rota(
     base_devolutiva: str = Form("detectada"),
     sequencia_notas: str = Form(None),
     historico_id: str = Form(None),
+    escala: str = Form(None),
 ):
     """Segunda etapa da análise: gera a devolutiva do professor IA (chamada
     ao Gemini) separada da análise numérica, e atualiza o registro do
@@ -123,10 +129,11 @@ def gerar_devolutiva_rota(
     import json as _json
     resultado_dict = _json.loads(resultado)
     sequencia_dict = _json.loads(sequencia_notas) if sequencia_notas else None
+    escala_dict = _json.loads(escala) if escala else None
 
     devolutiva, erro = professor.gerar_devolutiva(
         resultado_dict, nota_ref=nota_ref, base_devolutiva=base_devolutiva,
-        sequencia_notas=sequencia_dict,
+        sequencia_notas=sequencia_dict, escala=escala_dict,
     )
 
     if devolutiva and historico_id:
@@ -234,6 +241,19 @@ def acordes_identificar(cordas: str = Form(...)):
 @app.post("/api/acordes/procurar")
 def acordes_procurar(nome: str = Form(...)):
     return acordes.procurar(nome)
+
+
+# ══════════════════════════════════════════════════════════════
+# ESCALAS (treino: notas, graus, acordes da escala)
+# ══════════════════════════════════════════════════════════════
+@app.get("/api/escalas/tipos")
+def escalas_tipos():
+    return {"tipos": escalas.tipos_disponiveis()}
+
+
+@app.post("/api/escalas/descrever")
+def escalas_descrever(tonica: str = Form(...), tipo: str = Form(...)):
+    return escalas.descrever(tonica, tipo)
 
 
 # ── Separação de stems via Colab (fila no Firebase) ──

@@ -10,7 +10,7 @@ from firebase_config import get_db
 COLECAO = "historico_web"
 
 
-def registrar_analise(resultado, modo="completa", tom_ref=None, devolutiva=None):
+def registrar_analise(resultado, modo="completa", tom_ref=None, devolutiva=None, escala=None):
     db = get_db()
     if db is None:
         return None
@@ -29,6 +29,9 @@ def registrar_analise(resultado, modo="completa", tom_ref=None, devolutiva=None)
         "sustentacao_media": round(resultado.get("sustentacao_media", 0), 2),
         "num_pausas": resultado.get("num_pausas", 0),
         "tom_ref": tom_ref or "",
+        # escala que o aluno estava treinando (opcional): nome e % das notas cantadas dentro dela
+        "escala": (escala or {}).get("escala", "") if isinstance(escala, dict) and "erro" not in escala else "",
+        "pct_na_escala": (escala or {}).get("pct_dentro", None) if isinstance(escala, dict) and "erro" not in escala else None,
     })
     return doc_ref.id
 
