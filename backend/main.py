@@ -29,6 +29,7 @@ import stems
 import estudio_fila
 import acordes
 import escalas
+import news
 import chats
 import songwriter
 
@@ -241,6 +242,21 @@ def acordes_identificar(cordas: str = Form(...)):
 @app.post("/api/acordes/procurar")
 def acordes_procurar(nome: str = Form(...)):
     return acordes.procurar(nome)
+
+
+# ══════════════════════════════════════════════════════════════
+# ORANGE NEWS (jornal do app: dicas escritas + notícias de fora)
+# ══════════════════════════════════════════════════════════════
+@app.get("/api/news/edicao")
+def news_edicao():
+    """Edição escrita do dia (instantânea; não depende de internet nem de IA)."""
+    return news.edicao_do_dia()
+
+
+@app.get("/api/news/noticias")
+def news_noticias(atualizar: bool = False):
+    """Notícias de fora, filtradas e resumidas em português (com cache de 6 h)."""
+    return news.obter_noticias(forcar=atualizar)
 
 
 # ══════════════════════════════════════════════════════════════
