@@ -184,12 +184,15 @@ function tocarTom(freq, duracao = 3) {
 }
 
 // Escala: as notas se sobrepõem (o pedal do piano), como tocada de verdade
-function tocarEscalaPiano(freqs) {
+function tocarEscalaPiano(freqs, idaVolta = false) {
   const { ctx, entrada } = obterPiano();
   const t0 = ctx.currentTime + 0.05;
+  const n = freqs.length;
   freqs.forEach((freq, i) => {
-    const ultima = i === freqs.length - 1;
-    sintetizarNotaPiano(ctx, entrada, freq, t0 + i * 0.62, ultima ? 3.4 : 1.8, 0.9 + 0.1 * (i / (freqs.length - 1)));
+    const ultima = i === n - 1;
+    const posicao = n > 1 ? i / (n - 1) : 0;
+    const forca = idaVolta ? 0.9 + 0.1 * (1 - Math.abs(posicao * 2 - 1)) : 0.9 + 0.1 * posicao;
+    sintetizarNotaPiano(ctx, entrada, freq, t0 + i * 0.62, ultima ? 3.4 : 1.8, forca);
   });
 }
 
@@ -198,10 +201,189 @@ function calibracaoAtual() {
   return marcado ? parseFloat(marcado.value) : 440;
 }
 
+// ── Escalas para treino (as MESMAS fórmulas de backend/escalas.py; o som é gerado aqui, sem esperar o servidor) ──
+const ESCALAS_TREINO = [
+  { chave: "maior", nome: "maior (jônio)", formula: "1 2 3 4 5 6 7" },
+  { chave: "menor", nome: "menor natural (eólio)", formula: "1 2 b3 4 5 b6 b7" },
+  { chave: "menor_harmonica", nome: "menor harmônica", formula: "1 2 b3 4 5 b6 7" },
+  { chave: "menor_melodica", nome: "menor melódica", formula: "1 2 b3 4 5 6 7" },
+  { chave: "dorico", nome: "dórico", formula: "1 2 b3 4 5 6 b7" },
+  { chave: "frigio", nome: "frígio", formula: "1 b2 b3 4 5 b6 b7" },
+  { chave: "lidio", nome: "lídio", formula: "1 2 3 #4 5 6 7" },
+  { chave: "mixolidio", nome: "mixolídio", formula: "1 2 3 4 5 6 b7" },
+  { chave: "locrio", nome: "lócrio", formula: "1 b2 b3 4 b5 b6 b7" },
+  { chave: "pentatonica_maior", nome: "pentatônica maior", formula: "1 2 3 5 6" },
+  { chave: "pentatonica_menor", nome: "pentatônica menor", formula: "1 b3 4 5 b7" },
+  { chave: "blues", nome: "blues", formula: "1 b3 4 b5 5 b7" },
+];
+const MAIOR_SEMITONS = [0, 2, 4, 5, 7, 9, 11];
+
+function intervalosDaFormula(formula) {
+  return formula.split(" ").map((tok) => {
+    const alt = tok.startsWith("b") ? -1 : tok.startsWith("#") ? 1 : 0;
+    return MAIOR_SEMITONS[parseInt(tok.replace(/[b#]/, ""), 10) - 1] + alt;
+  });
+}
+
+// Lê os seletores: {tonica: "G#", oitava: 2, chave, nome, formula, intervalos}
+function escalaAtual() {
+  const nota = document.getElementById("notaRef").value;                  // ex: "G#2"
+  const escala = ESCALAS_TREINO.find((e) => e.chave === document.getElementById("escalaTipo").value) || ESCALAS_TREINO[0];
+  return {
+    tonica: nota.slice(0, -1), oitava: parseInt(nota.slice(-1), 10), nota,
+    chave: escala.chave, nome: escala.nome, formula: escala.formula, intervalos: intervalosDaFormula(escala.formula),
+  };
+}
+
+function elemento(tag, classe, texto) {
+  const e = document.createElement(tag);
+  if (classe) e.className = classe;
+  if (texto !== undefined) e.textContent = texto;
+  return e;
+}
+
+let escalaInfoSeq = 0;
+let escalaInfoUltima = null;
+let escalaInfoTimer = null;
+
+function montarSeletorEscalas() {
+  const sel = document.getElementById("escalaTipo");
+  if (!sel) return;
+  ESCALAS_TREINO.forEach((e) => {
+    const opt = document.createElement("option");
+    opt.value = e.chave;
+    opt.textContent = e.nome;
+    sel.appendChild(opt);
+  });
+}
+
+// Texto do botão acompanha a escolha: "Tocar G#2 lídio"
+function atualizarBotaoEscala() {
+  const btn = document.getElementById("btnTocarEscala");
+  if (!btn) return;
+  const esc = escalaAtual();
+  btn.textContent = `🎵 Tocar ${esc.nota} ${esc.nome.split(" (")[0]}`;
+}
+
+function renderizarInfoEscala(d) {
+  const info = document.getElementById("escalaInfo");
+  escalaInfoUltima = d && !d.erro ? d : null;
+  if (!escalaInfoUltima) { info.hidden = true; return; }
+  info.hidden = false;
+  document.getElementById("escalaNome").textContent = d.nome_pedido || d.nome;
+  document.getElementById("escalaEnarmonico").textContent = d.enarmonico
+    ? `${d.nome_pedido} exigiria notas com dois sustenidos, então mostramos como ${d.enarmonico} — são as mesmas notas.`
+    : "";
+  document.getElementById("escalaCarater").textContent = d.carater;
+  const notas = document.getElementById("escalaNotas");
+  notas.replaceChildren();
+  d.notas.forEach((n) => {
+    const chip = elemento("span", "oh-chip", `${n.letra} · ${n.grau}`);
+    chip.title = `${n.solfejo} (grau ${n.grau})`;
+    notas.appendChild(chip);
+  });
+  const bloco = document.getElementById("escalaAcordesBloco");
+  const acordes = document.getElementById("escalaAcordes");
+  acordes.replaceChildren();
+  if (d.acordes_triades) {
+    bloco.hidden = false;
+    [["Tríades", d.acordes_triades], ["Com sétima", d.acordes_setimas]].forEach(([rotulo, lista]) => {
+      const linha = elemento("div", "oh-acordes-linha");
+      linha.appendChild(elemento("span", "oh-acordes-rotulo", rotulo));
+      lista.forEach((x) => { if (x) linha.appendChild(elemento("span", "oh-chip oh-chip-tom", `${x.grau} ${x.acorde}`)); });
+      acordes.appendChild(linha);
+    });
+  } else {
+    bloco.hidden = true;
+  }
+  document.getElementById("escalaDesafio").textContent = `🎤 Desafio ao cantar: ${d.desafio_vocal}`;
+}
+
+async function carregarInfoEscala() {
+  const esc = escalaAtual();
+  const minha = ++escalaInfoSeq;
+  const form = new FormData();
+  form.append("tonica", esc.tonica);
+  form.append("tipo", esc.chave);
+  try {
+    const resp = await fetch(`${API_BASE}/api/escalas/descrever`, { method: "POST", body: form });
+    const dados = await resp.json();
+    if (minha === escalaInfoSeq) renderizarInfoEscala(dados);
+  } catch (err) {
+    if (minha === escalaInfoSeq) renderizarInfoEscala(null);       // sem servidor: o botão de tocar continua funcionando
+  }
+}
+
+function aoMudarEscala() {
+  atualizarBotaoEscala();
+  clearTimeout(escalaInfoTimer);
+  escalaInfoTimer = setTimeout(carregarInfoEscala, 200);
+}
+
+// Resultado da análise NA escala: % dentro, graus cantados, notas fora e o que provavelmente aconteceu
+function mostrarResultadoEscala(av) {
+  const card = document.getElementById("escalaResultadoCard");
+  const corpo = document.getElementById("escalaResultadoCorpo");
+  corpo.replaceChildren();
+  if (!av) { card.hidden = true; return; }
+  card.hidden = false;
+  if (av.erro) { corpo.appendChild(elemento("p", "oh-hint", av.erro)); return; }
+
+  const titulo = av.escala_pedida && av.escala_pedida !== av.escala ? `${av.escala_pedida} (= ${av.escala})` : av.escala;
+  corpo.appendChild(elemento("div", "oh-encaixe-titulo", `${titulo} — ${av.notas_da_escala}`));
+  const placar = elemento("div", "oh-escala-placar");
+  placar.appendChild(elemento("span", "oh-escala-pct", `${av.pct_dentro}%`));
+  placar.appendChild(elemento("span", "oh-hint", `das notas dentro da escala (${av.dentro} de ${av.total_notas}) · ${av.pct_dentro_tempo}% do tempo`));
+  corpo.appendChild(placar);
+  const barra = elemento("div", "oh-barra");
+  const preenchida = elemento("div", "oh-barra-cheia");
+  preenchida.style.width = `${Math.max(2, Math.min(100, av.pct_dentro))}%`;
+  barra.appendChild(preenchida);
+  corpo.appendChild(barra);
+
+  const cantados = elemento("div", "oh-chips");
+  av.graus_cantados.forEach((g) => cantados.appendChild(elemento("span", "oh-chip oh-chip-ok", `${g.nota} · grau ${g.grau} ×${g.vezes}`)));
+  av.graus_nao_cantados.forEach((g) => cantados.appendChild(elemento("span", "oh-chip oh-chip-falta", `faltou ${g}`)));
+  corpo.appendChild(cantados);
+
+  if (av.fora.length) {
+    corpo.appendChild(elemento("div", "oh-encaixe-titulo", "⚠️ Notas fora da escala"));
+    const ul = elemento("ul", "oh-lista-escalas");
+    av.fora.forEach((f) => {
+      const li = elemento("li");
+      li.appendChild(elemento("b", "", `${f.nota} ×${f.vezes}`));
+      li.appendChild(elemento("span", "oh-escala-notas", f.dica));
+      ul.appendChild(li);
+    });
+    corpo.appendChild(ul);
+  } else {
+    corpo.appendChild(elemento("p", "oh-hint", "✅ Nenhuma nota fora da escala."));
+  }
+}
+
+function perguntarLaranjinhaSobreEscala() {
+  const esc = escalaAtual();
+  const d = escalaInfoUltima;
+  const nome = d ? (d.nome_pedido || d.nome) : `${esc.tonica} ${esc.nome}`;
+  const notas = d ? ` (notas: ${d.notas_texto})` : "";
+  const painel = document.getElementById("laranjinhaPainel");
+  if (painel.hidden) document.getElementById("fabLaranjinha").click();
+  const campo = document.getElementById("laranjinhaInput");
+  campo.value = `Estou estudando a escala ${nome}${notas}. Me explica como ela soa, que acordes combinam com ela e me passa um exercício de canto pra treinar essa escala.`;
+  campo.focus();
+}
+
 function inicializarTomReferencia() {
   const btnNota = document.getElementById("btnTocarNota");
   const btnEscala = document.getElementById("btnTocarEscala");
   if (!btnNota || !btnEscala) return;
+
+  montarSeletorEscalas();
+  atualizarBotaoEscala();
+  document.getElementById("notaRef").addEventListener("change", aoMudarEscala);
+  document.getElementById("escalaTipo").addEventListener("change", aoMudarEscala);
+  document.getElementById("btnEscalaLaranjinha").addEventListener("click", perguntarLaranjinhaSobreEscala);
+  carregarInfoEscala();
 
   btnNota.addEventListener("click", () => {
     const nota = document.getElementById("notaRef").value;
@@ -209,13 +391,13 @@ function inicializarTomReferencia() {
   });
 
   btnEscala.addEventListener("click", () => {
-    const notaBase = document.getElementById("notaRef").value;
-    const nomeBase = notaBase.slice(0, -1);
-    const oitavaBase = parseInt(notaBase.slice(-1), 10);
-    const midiBase = 12 * (oitavaBase + 1) + NOMES_NOTAS.indexOf(nomeBase);
-    const escalaMaior = [0, 2, 4, 5, 7, 9, 11, 12];
+    const esc = escalaAtual();
+    const midiBase = 12 * (esc.oitava + 1) + NOMES_NOTAS.indexOf(esc.tonica);
+    const subida = [...esc.intervalos, 12];                                  // termina na oitava
+    const idaVolta = document.getElementById("escalaIdaVolta").checked;
+    const semitons = idaVolta ? [...subida, ...subida.slice(0, -1).reverse()] : subida;
     const calib = calibracaoAtual();
-    tocarEscalaPiano(escalaMaior.map((intervalo) => calib * Math.pow(2, (midiBase + intervalo - 69) / 12)));
+    tocarEscalaPiano(semitons.map((iv) => calib * Math.pow(2, (midiBase + iv - 69) / 12)), idaVolta);
   });
 }
 
@@ -330,6 +512,12 @@ function inicializarAnaliseVocal() {
     form.append("nota_ref", document.getElementById("notaRef").value);
     const baseDevolutivaMarcada = document.querySelector('input[name="baseDevolutiva"]:checked');
     form.append("base_devolutiva", baseDevolutivaMarcada ? baseDevolutivaMarcada.value : "detectada");
+    const avaliarEscala = document.getElementById("avaliarNaEscala");
+    if (avaliarEscala && avaliarEscala.checked && document.getElementById("modo").value !== "cover") {
+      const esc = escalaAtual();
+      form.append("escala_tonica", esc.tonica);
+      form.append("escala_tipo", esc.chave);
+    }
 
     try {
       const resp = await fetch(`${API_BASE}/api/analyze`, { method: "POST", body: form });
@@ -380,6 +568,8 @@ function inicializarAnaliseVocal() {
         }
       }
 
+      mostrarResultadoEscala(dados.modo === "cover" ? null : dados.avaliacao_escala);
+
       const devolutivaCard = document.getElementById("devolutivaCard");
       const devolutivaTexto = document.getElementById("devolutivaTexto");
       if (dados.modo !== "cover") {
@@ -393,6 +583,7 @@ function inicializarAnaliseVocal() {
         formDevolutiva.append("base_devolutiva", baseDevolutivaMarcada ? baseDevolutivaMarcada.value : "detectada");
         if (dados.sequencia_notas) formDevolutiva.append("sequencia_notas", JSON.stringify(dados.sequencia_notas));
         if (dados.historico_id) formDevolutiva.append("historico_id", dados.historico_id);
+        if (dados.avaliacao_escala && !dados.avaliacao_escala.erro) formDevolutiva.append("escala", JSON.stringify(dados.avaliacao_escala));
 
         fetch(`${API_BASE}/api/analyze/devolutiva`, { method: "POST", body: formDevolutiva })
           .then((r) => r.json())

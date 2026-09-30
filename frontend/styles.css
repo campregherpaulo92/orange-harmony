@@ -1091,3 +1091,16 @@ canvas#curvaPitch { width: 100%; background: #0d0d0d; border-radius: 12px; }
 .oh-mini-braco:hover { transform: translateY(-2px); border-color: var(--oh-orange); }
 .oh-mini-braco svg { width: 100%; height: auto; }
 .oh-mini-legenda { font-size: 0.74rem; margin-top: 4px; font-family: monospace; }
+
+
+/* ── Escalas para treino (aba Estudo) ── */
+.oh-escala-info { margin-top: 14px; padding: 14px; border: 1px solid rgba(249,115,22,0.25); border-radius: 14px; background: rgba(249,115,22,0.05); }
+.oh-escala-nome { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 1.5rem; color: var(--oh-orange); }
+.oh-acordes-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; }
+.oh-acordes-rotulo { font-size: 0.74rem; color: #9a9a9a; min-width: 74px; }
+.oh-chip-ok { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.4); color: #bff5cf; }
+.oh-chip-falta { background: rgba(239,68,68,0.10); border-color: rgba(239,68,68,0.4); color: #ffc9c9; }
+.oh-escala-placar { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 6px 0 4px; }
+.oh-escala-pct { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 2.4rem; color: var(--oh-orange); }
+.oh-barra { height: 10px; border-radius: 10px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 8px; }
+.oh-barra-cheia { height: 100%; background: linear-gradient(90deg, var(--oh-orange-dark), var(--oh-orange)); border-radius: 10px; transition: width .4s ease; }

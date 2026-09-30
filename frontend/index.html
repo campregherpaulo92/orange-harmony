@@ -50,8 +50,11 @@
       <div class="oh-card">
         <div class="oh-section-title"><span>🎯</span> Tom de Referência<i class="oh-title-line"></i></div>
         <div class="oh-row">
-          <label>Nota de referência
+          <label>Nota de referência (tônica)
             <select id="notaRef"></select>
+          </label>
+          <label>Escala
+            <select id="escalaTipo"></select>
           </label>
           <label>Calibração A4 (Hz)
             <div class="oh-radio-group">
@@ -62,7 +65,24 @@
         </div>
         <div class="oh-row">
           <button class="oh-btn oh-btn-secundario" id="btnTocarNota">▶ Tocar nota</button>
-          <button class="oh-btn oh-btn-secundario" id="btnTocarEscala">🎵 Tocar escala maior</button>
+          <button class="oh-btn oh-btn-secundario" id="btnTocarEscala">🎵 Tocar escala</button>
+          <label class="oh-radio"><input type="checkbox" id="escalaIdaVolta" checked> ↕ subir e descer</label>
+        </div>
+
+        <div id="escalaInfo" class="oh-escala-info" hidden>
+          <div id="escalaNome" class="oh-escala-nome"></div>
+          <div id="escalaEnarmonico" class="oh-hint"></div>
+          <div id="escalaCarater" class="oh-hint"></div>
+          <div id="escalaNotas" class="oh-chips"></div>
+          <div id="escalaAcordesBloco" hidden>
+            <div class="oh-encaixe-titulo">🎼 Acordes que nascem dessa escala</div>
+            <div id="escalaAcordes" class="oh-chips"></div>
+          </div>
+          <div id="escalaDesafio" class="oh-hint"></div>
+        </div>
+        <div class="oh-row" style="margin-top:8px;">
+          <label class="oh-radio"><input type="checkbox" id="avaliarNaEscala"> 🎯 Avaliar minha gravação nesta escala (na análise abaixo)</label>
+          <button class="oh-btn oh-btn-secundario oh-btn-mini" id="btnEscalaLaranjinha" type="button">🍊 Perguntar à Laranjinha</button>
         </div>
       </div>
 
@@ -102,6 +122,11 @@
         <div class="oh-card">
           <div class="oh-section-title"><span>📊</span> Diagnóstico da sua voz<i class="oh-title-line"></i></div>
           <div id="metricas" class="oh-metric-grid"></div>
+        </div>
+
+        <div id="escalaResultadoCard" class="oh-card" hidden>
+          <div class="oh-section-title"><span>🎼</span> Sua voz na escala<i class="oh-title-line"></i></div>
+          <div id="escalaResultadoCorpo"></div>
         </div>
 
         <div id="devolutivaCard" class="oh-devolutiva-card" hidden>
