@@ -21,7 +21,7 @@ Aplicação completa de coaching vocal e composição: analisa sua voz, detecta 
 | Módulo | Descrição |
 |---|---|
 | 📋 **Avaliação** | 5 exercícios vocais (nota grave, aguda, confortável, glissando, frase) que geram o perfil: classificação, extensão e tessitura. O professor usa esse perfil nas análises |
-| 🎵 **Estudo** | Análise de voz: pitch (F0), nota predominante, desvio em cents, % de afinação, vibrato (taxa, extensão, periodicidade), curva de pitch, BPM e tom. Devolutiva do **Professor de IA** (Gemini). Tom de referência e escala maior em **piano sintetizado** |
+| 🎵 **Estudo** | Análise de voz: pitch (F0), nota predominante, desvio em cents, % de afinação, vibrato (taxa, extensão, periodicidade), curva de pitch, BPM e tom. Devolutiva do **Professor de IA** (Gemini). **Treino de escalas:** 12 escalas (maior, menores natural/harmônica/melódica, os modos gregos, pentatônicas e blues) em qualquer tônica — toca no **piano sintetizado** (subindo e descendo), mostra as notas com os graus, os acordes que nascem da escala e o desafio de canto, e **avalia sua gravação nessa escala** (quantas notas caíram dentro, quais ficaram fora e o que provavelmente aconteceu). O Professor recebe a escala e comenta em cima disso |
 | 🎸 **Afinador** | 11 afinações (violão, 7 cordas, ukulele, drop tunings, open tunings), calibração 440/442 Hz, agulha em tempo real |
 | 🎶 **Acordes** | Braço de violão clicável: você marca as notas e o app diz o **nome do acorde** (com alternativas), as **notas**, as **tonalidades** onde ele é diatônico (com o grau, ex: vi7) e as **escalas** que dá pra tocar por cima. Também **procura por nome** (Am7, C7M, F#m, G/B…) e mostra posições no braço. Toca o acorde (violão sintetizado), insere na composição e leva a pergunta pra Laranjinha |
 | 🎙️ **Biblioteca** | Grava ou sobe áudios, salva no Firebase Storage e lista as gravações |
@@ -31,7 +31,7 @@ Aplicação completa de coaching vocal e composição: analisa sua voz, detecta 
 | 🎛️ **Produtor** | Backing track com baixo, bateria, acordes, teclado e solo em **20 estilos** (Pop, Rock, Balada, Sertanejo, Funk, MPB, Gospel, Reggae, Blues, Jazz, Forró, Eletrônica, Samba, Pagode, Axé, Bossa Nova, Country, R&B, Trap e Metal). Um assistente de IA sugere a configuração a partir de uma frase |
 | ✨ **Edição Vocal Inteligente** | EQ de presença, compressão, redução de ruído, sibilância, ajuste de tom e reverb — por checkbox ou por **comando em português** interpretado por IA |
 | 🤖 **Songwriter** | Letra original em português (Gemini), referência sonora analisada por IA, prompt musical e geração da música completa via Hugging Face (YuE2) |
-| 🍊 **Laranjinha** | Assistente de IA multi-chat, com memória entre conversas, que **age**: avalia gravações, gera produções, aplica edições, salva composições, renomeia e exclui, e consulta o motor de acordes |
+| 🍊 **Laranjinha** | Assistente de IA multi-chat, com memória entre conversas, que **age**: avalia gravações, gera produções, aplica edições, salva composições, renomeia e exclui, e consulta os motores de **acordes** e de **escalas** (explica uma escala e avalia uma gravação nela) |
 | 🎚️ **Orange Studio** | Mini-DAW: separação de stems (voz e instrumental), forma de onda e espectro ao vivo, mute/solo/volume, corte e deslocamento por faixa (com desfazer), renomear faixas, substituir e baixar por faixa, e um agente de IA que aplica ajustes por texto |
 
 ---
@@ -138,6 +138,7 @@ orange-harmony/
 │   ├── main.py                 # rotas da API (FastAPI)
 │   ├── audio_analysis.py       # pitch, BPM, tom, vibrato (em blocos, memória constante)
 │   ├── acordes.py              # teoria de acordes: identificar, procurar, escalas e tonalidades
+│   ├── escalas.py              # escalas para treino: notas, graus, acordes da escala, avaliação do canto
 │   ├── edicao_dsp.py           # EQ, compressor, redução de ruído, ajuste de tom
 │   ├── producao_dsp.py         # baixo, bateria, acordes, teclado, solo
 │   ├── songwriter.py           # letra, referência sonora, geração via YuE2
@@ -173,6 +174,12 @@ orange-harmony/
 ---
 
 ## 📝 Histórico de versões
+
+**v10 — treino de escalas**
+- Seletor de escala na aba Estudo (12 escalas, qualquer tônica), com notas, graus, acordes da escala e desafio de canto
+- Botão de tocar a escala no piano, subindo e descendo
+- Avaliação da gravação na escala escolhida, com o Professor e a Laranjinha cientes dela
+- O histórico passa a guardar a escala treinada
 
 **v9 — hospedagem e acordes**
 - Migração para o Render, com monitor de 5 min contra o sono do servidor
