@@ -27,6 +27,7 @@ import laranjinha
 import estudio_agente
 import stems
 import estudio_fila
+import acordes
 import chats
 import songwriter
 
@@ -214,6 +215,25 @@ def separar_stems_rota(arquivo: UploadFile = File(...)):
         "bpm": round(bpm, 1) if bpm else None,
         "tom": tom,
     }
+
+
+# ══════════════════════════════════════════════════════════════
+# ACORDES (braço do violão: identificar, procurar por nome, onde se encaixa)
+# ══════════════════════════════════════════════════════════════
+@app.post("/api/acordes/identificar")
+def acordes_identificar(cordas: str = Form(...)):
+    """cordas: '-1,3,2,0,1,0' (da corda mais grave à mais aguda; -1 = muda, 0 = solta, n = casa).
+    Problemas de digitação voltam como {"erro": ...} (status 200) — a tela mostra como dica."""
+    try:
+        lista = [int(x) for x in cordas.split(",")]
+    except Exception:
+        return {"erro": "Formato inválido. Envie 6 números separados por vírgula."}
+    return acordes.identificar(lista)
+
+
+@app.post("/api/acordes/procurar")
+def acordes_procurar(nome: str = Form(...)):
+    return acordes.procurar(nome)
 
 
 # ── Separação de stems via Colab (fila no Firebase) ──

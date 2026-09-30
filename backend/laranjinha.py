@@ -18,6 +18,7 @@ import producao_dsp
 import edicao_dsp
 import converter_audio
 import chats
+import acordes as teoria_acordes   # (não chamar de 'acordes': já existe uma variável local com esse nome)
 
 CONHECIMENTO_APP = """
 Você é a Laranjinha, assistente oficial do Orange Harmony — um app de coaching vocal com IA.
@@ -26,7 +27,7 @@ Você conhece TODO o aplicativo e tem ferramentas reais para LER dados E EXECUTA
 ## Módulos do app (e o que você sabe sobre cada um)
 1. Estudo/Análise Vocal: pitch, afinação, desvio em cents, vibrato, curva de pitch, devolutiva do professor.
 2. Afinador: 11 afinações, calibração 440/442, detecção de pitch em tempo real no navegador.
-3. Biblioteca: grava/sobe áudio, salva no Firebase Storage.
+3. Biblioteca (antes chamada Gravador): grava/sobe áudio, salva no Firebase Storage e lista as gravações.
 4. Histórico: evolução das análises salvas, com devolutiva do professor.
 5. Composições: letras com cifras [Am] e seções (#), versionamento.
 6. Conversor: WAV/MP3/FLAC/OGG/M4A.
@@ -35,6 +36,7 @@ Você conhece TODO o aplicativo e tem ferramentas reais para LER dados E EXECUTA
 9. Avaliação: 5 exercícios que geram o perfil vocal (classificação, extensão, tessitura).
 10. Orange Studio: separação de stems (voz/instrumental) via Demucs no Colab.
 11. Songwriter: geração de música via Hugging Face + letra via você mesma (Gemini).
+12. Acordes: braço de violão clicável — o usuário marca as notas nas cordas e o app identifica o acorde (nome, notas, onde se encaixa: tonalidades e escalas); também procura um acorde por nome e mostra posições no braço.
 
 ## Suas ferramentas (você EXECUTA, não só descreve)
 - listar_gravacoes, avaliar_gravacao (ouve o áudio de verdade), analisar_gravacao (roda
@@ -54,7 +56,7 @@ Você conhece TODO o aplicativo e tem ferramentas reais para LER dados E EXECUTA
   a menos que ele já tenha confirmado explicitamente na mensagem.
 - Se o usuário disser "minha última gravação" sem nome exato, use listar_gravacoes
   primeiro pra achar o nome certo (a lista vem ordenada da mais recente pra mais antiga).
-- Sempre responda em português, de forma acolhedora, prática e específica, porém simpática.
+- Sempre responda em português, de forma acolhedora, prática e específica.
 - Baseie suas respostas em dados reais obtidos pelas ferramentas — nunca invente números.
 """
 
@@ -85,6 +87,9 @@ Ferramentas disponíveis:
 - excluir_gravacao(nome: str) — exclui uma gravação. Só chame depois do usuário confirmar.
 - listar_conversas() — lista as conversas salvas com você (nome, data).
 - ler_conversa(nome: str) — lê o histórico completo de outra conversa salva.
+- identificar_acorde(cordas: str) — identifica um acorde montado no braço do violão. `cordas` = 6 valores, da corda mais GRAVE (Mi) à mais AGUDA (mi): x = corda muda, 0 = solta, número = casa. Ex: "x32010" (Dó maior). Com casas de 2 dígitos separe por vírgula: "x,10,10,9,x,x". Devolve nome, alternativas, notas, tonalidades e escalas onde se encaixa.
+- procurar_acorde(nome: str) — dado o nome (ex: Am7, C7M, F#m, G/B), devolve as notas, posições no violão e onde se encaixa (tonalidades e escalas).
+Quando o usuário perguntar que acorde é, em qual escala ou tonalidade um acorde se encaixa, ou pedir ideias a partir de um acorde que montou, USE essas duas ferramentas e explique em cima do resultado — não invente teoria de cabeça.
 
 Depois que o resultado de uma ferramenta aparecer em "Resultados de ferramentas já
 chamadas", USE esse resultado pra responder ao usuário em texto normal — não chame
@@ -99,7 +104,7 @@ pra dar uma resposta final em português.
   a menos que ele já tenha confirmado explicitamente na mensagem.
 - Se o usuário disser "minha última gravação" sem nome exato, use listar_gravacoes
   primeiro pra achar o nome certo (a lista vem ordenada da mais recente pra mais antiga).
-- Sempre responda em português, de forma acolhedora, prática e específica, porém simpática.
+- Sempre responda em português, de forma acolhedora, prática e específica.
 - Baseie suas respostas em dados reais obtidos pelas ferramentas — nunca invente números.
 """
 
@@ -198,7 +203,54 @@ def interpretar_comando_producao(descricao):
     return padrao
 
 
+def _ler_cordas(valor):
+    """Aceita lista [-1,3,2,0,1,0], "x32010" (casas de 1 dígito) ou "x,10,10,9,x,x" (com vírgula/espaço)."""
+    if isinstance(valor, (list, tuple)):
+        try:
+            cordas = [-1 if str(v).strip().lower() == "x" else int(v) for v in valor]
+        except Exception:
+            return None
+        return cordas if len(cordas) == 6 else None
+    texto = str(valor or "").strip().lower()
+    if not texto:
+        return None
+    partes = [p for p in re.split(r"[,\s]+", texto) if p] if ("," in texto or " " in texto) else list(texto)
+    try:
+        cordas = [-1 if p in ("x", "-1") else int(p) for p in partes]
+    except Exception:
+        return None
+    return cordas if len(cordas) == 6 else None
+
+
+def _resumo_acorde(info):
+    """Versão enxuta do resultado de acordes.py (poupa tokens da conversa)."""
+    if "erro" in info:
+        return info
+    saida = {k: info[k] for k in ("nome", "tipo", "alternativas", "baixo") if k in info}
+    saida["notas"] = " ".join(f"{n['letra']}({n['funcao']})" for n in info["notas"])
+    enc = info["encaixe"]
+    saida["tonalidades"] = [f"{t['tonalidade']} — {t['grau']}" for t in enc["tonalidades"][:6]]
+    saida["escalas_sobre_a_fundamental"] = [f"{e['nome']}: {e['notas']}" for e in enc["escalas"][:8]]
+    if enc.get("observacao"):
+        saida["observacao"] = enc["observacao"]
+    if info.get("posicoes"):
+        saida["posicoes"] = [
+            "".join("x" if c < 0 else (str(c) if c < 10 else f"({c})") for c in p["cordas"]) + f" (a partir da casa {p['base']})"
+            for p in info["posicoes"][:4]
+        ]
+    return saida
+
+
 def _executar_ferramenta(nome_func, args):
+    if nome_func == "identificar_acorde":
+        cordas = _ler_cordas(args.get("cordas"))
+        if cordas is None:
+            return {"erro": "Preciso das 6 cordas, da mais grave à mais aguda. Ex: \"x32010\" (x = muda, 0 = solta, número = casa)."}
+        return _resumo_acorde(teoria_acordes.identificar(cordas))
+
+    if nome_func == "procurar_acorde":
+        return _resumo_acorde(teoria_acordes.procurar(str(args.get("nome", ""))))
+
     if nome_func == "listar_gravacoes":
         return {"gravacoes": gravacoes.listar_gravacoes()[: args.get("limite", 20)]}
 
