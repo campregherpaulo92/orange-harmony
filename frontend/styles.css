@@ -1062,3 +1062,32 @@ canvas#curvaPitch { width: 100%; background: #0d0d0d; border-radius: 12px; }
 .oh-progresso li.oh-ativa i { background: rgba(249,115,22,0.25); }
 .oh-progresso li.oh-ativa i::after { content: ""; position: absolute; inset: 0; width: 45%; background: var(--oh-orange); border-radius: 4px; animation: oh-vai 1.2s ease-in-out infinite; }
 @keyframes oh-vai { 0% { left: -45%; } 100% { left: 100%; } }
+
+
+/* ── Aba Acordes ── */
+.oh-acorde-layout { display: grid; grid-template-columns: minmax(250px, 310px) 1fr; gap: 28px; align-items: start; margin-top: 12px; }
+@media (max-width: 780px) { .oh-acorde-layout { grid-template-columns: 1fr; } }
+.oh-acorde-braco { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 8px 6px; }
+.oh-braco-svg { width: 100%; height: auto; display: block; user-select: none; -webkit-user-select: none; }
+.oh-braco-celula, .oh-braco-topo { cursor: pointer; }
+.oh-braco-celula:hover { fill: rgba(249,115,22,0.22); }
+.oh-braco-topo:hover { fill: rgba(255,255,255,0.10); }
+.oh-acorde-controles { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.oh-acorde-base-texto { font-size: 0.82rem; color: #bdbdbd; min-width: 104px; text-align: center; }
+.oh-btn-mini { padding: 6px 12px; font-size: 0.82rem; box-shadow: none; }
+.oh-acorde-nome { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 3.2rem; line-height: 1.05; color: var(--oh-orange); }
+.oh-acorde-tipo { color: #cfcfcf; margin: 2px 0 6px; }
+.oh-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.oh-chip { background: rgba(249,115,22,0.14); border: 1px solid rgba(249,115,22,0.35); color: #ffd9bd; border-radius: 999px; padding: 3px 11px; font-size: 0.8rem; }
+.oh-chip-tom { background: rgba(34,211,238,0.10); border-color: rgba(34,211,238,0.35); color: #b8f1fb; }
+.oh-acorde-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+.oh-encaixe-bloco { margin-top: 14px; }
+.oh-encaixe-titulo { font-family: 'Baloo 2', sans-serif; font-weight: 700; margin-bottom: 6px; }
+.oh-lista-escalas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 0.86rem; }
+.oh-lista-escalas b { color: #f2f2f2; margin-right: 8px; }
+.oh-escala-notas { color: #9a9a9a; font-family: monospace; }
+.oh-acorde-posicoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-top: 10px; }
+.oh-mini-braco { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; padding: 6px; cursor: pointer; color: #cfcfcf; display: flex; flex-direction: column; align-items: center; transition: transform .15s ease, border-color .15s ease; }
+.oh-mini-braco:hover { transform: translateY(-2px); border-color: var(--oh-orange); }
+.oh-mini-braco svg { width: 100%; height: auto; }
+.oh-mini-legenda { font-size: 0.74rem; margin-top: 4px; font-family: monospace; }

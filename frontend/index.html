@@ -6,7 +6,7 @@
 <title>Orange Harmony</title>
 <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
 <link rel="icon" href="favicon.ico" sizes="any">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">  
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -23,6 +23,7 @@
       <button class="oh-nav-item" data-page="avaliacao">📋 <span>Avaliação</span></button>
       <button class="oh-nav-item oh-nav-active" data-page="estudo">🎵 <span>Estudo</span></button>
       <button class="oh-nav-item" data-page="afinador">🎸 <span>Afinador</span></button>
+      <button class="oh-nav-item" data-page="acordes">🎶 <span>Acordes</span></button>
       <button class="oh-nav-item" data-page="gravador">🎙️ <span>Biblioteca</span></button>
       <button class="oh-nav-item" data-page="historico">📊 <span>Histórico</span></button>
       <button class="oh-nav-item" data-page="composicoes">🎼 <span>Composições</span></button>
@@ -123,7 +124,7 @@
     <!-- ── PÁGINA: GRAVADOR ── -->
     <section class="oh-page" id="page-gravador">
       <div class="oh-card">
-<div class="oh-section-title"><span>🎙️</span> Biblioteca<i class="oh-title-line"></i></div>
+        <div class="oh-section-title"><span>🎙️</span> Biblioteca<i class="oh-title-line"></i></div>
         <p class="oh-label-campo">Nome da gravação</p>
         <input type="text" id="gravadorNomeInput" class="oh-input-texto" placeholder="Ex: Cover Snuff - 23/09">
 
@@ -318,6 +319,48 @@
         <p id="afinadorErro" class="oh-status"></p>
       </div>
     </section>
+    <!-- ── PÁGINA: ACORDES (braço do violão) ── -->
+    <section class="oh-page" id="page-acordes">
+      <div class="oh-card">
+        <div class="oh-section-title"><span>🎶</span> Acordes<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Toque nas casas para montar o acorde. Toque nas marcas <b>acima da pestana</b> para deixar a corda <b>solta ○</b> ou <b>muda ×</b>. O nome aparece ao lado.</p>
+        <div class="oh-acorde-layout">
+          <div class="oh-acorde-braco-col">
+            <div id="acordeBraco" class="oh-acorde-braco"></div>
+            <div class="oh-acorde-controles">
+              <button id="btnAcordeBaseMenos" class="oh-btn oh-btn-secundario oh-btn-mini" title="Descer o braço (casas mais graves)">◀</button>
+              <span id="acordeBaseTexto" class="oh-acorde-base-texto">Casa inicial: 1</span>
+              <button id="btnAcordeBaseMais" class="oh-btn oh-btn-secundario oh-btn-mini" title="Subir o braço (casas mais agudas)">▶</button>
+              <button id="btnAcordeLimpar" class="oh-btn oh-btn-secundario oh-btn-mini">🧹 Limpar</button>
+            </div>
+          </div>
+          <div class="oh-acorde-resultado">
+            <div id="acordeNome" class="oh-acorde-nome">—</div>
+            <div id="acordeTipo" class="oh-acorde-tipo">Marque pelo menos 2 notas no braço.</div>
+            <div id="acordeAlternativas" class="oh-hint"></div>
+            <div id="acordeNotas" class="oh-chips"></div>
+            <div class="oh-acorde-acoes">
+              <button id="btnAcordeTocar" class="oh-btn" disabled>🔊 Tocar acorde</button>
+              <button id="btnAcordeComposicao" class="oh-btn oh-btn-secundario" disabled>➕ Usar na composição</button>
+              <button id="btnAcordeLaranjinha" class="oh-btn oh-btn-secundario" disabled>🍊 Perguntar à Laranjinha</button>
+            </div>
+            <p id="acordeStatus" class="oh-status"></p>
+            <div id="acordeEncaixe" class="oh-acorde-encaixe"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="oh-card">
+        <div class="oh-section-title"><span>🔎</span> Procurar acorde por nome<i class="oh-title-line"></i></div>
+        <div class="oh-row">
+          <input type="text" id="acordeBusca" class="oh-input-texto" placeholder="Ex: Am7, C7M, F#m, G/B, Dsus4">
+          <button id="btnAcordeBuscar" class="oh-btn">Procurar</button>
+        </div>
+        <p id="acordeBuscaInfo" class="oh-hint"></p>
+        <div id="acordePosicoes" class="oh-acorde-posicoes"></div>
+      </div>
+    </section>
+
     <!-- ── PÁGINA: HISTÓRICO ── -->
     <section class="oh-page" id="page-historico">
       <div class="oh-card">
@@ -723,5 +766,6 @@
 <script src="laranjinha.js"></script>
 <script src="estudio.js"></script>
 <script src="songwriter.js"></script>
+<script src="acordes.js"></script>
 </body>
 </html>
