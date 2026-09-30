@@ -30,6 +30,7 @@ Aplicação completa de coaching vocal e composição: analisa sua voz, detecta 
 | 🔄 **Conversor** | WAV, MP3, FLAC, OGG e M4A, vários formatos de uma vez |
 | 🎛️ **Produtor** | Backing track com baixo, bateria, acordes, teclado e solo em **20 estilos** (Pop, Rock, Balada, Sertanejo, Funk, MPB, Gospel, Reggae, Blues, Jazz, Forró, Eletrônica, Samba, Pagode, Axé, Bossa Nova, Country, R&B, Trap e Metal). Um assistente de IA sugere a configuração a partir de uma frase |
 | ✨ **Edição Vocal Inteligente** | EQ de presença, compressão, redução de ruído, sibilância, ajuste de tom e reverb — por checkbox ou por **comando em português** interpretado por IA |
+| 📰 **Newsletter (Orange News)** | Jornal do app em formato de jornal: **manchete do dia**, dicas de afinação, composição, violão (com a **levada do dia** em grade), teoria, produção, IA e curiosidades — que trocam todo dia e têm botão "Experimente no app". Embaixo, notícias de fora sobre música e produção, filtradas por relevância, com **resumo curto em português** e link da matéria |
 | 🤖 **Songwriter** | Letra original em português (Gemini), referência sonora analisada por IA, prompt musical e geração da música completa via Hugging Face (YuE2) |
 | 🍊 **Laranjinha** | Assistente de IA multi-chat, com memória entre conversas, que **age**: avalia gravações, gera produções, aplica edições, salva composições, renomeia e exclui, e consulta os motores de **acordes** e de **escalas** (explica uma escala e avalia uma gravação nela) |
 | 🎚️ **Orange Studio** | Mini-DAW: separação de stems (voz e instrumental), forma de onda e espectro ao vivo, mute/solo/volume, corte e deslocamento por faixa (com desfazer), renomear faixas, substituir e baixar por faixa, e um agente de IA que aplica ajustes por texto |
@@ -139,6 +140,8 @@ orange-harmony/
 │   ├── audio_analysis.py       # pitch, BPM, tom, vibrato (em blocos, memória constante)
 │   ├── acordes.py              # teoria de acordes: identificar, procurar, escalas e tonalidades
 │   ├── escalas.py              # escalas para treino: notas, graus, acordes da escala, avaliação do canto
+│   ├── news.py                 # motor do Orange News: edição do dia, feeds RSS, filtro, resumos
+│   ├── news_conteudo.py        # dicas, curiosidades e levadas escritas (é só acrescentar itens para ampliar)
 │   ├── edicao_dsp.py           # EQ, compressor, redução de ruído, ajuste de tom
 │   ├── producao_dsp.py         # baixo, bateria, acordes, teclado, solo
 │   ├── songwriter.py           # letra, referência sonora, geração via YuE2
@@ -170,10 +173,15 @@ orange-harmony/
 - [ ] **Estúdio:** arrastar na linha do tempo para avançar e voltar a música
 - [ ] **Acordes:** campo para digitar as notas ("Lá, Dó, Mi, Sol") e descobrir o acorde
 - [ ] **Colab:** guardar o JSON do Firebase nos Segredos, para não escolher o arquivo toda vez
+- [ ] **Orange News:** ampliar o banco de dicas e, com login, personalizar o jornal com a sua evolução
 
 ---
 
 ## 📝 Histórico de versões
+
+**v11 — Orange News**
+- Nova aba **Newsletter** (Orange News): jornal com edição diária e notícias de fora com resumo em português
+- Correção de layout no celular: nenhuma aba passa mais da largura da tela
 
 **v10 — treino de escalas**
 - Seletor de escala na aba Estudo (12 escalas, qualquer tônica), com notas, graus, acordes da escala e desafio de canto
