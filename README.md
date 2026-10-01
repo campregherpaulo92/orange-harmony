@@ -182,6 +182,12 @@ orange-harmony/
 
 ## 📝 Histórico de versões
 
+**v13 — análise nota por nota**
+- O desvio e o % afinado passam a ser medidos **nota por nota**, como um afinador (antes tudo era comparado a uma nota só, e uma escala perfeita saía como "desafinada")
+- A nota de referência só vale quando "Nota de referência" está marcada
+- Novo cartão **Nota por nota** na análise; o Professor recebe o detalhe de cada nota e o último exercício que passou, sem penalizar quem canta outra coisa
+- Histórico: análises antigas marcadas com ⚠️ e fora do gráfico de evolução
+
 **v12 — Singergame**
 - Nova aba **Singergame**: jogo de afinação (túnel com anéis, modo Livre e modo Escala), com afinômetro em tempo real e tolerância em cents por dificuldade
 - Reaproveita a detecção de pitch do Afinador e o perfil vocal da Avaliação
