@@ -29,10 +29,15 @@ function desenharGraficoEvolucao(itens) {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, w, h);
 
-  if (!itens || itens.length < 2) {
+  // Análises antigas mediam o desvio contra UMA nota só (números incomparáveis com os atuais): ficam fora do gráfico.
+  const novas = (itens || []).filter((a) => (a.metodo ?? 1) >= 2);
+  const temAntigas = (itens || []).length > novas.length;
+  itens = novas;
+  if (itens.length < 2) {
     ctx.fillStyle = "#888";
     ctx.font = "13px Nunito";
-    ctx.fillText("Precisa de pelo menos 2 análises para desenhar a evolução.", 12, h / 2);
+    ctx.fillText(temAntigas ? "As análises antigas usavam outro método de medição e ficam fora do gráfico." : "Precisa de pelo menos 2 análises para desenhar a evolução.", 12, h / 2 - 8);
+    if (temAntigas) ctx.fillText("A evolução aparece a partir de 2 análises novas.", 12, h / 2 + 12);
     return;
   }
 
@@ -79,7 +84,7 @@ async function carregarHistorico() {
 
     tbody.innerHTML = itens.map((a) => `
       <tr data-id="${a.id}" class="oh-historico-linha">
-        <td>${a.nome || formatarDataCurta(a.data)}</td>
+        <td>${a.nome || formatarDataCurta(a.data)}${(a.metodo ?? 1) < 2 ? ' <span title="Medição antiga: o desvio era comparado a uma nota só — não é comparável com as análises novas">⚠️</span>' : ""}</td>
         <td>${formatarDataCurta(a.data)}</td>
         <td>${a.nota_predominante || "—"}</td>
         <td>${(a.desvio_medio_cents ?? 0).toFixed ? a.desvio_medio_cents.toFixed(1) : a.desvio_medio_cents}</td>
@@ -137,12 +142,13 @@ function mostrarDetalheHistorico(analise) {
   if (!painel || !analise) return;
   painel.innerHTML = metricaHTML("Análise", analise.nome || "—", formatarDataCurta(analise.data))
     + metricaHTML("Nota predominante", analise.nota_predominante || "—", "nota mais cantada")
-    + metricaHTML("Desvio médio", `${(analise.desvio_medio_cents ?? 0)} cents`, "quanto sai do tom")
+    + metricaHTML("Desvio médio", `${(analise.desvio_medio_cents ?? 0)} cents`, "quanto sai da nota")
     + metricaHTML("Tendência", analise.tendencia || "—", "aguda / grave / neutra")
-    + metricaHTML("Afinado (±50c)", `${analise.pct_afinado ?? 0}%`, "das notas no tom")
+    + metricaHTML(`Afinado (±${(analise.metodo ?? 1) >= 2 && analise.base_desvio === "nota mais próxima" ? 25 : 50}c)`, `${analise.pct_afinado ?? 0}%`, "do tempo no tom")
     + metricaHTML("Frases", analise.num_frases ?? 0, `média ${analise.sustentacao_media ?? 0}s`)
     + metricaHTML("Pausas", analise.num_pausas ?? 0, "respirações detectadas")
-    + metricaHTML("Tom ref.", analise.tom_ref || "—", "referência usada");
+    + metricaHTML("Tom ref.", analise.tom_ref || "—", "referência usada")
+    + metricaHTML("Medição", (analise.metodo ?? 1) >= 2 ? "nota a nota" : "antiga", (analise.metodo ?? 1) >= 2 ? (analise.base_desvio || "") : "contra uma nota só");
 
   const devolutivaCard = document.getElementById("historicoDevolutiva");
   if (devolutivaCard) {

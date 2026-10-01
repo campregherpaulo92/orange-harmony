@@ -321,6 +321,30 @@ function aoMudarEscala() {
 }
 
 // Resultado da análise NA escala: % dentro, graus cantados, notas fora e o que provavelmente aconteceu
+// Quanto o aluno errou em CADA nota (o mesmo detalhe que o Professor recebe)
+function mostrarNotasCantadas(seq, r) {
+  const card = document.getElementById("notasCard");
+  const chips = document.getElementById("notasChips");
+  const base = document.getElementById("metricasBase");
+  chips.replaceChildren();
+  if (base) {
+    base.textContent = !r ? "" : (r.base_desvio || "").startsWith("referência")
+      ? `Medido contra a ${r.base_desvio} que você escolheu. Marque "Nota detectada" para medir cada nota contra ela mesma.`
+      : "Medido em relação à nota mais próxima de cada trecho, como um afinador — vale para uma nota, uma escala ou uma melodia.";
+  }
+  if (!seq || seq.length < 2) { card.hidden = true; return; }
+  card.hidden = false;
+  seq.forEach((n) => {
+    const d = typeof n.desvio_cents === "number" ? n.desvio_cents : null;
+    const dentro = d !== null && Math.abs(d) <= 25;
+    const sinal = d === null ? "" : d > 0 ? "+" : d < 0 ? "−" : "";
+    const rotulo = `${String(n.nota).replace("♯", "#")} · ${n.duracao_s}s` + (d === null ? "" : ` · ${sinal}${Math.round(Math.abs(d))}¢`);
+    const chip = elemento("span", "oh-chip " + (d === null ? "" : dentro ? "oh-chip-ok" : "oh-chip-falta"), rotulo);
+    if (d !== null) chip.title = dentro ? "dentro da afinação" : d > 0 ? "agudo" : "grave";
+    chips.appendChild(chip);
+  });
+}
+
 function mostrarResultadoEscala(av) {
   const card = document.getElementById("escalaResultadoCard");
   const corpo = document.getElementById("escalaResultadoCorpo");
@@ -539,16 +563,18 @@ function inicializarAnaliseVocal() {
           metricaHTML("Duração", `${c.duracao_s}s`, "áudio analisado"),
         ].join("");
         vibratoCard.hidden = true;
+        mostrarNotasCantadas(null, null);
       } else {
         const r = dados.resultado;
         metricasEl.innerHTML = [
           metricaHTML("Nota predominante", r.nota_predominante, "nota mais cantada"),
-          metricaHTML("Desvio médio", `${r.desvio_medio_cents.toFixed(1)} cents`, "quanto sai do tom"),
+          metricaHTML("Desvio médio", `${r.desvio_medio_cents.toFixed(1)} cents`, "quanto sai da nota"),
           metricaHTML("Tendência", r.tendencia, `${r.desvio_sinal_cents.toFixed(1)} cents`),
-          metricaHTML("Afinado (±50c)", `${r.pct_afinado.toFixed(1)}%`, "das notas no tom"),
+          metricaHTML(`Afinado (±${r.limite_afinado_cents || 50}c)`, `${r.pct_afinado.toFixed(1)}%`, "do tempo no tom"),
           metricaHTML("Frases", r.num_frases, `média ${r.sustentacao_media.toFixed(2)}s`),
           metricaHTML("Pausas", r.num_pausas, `média ${r.pausa_media.toFixed(2)}s`),
         ].join("");
+        mostrarNotasCantadas(dados.sequencia_notas, r);
 
         if (dados.vibratos && dados.vibratos.length > 0) {
           vibratoCard.hidden = false;
