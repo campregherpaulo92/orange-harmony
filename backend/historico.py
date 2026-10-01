@@ -29,6 +29,8 @@ def registrar_analise(resultado, modo="completa", tom_ref=None, devolutiva=None,
         "sustentacao_media": round(resultado.get("sustentacao_media", 0), 2),
         "num_pausas": resultado.get("num_pausas", 0),
         "tom_ref": tom_ref or "",
+        "metodo": resultado.get("metodo", 1),                    # 2 = desvio medido nota por nota; 1 = método antigo (uma nota só)
+        "base_desvio": resultado.get("base_desvio", ""),
         # escala que o aluno estava treinando (opcional): nome e % das notas cantadas dentro dela
         "escala": (escala or {}).get("escala", "") if isinstance(escala, dict) and "erro" not in escala else "",
         "pct_na_escala": (escala or {}).get("pct_dentro", None) if isinstance(escala, dict) and "erro" not in escala else None,

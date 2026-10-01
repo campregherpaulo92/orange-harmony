@@ -205,7 +205,7 @@ def segmentar_notas(f0, tempos, duracao_min=0.4):
 
 def analisar_afinacao(f0_limpo, tempos, calibracao=440.0, nota_ref=None):
     mascara = f0_limpo > 0
-    vazio = {"nota_predominante": "—", "desvio_medio_cents": 0.0, "tendencia": "—",
+    vazio = {"nota_predominante": "—", "desvio_medio_cents": 0.0, "tendencia": "—", "base_desvio": "", "metodo": 2, "limite_afinado_cents": 25,
              "desvio_sinal_cents": 0.0, "pct_afinado": 0.0, "num_frases": 0,
              "sustentacao_media": 0.0, "num_pausas": 0, "pausa_media": 0.0}
     if mascara.sum() == 0:
@@ -223,13 +223,23 @@ def analisar_afinacao(f0_limpo, tempos, calibracao=440.0, nota_ref=None):
     midi_arred_pred = int(round(midi_pred))
     nota_pred = f"{NOMES_NOTAS[midi_arred_pred % 12]}{midi_arred_pred // 12 - 1}"
     if nota_ref:
+        # modo REFERÊNCIA (o aluno escolheu cantar contra uma nota): régua única, a nota de referência
         f_ref = f0_para_freq(nota_ref, calibracao)
+        cents = 1200 * np.log2(f0_voz / f_ref)
+        base_desvio = f"referência {nota_ref}"
     else:
-        f_ref = calibracao * 2 ** ((midi_arred_pred - 69) / 12)
-    cents = 1200 * np.log2(f0_voz / f_ref)
+        # modo NOTA DETECTADA: cada instante é medido contra a nota (semitom) mais próxima, como um afinador.
+        # Vale para uma nota sustentada, uma escala ou uma melodia — antes tudo era comparado a UMA nota só,
+        # e uma escala perfeitamente afinada saía com ~350 cents de "erro".
+        midi_voz = 69 + 12 * np.log2(f0_voz / calibracao)
+        cents = 100 * (midi_voz - np.round(midi_voz))
+        base_desvio = "nota mais próxima"
     desvio_medio = float(np.mean(np.abs(cents)))
     desvio_sinal = float(np.mean(cents))
-    pct_afinado = float(np.mean(np.abs(cents) <= 50) * 100)
+    # Medindo contra a nota mais próxima, o erro máximo possível é 50¢ — então "dentro de ±50¢" seria sempre 100%.
+    # Nesse modo o limite de "afinado" é ±25¢; no modo referência continua ±50¢ (régua única).
+    limite_afinado = 50 if nota_ref else 25
+    pct_afinado = float(np.mean(np.abs(cents) <= limite_afinado) * 100)
     tendencia = ("neutra (bem centrada)" if abs(desvio_sinal) < 10
                  else ("aguda (sharp)" if desvio_sinal > 0 else "grave (flat)"))
     dt = tempos[1] - tempos[0] if len(tempos) > 1 else 0.01
@@ -244,6 +254,7 @@ def analisar_afinacao(f0_limpo, tempos, calibracao=440.0, nota_ref=None):
     pausas = [(inicios[k + 1] - fins[k]) * dt for k in range(len(fins) - 1) if (inicios[k + 1] - fins[k]) * dt >= 0.3]
     return {"nota_predominante": nota_pred, "desvio_medio_cents": desvio_medio,
             "tendencia": tendencia, "desvio_sinal_cents": desvio_sinal,
+            "base_desvio": base_desvio, "metodo": 2, "limite_afinado_cents": limite_afinado,
             "pct_afinado": pct_afinado, "num_frases": len(frases),
             "sustentacao_media": float(np.mean(frases)) if frases else 0.0,
             "num_pausas": len(pausas), "pausa_media": float(np.mean(pausas)) if pausas else 0.0}
@@ -266,6 +277,32 @@ def extrair_sequencia_notas(f0, tempos, min_dur=0.15):
             atual, inicio = n, t
     if atual is not None and (tempos[-1] - inicio) >= min_dur:
         notas.append((atual, round(tempos[-1] - inicio, 2)))
+    return notas
+
+
+def extrair_notas_detalhadas(f0, tempos, calibracao=440.0, min_dur=0.15):
+    """Como extrair_sequencia_notas, mas devolve também o desvio TÍPICO (mediana, em cents) de cada nota
+    em relação à própria nota: [{"nota": "G3", "duracao_s": 0.8, "desvio_cents": -8.0}, ...]."""
+    notas, atual, inicio, freqs = [], None, None, []
+
+    def fechar(fim):
+        if atual is not None and (fim - inicio) >= min_dur and freqs:
+            alvo = librosa.note_to_midi(atual)
+            cents = [100 * (69 + 12 * np.log2(f / calibracao) - alvo) for f in freqs]
+            notas.append({"nota": atual, "duracao_s": round(fim - inicio, 2), "desvio_cents": round(float(np.median(cents)), 1)})
+
+    for t, f in zip(tempos, f0):
+        if f <= 0:
+            fechar(t)
+            atual, inicio, freqs = None, None, []
+            continue
+        n = librosa.hz_to_note(f)
+        if n != atual:
+            fechar(t)
+            atual, inicio, freqs = n, t, []
+        freqs.append(f)
+    if atual is not None:
+        fechar(tempos[-1])
     return notas
 
 
@@ -442,7 +479,7 @@ def analisar_audio_completo(dados: bytes, nome_arquivo: str, modo: str = "comple
                 "aviso_duracao": aviso_duracao}
 
     resultado = analisar_afinacao(f0_limpo, tempos, calibracao, nota_ref=nota_ref)
-    seq_notas = extrair_sequencia_notas(f0_limpo, tempos)
+    seq_notas = extrair_notas_detalhadas(f0_limpo, tempos, calibracao)
     avaliacao_escala = None
     if escala and escala.get("tonica") and escala.get("tipo"):
         try:
@@ -459,7 +496,7 @@ def analisar_audio_completo(dados: bytes, nome_arquivo: str, modo: str = "comple
     return {
         "modo": "completa",
         "resultado": resultado,
-        "sequencia_notas": [{"nota": n, "duracao_s": d} for n, d in seq_notas[:20]],
+        "sequencia_notas": seq_notas[:24],
         "avaliacao_escala": avaliacao_escala,
         "vibratos": vibratos_json,
         "curva_pitch": curva_pitch,

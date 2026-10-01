@@ -98,7 +98,9 @@ def analisar(
         nome_arquivo=arquivo.filename or "audio.wav",
         modo=modo,
         calibracao=calibracao,
-        nota_ref=nota_ref,
+        # a nota de referência só serve de régua quando o aluno escolheu "Nota de referência";
+        # com "Nota detectada" cada nota é medida contra ela mesma (antes a referência valia sempre)
+        nota_ref=nota_ref if base_devolutiva == "referencia" else None,
         escala={"tonica": escala_tonica, "tipo": escala_tipo} if escala_tonica and escala_tipo else None,
     )
 
