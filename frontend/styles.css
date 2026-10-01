@@ -1192,3 +1192,7 @@ canvas#curvaPitch { width: 100%; background: #0d0d0d; border-radius: 12px; }
 .sg-combo-ativo { transform: scale(1.15); }
 .sg-canvas { width: 100%; max-width: 900px; height: auto; aspect-ratio: 900 / 620; display: block; margin: 0 auto; border-radius: 14px; background: #0a0a0a; }
 .sg-hud-baixo { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 0.82rem; color: #9a9a9a; }
+
+.sg-palco { position: relative; max-width: 900px; margin: 0 auto; }
+.sg-feedback { position: absolute; top: 14px; left: 58%; transform: translateX(-50%); font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 1.35rem; text-shadow: 0 0 14px rgba(0,0,0,0.9); opacity: 0; pointer-events: none; transition: opacity .2s ease; text-align: center; white-space: nowrap; }
+.sg-feedback-ativo { opacity: 1; }

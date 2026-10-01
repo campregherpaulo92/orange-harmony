@@ -411,14 +411,16 @@
         <p class="oh-hint">Sua voz guia uma bolinha de luz por um túnel. Cante a nota certa pra atravessar cada anel.</p>
 
         <div class="oh-row" style="margin-top:10px;">
-          <label>Dificuldade
+          <label>Dificuldade (quão perto da nota você precisa estar)
             <select id="sgDificuldade">
-              <option value="facil">Fácil</option>
-              <option value="medio">Médio</option>
-              <option value="dificil">Difícil</option>
+              <option value="facil">Fácil — ±75 cents</option>
+              <option value="medio">Médio — ±50 cents</option>
+              <option value="dificil">Difícil — ±25 cents</option>
             </select>
           </label>
         </div>
+        <p class="oh-hint">100 cents = 1 semitom. O <b>afinômetro</b> mostra, em tempo real, o quanto a sua voz está acima ou abaixo da nota. Você precisa ficar dentro da faixa verde durante a passagem do anel.</p>
+        <label class="oh-radio"><input type="checkbox" id="sgQualquerOitava" checked> Aceitar a nota em qualquer oitava (útil se ela estiver fora da sua extensão)</label>
         <div class="oh-row" style="margin-top:6px;">
           <button class="oh-btn sg-modo-btn" data-modo="livre">🎲 Modo Livre</button>
           <button class="oh-btn oh-btn-secundario sg-modo-btn" data-modo="escala">🎼 Modo Escala (usa a escala escolhida na aba Estudo)</button>
@@ -436,9 +438,12 @@
             <div id="sgCombo" class="sg-combo">combo x0</div>
           </div>
         </div>
-        <canvas id="sgCanvas" width="900" height="620" class="sg-canvas"></canvas>
+        <div class="sg-palco">
+          <canvas id="sgCanvas" width="900" height="620" class="sg-canvas"></canvas>
+          <div id="sgFeedback" class="sg-feedback"></div>
+        </div>
         <div class="sg-hud-baixo">
-          <span>Anel <span id="sgTotal">0</span> de 20</span>
+          <span>Anel <span id="sgTotal">0</span> de <span id="sgMeta">20</span></span>
           <button class="oh-btn oh-btn-secundario oh-btn-mini" id="btnSgCancelar">■ Encerrar</button>
         </div>
       </div>
