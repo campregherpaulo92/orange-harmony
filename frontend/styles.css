@@ -1176,3 +1176,19 @@ canvas#curvaPitch { width: 100%; background: #0d0d0d; border-radius: 12px; }
 @media (max-width: 800px) {
   .oh-table { display: block; max-width: 100%; overflow-x: auto; }
 }
+
+
+/* ── Singergame ── */
+.sg-recordes { margin-top: 16px; display: flex; flex-direction: column; gap: 4px; }
+.sg-recorde-item { font-size: 0.85rem; color: #cfcfcf; background: rgba(255,255,255,0.03); border-radius: 8px; padding: 6px 12px; }
+.sg-jogo { padding: 14px; }
+.sg-hud-topo { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+.sg-nota-alvo { font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 1.1rem; color: #f2f2f2; }
+.sg-nota-alvo span { color: var(--oh-orange); font-weight: 800; }
+.sg-placar { text-align: right; }
+.sg-pontos { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 1.6rem; color: var(--oh-orange); line-height: 1; }
+.sg-pontos-final { font-size: 3rem; text-align: center; margin: 10px 0; }
+.sg-combo { font-size: 0.82rem; color: #4ade80; font-weight: 700; transition: transform .15s ease; }
+.sg-combo-ativo { transform: scale(1.15); }
+.sg-canvas { width: 100%; max-width: 900px; height: auto; aspect-ratio: 900 / 620; display: block; margin: 0 auto; border-radius: 14px; background: #0a0a0a; }
+.sg-hud-baixo { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 0.82rem; color: #9a9a9a; }

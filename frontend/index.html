@@ -32,6 +32,7 @@
       <button class="oh-nav-item" data-page="edicao">✨ <span>Edição Vocal Inteligente</span></button>
       <button class="oh-nav-item" data-page="songwriter">🤖 <span>Songwriter</span></button>
       <button class="oh-nav-item" data-page="news">📰 <span>Newsletter</span></button>
+      <button class="oh-nav-item" data-page="singergame">🎮 <span>Singergame</span></button>
     </nav>
     <div class="oh-sidebar-resize" id="sidebarResize"></div>
   </aside>
@@ -400,6 +401,54 @@
           <div class="oh-jornal-lema">O jornal de quem estuda, canta, toca e compõe</div>
         </header>
         <div id="jornalCorpo"><p class="oh-jornal-carregando">Preparando a edição de hoje…</p></div>
+      </div>
+    </section>
+
+    <!-- ── PÁGINA: SINGERGAME ── -->
+    <section class="oh-page" id="page-singergame">
+      <div class="oh-card" id="sgConfig">
+        <div class="oh-section-title"><span>🎮</span> Singergame<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Sua voz guia uma bolinha de luz por um túnel. Cante a nota certa pra atravessar cada anel.</p>
+
+        <div class="oh-row" style="margin-top:10px;">
+          <label>Dificuldade
+            <select id="sgDificuldade">
+              <option value="facil">Fácil</option>
+              <option value="medio">Médio</option>
+              <option value="dificil">Difícil</option>
+            </select>
+          </label>
+        </div>
+        <div class="oh-row" style="margin-top:6px;">
+          <button class="oh-btn sg-modo-btn" data-modo="livre">🎲 Modo Livre</button>
+          <button class="oh-btn oh-btn-secundario sg-modo-btn" data-modo="escala">🎼 Modo Escala (usa a escala escolhida na aba Estudo)</button>
+        </div>
+        <p id="sgErro" class="oh-status"></p>
+
+        <div id="sgRecordes" class="sg-recordes"></div>
+      </div>
+
+      <div id="sgJogo" class="oh-card sg-jogo" hidden>
+        <div class="sg-hud-topo">
+          <div class="sg-nota-alvo">Cante um <span id="sgNotaAlvo">—</span></div>
+          <div class="sg-placar">
+            <div id="sgPontos" class="sg-pontos">0</div>
+            <div id="sgCombo" class="sg-combo">combo x0</div>
+          </div>
+        </div>
+        <canvas id="sgCanvas" width="900" height="620" class="sg-canvas"></canvas>
+        <div class="sg-hud-baixo">
+          <span>Anel <span id="sgTotal">0</span> de 20</span>
+          <button class="oh-btn oh-btn-secundario oh-btn-mini" id="btnSgCancelar">■ Encerrar</button>
+        </div>
+      </div>
+
+      <div id="sgFim" class="oh-card" hidden>
+        <div class="oh-section-title"><span>🏁</span> Fim de partida<i class="oh-title-line"></i></div>
+        <div id="sgFimPontos" class="sg-pontos sg-pontos-final">0</div>
+        <p id="sgFimDetalhe" class="oh-hint"></p>
+        <p id="sgFimRecorde" class="oh-hint"></p>
+        <button class="oh-btn" id="btnSgJogarDeNovo">🔁 Jogar de novo</button>
       </div>
     </section>
 
@@ -810,5 +859,6 @@
 <script src="songwriter.js"></script>
 <script src="acordes.js"></script>
 <script src="news.js"></script>
+<script src="singergame.js"></script>
 </body>
 </html>
