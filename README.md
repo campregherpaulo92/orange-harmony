@@ -30,6 +30,7 @@ Aplicação completa de coaching vocal e composição: analisa sua voz, detecta 
 | 🔄 **Conversor** | WAV, MP3, FLAC, OGG e M4A, vários formatos de uma vez |
 | 🎛️ **Produtor** | Backing track com baixo, bateria, acordes, teclado e solo em **20 estilos** (Pop, Rock, Balada, Sertanejo, Funk, MPB, Gospel, Reggae, Blues, Jazz, Forró, Eletrônica, Samba, Pagode, Axé, Bossa Nova, Country, R&B, Trap e Metal). Um assistente de IA sugere a configuração a partir de uma frase |
 | ✨ **Edição Vocal Inteligente** | EQ de presença, compressão, redução de ruído, sibilância, ajuste de tom e reverb — por checkbox ou por **comando em português** interpretado por IA |
+| 🎮 **Singergame** | Jogo de afinação: sua voz guia uma bolinha de luz por um túnel com anéis — cada anel é uma nota, e cantar a altura certa faz você atravessar. Modo **Livre** (notas aleatórias dentro da sua extensão vocal) e modo **Escala** (usa a escala escolhida na aba Estudo). Pontos, combo e recorde salvo por modo/dificuldade |
 | 📰 **Newsletter (Orange News)** | Jornal do app em formato de jornal: **manchete do dia**, dicas de afinação, composição, violão (com a **levada do dia** em grade), teoria, produção, IA e curiosidades — que trocam todo dia e têm botão "Experimente no app". Embaixo, notícias de fora sobre música e produção, filtradas por relevância, com **resumo curto em português** e link da matéria |
 | 🤖 **Songwriter** | Letra original em português (Gemini), referência sonora analisada por IA, prompt musical e geração da música completa via Hugging Face (YuE2) |
 | 🍊 **Laranjinha** | Assistente de IA multi-chat, com memória entre conversas, que **age**: avalia gravações, gera produções, aplica edições, salva composições, renomeia e exclui, e consulta os motores de **acordes** e de **escalas** (explica uma escala e avalia uma gravação nela) |
@@ -142,6 +143,7 @@ orange-harmony/
 │   ├── escalas.py              # escalas para treino: notas, graus, acordes da escala, avaliação do canto
 │   ├── news.py                 # motor do Orange News: edição do dia, feeds RSS, filtro, resumos
 │   ├── news_conteudo.py        # dicas, curiosidades e levadas escritas (é só acrescentar itens para ampliar)
+│   ├── singergame.py           # placar do Singergame (recorde por modo/dificuldade)
 │   ├── edicao_dsp.py           # EQ, compressor, redução de ruído, ajuste de tom
 │   ├── producao_dsp.py         # baixo, bateria, acordes, teclado, solo
 │   ├── songwriter.py           # letra, referência sonora, geração via YuE2
@@ -174,10 +176,16 @@ orange-harmony/
 - [ ] **Acordes:** campo para digitar as notas ("Lá, Dó, Mi, Sol") e descobrir o acorde
 - [ ] **Colab:** guardar o JSON do Firebase nos Segredos, para não escolher o arquivo toda vez
 - [ ] **Orange News:** ampliar o banco de dicas e, com login, personalizar o jornal com a sua evolução
+- [ ] **Singergame:** mais modos (ex: ritmo, duetos), efeitos visuais ao acertar combo alto
 
 ---
 
 ## 📝 Histórico de versões
+
+**v12 — Singergame**
+- Nova aba **Singergame**: jogo de afinação (túnel com anéis, modo Livre e modo Escala)
+- Reaproveita a detecção de pitch do Afinador e o perfil vocal da Avaliação
+- Efeitos sonoros sintetizados (sem arquivo de áudio) e recorde salvo no Firestore
 
 **v11 — Orange News**
 - Nova aba **Newsletter** (Orange News): jornal com edição diária e notícias de fora com resumo em português
