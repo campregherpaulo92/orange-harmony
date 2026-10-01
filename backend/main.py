@@ -30,6 +30,7 @@ import estudio_fila
 import acordes
 import escalas
 import news
+import singergame
 import chats
 import songwriter
 
@@ -242,6 +243,24 @@ def acordes_identificar(cordas: str = Form(...)):
 @app.post("/api/acordes/procurar")
 def acordes_procurar(nome: str = Form(...)):
     return acordes.procurar(nome)
+
+
+# ══════════════════════════════════════════════════════════════
+# SINGERGAME (jogo de afinação: a bolinha atravessa o anel certo)
+# ══════════════════════════════════════════════════════════════
+@app.post("/api/singergame/pontuacao")
+def singergame_salvar(modo: str = Form(...), dificuldade: str = Form(...), pontos: int = Form(...),
+                       acertos: int = Form(...), total: int = Form(...), combo_maximo: int = Form(...),
+                       escala_nome: str = Form(None)):
+    recorde, bateu = singergame.salvar_pontuacao(modo, dificuldade, pontos, acertos, total, combo_maximo, escala_nome)
+    if recorde is None:
+        raise HTTPException(status_code=400, detail="Modo inválido.")
+    return {"recorde": recorde, "bateu_recorde": bateu}
+
+
+@app.get("/api/singergame/recordes")
+def singergame_recordes():
+    return {"recordes": singergame.listar_recordes()}
 
 
 # ══════════════════════════════════════════════════════════════
