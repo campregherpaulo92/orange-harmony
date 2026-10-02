@@ -434,6 +434,25 @@
         </div>
         <p id="sgErro" class="oh-status"></p>
 
+        <div class="sg-vocalise">
+          <div class="oh-section-title" style="margin-top:18px;"><span>🎹</span> Vocalise: eu faço, você copia<i class="oh-title-line"></i></div>
+          <p class="oh-hint">O piano toca um padrão e, em seguida, é a sua vez: repita no mesmo andamento. A cada rodada o padrão sobe meio tom e depois desce. Usa a mesma <b>dificuldade</b> (margem em cents) e a opção de oitava acima. Na sua vez não sai som nenhum, então <b>não precisa de fone de ouvido</b>.</p>
+          <div class="oh-row">
+            <label>Padrão
+              <select id="vzPadrao"></select>
+            </label>
+            <label>Velocidade
+              <select id="vzVelocidade">
+                <option value="lento">Lento (60 BPM)</option>
+                <option value="medio" selected>Médio (90 BPM)</option>
+                <option value="rapido">Rápido (130 BPM)</option>
+              </select>
+            </label>
+          </div>
+          <button class="oh-btn" id="btnVzIniciar" type="button">🎹 Começar o Vocalise</button>
+          <p id="vzErro" class="oh-status"></p>
+        </div>
+
         <div id="sgRecordes" class="sg-recordes"></div>
       </div>
 
@@ -452,6 +471,23 @@
         <div class="sg-hud-baixo">
           <span>Anel <span id="sgTotal">0</span> de <span id="sgMeta">20</span></span>
           <button class="oh-btn oh-btn-secundario oh-btn-mini" id="btnSgCancelar">■ Encerrar</button>
+        </div>
+      </div>
+
+      <div id="vzJogo" class="oh-card sg-jogo" hidden>
+        <div class="sg-hud-topo">
+          <div class="sg-nota-alvo"><span id="vzRodada">Rodada 1</span></div>
+          <div class="sg-placar">
+            <div id="vzPontos" class="sg-pontos">0</div>
+            <div id="vzCombo" class="sg-combo">combo x0</div>
+          </div>
+        </div>
+        <div class="sg-palco">
+          <canvas id="vzCanvas" width="900" height="420" class="sg-canvas" style="aspect-ratio: 900 / 420;"></canvas>
+        </div>
+        <div class="sg-hud-baixo">
+          <span id="vzStatus">Prepare-se…</span>
+          <button class="oh-btn oh-btn-secundario oh-btn-mini" id="btnVzCancelar" type="button">■ Encerrar</button>
         </div>
       </div>
 
@@ -872,5 +908,6 @@
 <script src="acordes.js"></script>
 <script src="news.js"></script>
 <script src="singergame.js"></script>
+<script src="vocalise.js"></script>
 </body>
 </html>

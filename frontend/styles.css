@@ -1196,3 +1196,5 @@ canvas#curvaPitch { width: 100%; background: #0d0d0d; border-radius: 12px; }
 .sg-palco { position: relative; max-width: 900px; margin: 0 auto; }
 .sg-feedback { position: absolute; top: 14px; left: 58%; transform: translateX(-50%); font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 1.35rem; text-shadow: 0 0 14px rgba(0,0,0,0.9); opacity: 0; pointer-events: none; transition: opacity .2s ease; text-align: center; white-space: nowrap; }
 .sg-feedback-ativo { opacity: 1; }
+
+.sg-vocalise { margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); }

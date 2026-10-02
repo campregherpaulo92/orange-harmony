@@ -353,13 +353,15 @@ async function sgCarregarRecordes() {
   try {
     const dados = await (await fetch(`${API_BASE}/api/singergame/recordes`)).json();
     const lista = sgEl("sgRecordes"); lista.replaceChildren();
-    const nomes = { livre: "Livre", escala: "Escala" }, dif = { facil: "Fácil", medio: "Médio", dificil: "Difícil" };
+    const nomes = { livre: "Livre", escala: "Escala", vocalise: "Vocalise" }, dif = { facil: "Fácil", medio: "Médio", dificil: "Difícil" };
+    const vel = { lento: "Lento", medio: "Médio", rapido: "Rápido" };
     const chaves = Object.keys(dados.recordes || {}).filter((k) => k.endsWith("_v2"));
     if (!chaves.length) { const p = document.createElement("p"); p.className = "oh-hint"; p.textContent = "Ainda sem recordes — jogue uma partida!"; lista.appendChild(p); return; }
     chaves.forEach((k) => {
-      const [modo, d] = k.replace("_v2", "").split("_");
+      const partes = k.replace("_v2", "").split("_");              // livre_facil | escala_medio | vocalise_rapido_dificil
+      const rotulo = partes[0] === "vocalise" ? `Vocalise · ${vel[partes[1]] || partes[1]} · ${dif[partes[2]] || partes[2]}` : `${nomes[partes[0]] || partes[0]} · ${dif[partes[1]] || partes[1]}`;
       const li = document.createElement("div"); li.className = "sg-recorde-item";
-      li.textContent = `${nomes[modo] || modo} · ${dif[d] || d}: ${Number(dados.recordes[k].pontos).toLocaleString("pt-BR")} pontos`;
+      li.textContent = `${rotulo}: ${Number(dados.recordes[k].pontos).toLocaleString("pt-BR")} pontos`;
       lista.appendChild(li);
     });
   } catch (err) { /* sem recordes: a tela segue sem essa lista */ }
