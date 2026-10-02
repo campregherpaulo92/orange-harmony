@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from firebase_config import get_db
 
 COLECAO = "singergame_placar"
-MODOS_VALIDOS = {"livre", "escala"}
+MODOS_VALIDOS = {"livre", "escala", "vocalise"}
 
 
 def _doc_id(modo, dificuldade):
