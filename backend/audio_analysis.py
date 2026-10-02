@@ -363,7 +363,8 @@ def classificar_vibrato_v4(taxa, extensao, deslize, periodicidade):
 
 
 # ══════════════════ BPM / TOM / COVER ══════════════════
-def detectar_bpm_e_beats(audio, sr):
+def _bpm_beats_beat_track(audio, sr):
+    """Método original (librosa.beat_track). Funciona bem com percussão/violão marcado; com melodia suave pode não achar batida nenhuma."""
     try:
         # BPM é estável ao longo da música: analisa até JANELA_TOM_BPM_S*2 segundos
         # (as batidas depois disso são extrapoladas pela grade do BPM abaixo).
@@ -385,6 +386,74 @@ def detectar_bpm_e_beats(audio, sr):
         return round(bpm, 1), beat_times
     except Exception:
         return 90.0, np.array([])
+
+
+def _beats_confiaveis(bpm, beat_times):
+    """As batidas achadas são regulares e batem com o andamento? (senão o método original falhou e caiu no chute de 90 BPM)"""
+    if beat_times is None or len(beat_times) < 8:
+        return False
+    d = np.diff(beat_times)
+    med = float(np.median(d))
+    return med > 0 and float(np.std(d)) / med < 0.2 and abs(med - 60.0 / bpm) / (60.0 / bpm) < 0.15
+
+
+def _bpm_beats_por_onsets(audio, sr, bpm_forcado=None):
+    """Andamento e batidas pelos ataques das notas (vale para voz/melodia sem percussão): estima o andamento pela
+    periodicidade dos ataques, refina andamento e fase com um 'pente' sobre os ataques e põe a 1ª batida no 1º ataque
+    (quem grava costuma começar a música no tempo 1). Devolve None se não há ataques suficientes."""
+    try:
+        x = np.asarray(audio[: int(JANELA_TOM_BPM_S * 2 * sr)], dtype=np.float32)
+        hop = 512
+        o = librosa.onset.onset_strength(y=x, sr=sr, hop_length=hop)
+        if len(o) < 40 or float(np.max(o)) < 1e-6:
+            return None
+        fr = sr / hop
+        if bpm_forcado:                                                   # o usuário disse o andamento: só acha a fase das batidas
+            tempo = float(bpm_forcado)
+        else:
+            tempo = float(librosa.feature.rhythm.tempo(onset_envelope=o, sr=sr, hop_length=hop, aggregate=np.median, start_bpm=100)[0])
+            if not np.isfinite(tempo) or tempo <= 0:
+                return None
+            while tempo < 70:
+                tempo *= 2
+            while tempo > 150:
+                tempo /= 2
+        t_o = np.arange(len(o)) / fr
+        melhor = (-1.0, tempo, 0.0)
+        faixa = 0.015 if bpm_forcado else 0.04
+        for t2 in np.linspace(tempo * (1 - faixa), tempo * (1 + faixa), 33):
+            bl = 60.0 / t2
+            for fase in np.linspace(0, bl, 32, endpoint=False):
+                tb = np.arange(fase, t_o[-1], bl)
+                if len(tb) < 4:
+                    continue
+                pont = float(np.interp(tb, t_o, o).mean())
+                if pont > melhor[0]:
+                    melhor = (pont, t2, fase)
+        _, tempo, fase = melhor
+        bl = 60.0 / tempo
+        duracao = len(audio) / sr
+        batidas = np.arange(fase, duracao, bl)
+        fortes = np.where(o > 0.3 * float(np.max(o)))[0]                    # 1º ataque forte = começo da música
+        t_inicio = float(t_o[fortes[0]]) if len(fortes) else 0.0
+        batidas = batidas[batidas >= t_inicio - 0.5 * bl]
+        if len(batidas) < 4:
+            return None
+        return round(float(tempo), 1), batidas.astype(np.float64)
+    except Exception:
+        return None
+
+
+def detectar_bpm_e_beats(audio, sr, bpm_forcado=None):
+    """bpm_forcado: andamento informado pelo usuário (se houver); senão detecta sozinho."""
+    if bpm_forcado:
+        alt = _bpm_beats_por_onsets(audio, sr, bpm_forcado)
+        return alt if alt is not None else (round(float(bpm_forcado), 1), np.arange(0.0, len(audio) / sr, 60.0 / float(bpm_forcado)))
+    bpm, beat_times = _bpm_beats_beat_track(audio, sr)
+    if _beats_confiaveis(bpm, beat_times):
+        return bpm, beat_times                                              # o método original funcionou: mantém
+    alternativo = _bpm_beats_por_onsets(audio, sr)
+    return alternativo if alternativo is not None else (bpm, beat_times)
 
 
 def detectar_tom(audio, sr):

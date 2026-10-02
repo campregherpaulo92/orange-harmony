@@ -19,6 +19,9 @@ import edicao_dsp
 import converter_audio
 import chats
 import escalas as teoria_escalas
+import ritmos
+import harmonia as harmonia_auto
+import producao_ritmos
 import acordes as teoria_acordes   # (não chamar de 'acordes': já existe uma variável local com esse nome)
 
 CONHECIMENTO_APP = """
@@ -32,7 +35,7 @@ Você conhece TODO o aplicativo e tem ferramentas reais para LER dados E EXECUTA
 4. Histórico: evolução das análises salvas, com devolutiva do professor.
 5. Composições: letras com cifras [Am] e seções (#), versionamento.
 6. Conversor: WAV/MP3/FLAC/OGG/M4A.
-7. Produção: gera baixo, bateria, acordes, teclado e solo a partir de uma gravação, em 20 estilos musicais.
+7. Produção: gera baixo, bateria, acordes, teclado e solo a partir de uma gravação, em mais de 70 estilos (samba, pagode, bossa nova, forró, baião, axé, sertanejo, funk carioca, MPB, pop, pop rock, rock, metal, jazz, blues, reggae, salsa, eletrônica, trap e muitos outros), cada um com bateria, baixo e acordes PRÓPRIOS. A produção SE ADAPTA à gravação: acompanha o andamento (o usuário pode informar o BPM se a detecção errar), descobre o tom (maior ou menor), escolhe os acordes que combinam com a melodia cantada ou tocada (o baixo, o teclado e os acordes seguem essa harmonia; há também a opção de usar a sequência fixa do estilo) e toca mais forte ou mais fraco conforme a voz. A harmonia é uma estimativa e pode errar em melodias ambíguas.
 8. Edição Vocal: redução de ruído, normalização, tom, EQ, compressão, sibilância, reverb.
 9. Avaliação: 5 exercícios que geram o perfil vocal (classificação, extensão, tessitura).
 10. Orange Studio: separação de stems (voz/instrumental) via Demucs no Colab.
@@ -204,6 +207,7 @@ def interpretar_comando_producao(descricao):
             for k in padrao:
                 if k in dados:
                     padrao[k] = dados[k]
+    padrao["estilo"] = ritmos.nome_canonico(padrao.get("estilo", "Pop"))     # "samba" / "Pagode " → nome do catálogo
     return padrao
 
 
@@ -358,16 +362,17 @@ def _executar_ferramenta(nome_func, args):
             return {"erro": "Não consegui ler esse áudio."}
         audio, _ = audio_analysis.limitar_duracao(audio, sr)
         bpm, beat_times = audio_analysis.detectar_bpm_e_beats(audio, sr)
-        tom = audio_analysis.detectar_tom(audio, sr)
-        estilo = args.get("estilo", "Pop")
+        estilo = ritmos.nome_canonico(args.get("estilo", "Pop"))
+        info = harmonia_auto.preparar(audio, sr, estilo, bpm, beat_times, "melodia")         # os acordes seguem a melodia da gravação
+        tom, harm = info["tom"], info["harmonia"]
         baixo = bateria = acordes = None
         try:
             if args.get("com_baixo", True):
-                baixo = producao_dsp.gerar_baixo_melodico(audio, sr, tom, bpm, beat_times)
+                baixo = producao_ritmos.gerar_baixo_estilo(audio, sr, tom, bpm, beat_times, estilo, harm)
             if args.get("com_bateria", True):
-                bateria = producao_dsp.gerar_bateria_ritmica(audio, sr, bpm, beat_times)
+                bateria = producao_ritmos.gerar_bateria_estilo(audio, sr, bpm, beat_times, estilo)
             if args.get("com_acordes", True):
-                acordes = producao_dsp.gerar_acordes_musicais(audio, sr, tom, bpm, beat_times, estilo)
+                acordes = producao_ritmos.gerar_acordes_estilo(audio, sr, tom, bpm, beat_times, estilo, harm)
         except Exception as e:
             return {"erro": f"Erro ao gerar produção: {e}"}
         if args.get("qualidade_pro", True):
@@ -375,7 +380,7 @@ def _executar_ferramenta(nome_func, args):
                 baixo = producao_dsp.aplicar_ducking(baixo, audio, sr, 0.30)
             if acordes is not None:
                 acordes = producao_dsp.aplicar_ducking(acordes, audio, sr, 0.40)
-        mix = producao_dsp.mixar(audio, baixo, bateria, acordes)
+        mix = producao_ritmos.mixar_estilo(audio, estilo, baixo=baixo, bateria=bateria, acordes=acordes)
         if args.get("qualidade_pro", True):
             mix = producao_dsp.aplicar_reverb(mix, sr, 0.08)
         wav_bytes = converter_audio.audio_para_wav_bytes(mix, sr)
@@ -385,7 +390,7 @@ def _executar_ferramenta(nome_func, args):
         doc_id, erro = gravacoes.salvar_gravacao(novo_nome, wav_bytes, "producao.wav", "audio/wav")
         if erro:
             return {"erro": erro}
-        return {"gerado": True, "nome_novo": novo_nome, "bpm": bpm, "tom": tom}
+        return {"gerado": True, "nome_novo": novo_nome, "bpm": bpm, "tom": f"{info['tom_detectado']} {info['modo_detectado']}", "acordes_usados": info["acordes"]}
 
     if nome_func == "aplicar_edicao_vocal":
         g = _achar_gravacao_por_nome(args.get("nome_gravacao", ""))
