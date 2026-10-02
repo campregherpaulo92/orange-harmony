@@ -28,11 +28,11 @@ Aplicação completa de coaching vocal e composição: analisa sua voz, detecta 
 | 📊 **Histórico** | Evolução das análises salvas no Firestore, com filtro por análise e devolutiva |
 | 🎼 **Composições** | Letra com cifras `[Am]` e seções `#`, prévia colorida, versionamento |
 | 🔄 **Conversor** | WAV, MP3, FLAC, OGG e M4A, vários formatos de uma vez |
-| 🎛️ **Produtor** | Backing track com baixo, bateria, acordes, teclado e solo em **20 estilos** (Pop, Rock, Balada, Sertanejo, Funk, MPB, Gospel, Reggae, Blues, Jazz, Forró, Eletrônica, Samba, Pagode, Axé, Bossa Nova, Country, R&B, Trap e Metal). Um assistente de IA sugere a configuração a partir de uma frase |
+| 🎛️ **Produtor** | Backing track com baixo, bateria, acordes, teclado e solo em **73 estilos**, agrupados (Samba, Pagode e Bossa · Nordeste e Norte · Sertanejo, Funk e Fé · Pop e Rock · Urbano e Eletrônico · Jazz e Blues · Latino e Mundo). Cada estilo tem bateria, baixo e acordes próprios. **A produção se adapta à sua gravação:** acompanha o andamento (com campo opcional para informar o BPM), descobre o tom (maior ou menor), **escolhe os acordes que combinam com a melodia cantada ou tocada** (o baixo, o teclado e os acordes seguem essa harmonia; também dá para usar a sequência fixa do estilo) e toca mais forte ou mais fraco conforme a sua voz. Um assistente de IA sugere a configuração a partir de uma frase |
 | ✨ **Edição Vocal Inteligente** | EQ de presença, compressão, redução de ruído, sibilância, ajuste de tom e reverb — por checkbox ou por **comando em português** interpretado por IA |
-| 🎮 **Singergame** | Jogo de afinação: sua voz guia uma bolinha de luz por um túnel com anéis — cada anel é uma nota, e cantar a altura certa faz você atravessar. Modo **Livre** (notas aleatórias dentro da sua extensão vocal) e modo **Escala** (usa a escala escolhida na aba Estudo). Um **afinômetro** mostra em tempo real, em cents, o quanto sua voz está acima ou abaixo da nota; tolerância de ±75, ±50 ou ±25 cents conforme a dificuldade, com opção de aceitar qualquer oitava. Pontos, combo e recorde salvo por modo/dificuldade |
+| 🎮 **Singergame** | Jogo de afinação: sua voz guia uma bolinha de luz por um túnel com anéis — cada anel é uma nota, e cantar a altura certa faz você atravessar. Modo **Livre** (notas aleatórias dentro da sua extensão vocal) e modo **Escala** (usa a escala escolhida na aba Estudo). Um **afinômetro** mostra em tempo real, em cents, o quanto sua voz está acima ou abaixo da nota; tolerância de ±75, ±50 ou ±25 cents conforme a dificuldade, com opção de aceitar qualquer oitava. Pontos, combo e recorde salvo por modo/dificuldade. Terceiro modo, o **Vocalise** ("eu faço, você copia"): o piano toca um padrão (escadinha, arpejo ou alternando duas notas) e você repete no mesmo andamento, em três velocidades; a cada rodada o padrão sobe meio tom e depois desce |
 | 📰 **Newsletter (Orange News)** | Jornal do app em formato de jornal: **manchete do dia**, dicas de afinação, composição, violão (com a **levada do dia** em grade), teoria, produção, IA e curiosidades — que trocam todo dia e têm botão "Experimente no app". Embaixo, notícias de fora sobre música e produção, filtradas por relevância, com **resumo curto em português** e link da matéria |
-| 🤖 **Songwriter** | Letra original em português (Gemini), referência sonora analisada por IA, prompt musical e geração da música completa via Hugging Face (YuE2) |
+| 🤖 **Songwriter** | Letra original em português (Gemini) no estilo escolhido entre os mesmos 73 estilos, referência sonora analisada por IA, prompt musical e geração da música completa via Hugging Face (YuE2) |
 | 🍊 **Laranjinha** | Assistente de IA multi-chat, com memória entre conversas, que **age**: avalia gravações, gera produções, aplica edições, salva composições, renomeia e exclui, e consulta os motores de **acordes** e de **escalas** (explica uma escala e avalia uma gravação nela) |
 | 🎚️ **Orange Studio** | Mini-DAW: separação de stems (voz e instrumental), forma de onda e espectro ao vivo, mute/solo/volume, corte e deslocamento por faixa (com desfazer), renomear faixas, substituir e baixar por faixa, e um agente de IA que aplica ajustes por texto |
 
@@ -145,7 +145,10 @@ orange-harmony/
 │   ├── news_conteudo.py        # dicas, curiosidades e levadas escritas (é só acrescentar itens para ampliar)
 │   ├── singergame.py           # placar do Singergame (recorde por modo/dificuldade)
 │   ├── edicao_dsp.py           # EQ, compressor, redução de ruído, ajuste de tom
-│   ├── producao_dsp.py         # baixo, bateria, acordes, teclado, solo
+│   ├── harmonia.py             # harmonia automática: tom (maior/menor) e acordes de cada compasso a partir da melodia
+│   ├── ritmos.py               # catálogo dos 73 estilos: padrões de bateria, baixo, acordes, harmonia (única fonte da lista)
+│   ├── producao_ritmos.py      # toca os padrões: percussão sintetizada, bateria, baixo, acordes, teclado e solo por estilo
+│   ├── producao_dsp.py         # sons básicos, mixagem, ducking e reverb
 │   ├── songwriter.py           # letra, referência sonora, geração via YuE2
 │   ├── stems.py                # separação de stems (Demucs)
 │   ├── estudio_fila.py         # fila app <-> Colab (Firestore + Storage)
@@ -176,11 +179,29 @@ orange-harmony/
 - [ ] **Acordes:** campo para digitar as notas ("Lá, Dó, Mi, Sol") e descobrir o acorde
 - [ ] **Colab:** guardar o JSON do Firebase nos Segredos, para não escolher o arquivo toda vez
 - [ ] **Orange News:** ampliar o banco de dicas e, com login, personalizar o jornal com a sua evolução
-- [ ] **Singergame:** mais modos (ex: ritmo, duetos), efeitos visuais ao acertar combo alto
+- [ ] **Singergame:** mais padrões de Vocalise (ex: alternar duas escalas), efeitos visuais ao acertar combo alto
 
 ---
 
 ## 📝 Histórico de versões
+
+**v16 — a produção acompanha a sua melodia**
+- Harmonia automática: o app descobre o tom (maior/menor) e escolhe os acordes de cada compasso a partir da melodia cantada ou tocada; baixo, teclado e acordes seguem essa harmonia (antes a sequência era fixa por estilo e combinava com só ~1/3 da melodia)
+- Dinâmica: a banda toca mais forte ou mais fraca conforme o volume da voz
+- Detecção de andamento corrigida para melodias sem percussão (antes devolvia sempre 90 BPM); campo opcional para informar o BPM
+- A tela mostra o tom e os acordes escolhidos
+
+**v15 — ritmos de verdade**
+- A Produção ganha **73 estilos** (antes 20, e só o tamanho do acorde mudava de um para outro): samba, pagode, bossa nova, forró, baião, axé, sertanejo, funk carioca, pop rock, rock, metal, jazz, blues, reggae, salsa, eletrônica e muitos mais
+- Cada estilo tem bateria, baixo e acordes próprios, sobre a grade da batida detectada na gravação (e acompanha oscilação de andamento)
+- A lista de estilos agora vem do servidor, em grupos, e é a mesma na Produção e no Songwriter (antes a tela tinha uma lista antiga de 12)
+- O Songwriter envia ao Gemini a descrição de cada estilo
+- Mixagem da produção nivelada pelo volume médio de cada camada em relação à sua voz (antes pelo pico, o que deixava a bateria uns 20 dB abaixo da voz e todos os estilos soando iguais)
+
+**v14 — Vocalise**
+- Novo modo do Singergame: o piano toca o padrão, depois é a sua vez (sem som na sua vez, então não precisa de fone)
+- Padrões escadinha, arpejo e terça; velocidades lenta, média e rápida; o padrão sobe meio tom por rodada e volta
+- Cada nota é julgada pelo centro do que foi cantado, com a margem da dificuldade escolhida
 
 **v13 — análise nota por nota**
 - O desvio e o % afinado passam a ser medidos **nota por nota**, como um afinador (antes tudo era comparado a uma nota só, e uma escala perfeita saía como "desafinada")
