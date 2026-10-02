@@ -2,7 +2,9 @@
 // producao.js — Estúdio de Produção: gera baixo, bateria e acordes
 // ══════════════════════════════════════════════════════════════
 
-const ESTILOS_MUSICAIS = {
+// Lista de RESERVA (se o servidor não responder). A lista completa e atual vem de /api/estilos (catálogo único em ritmos.py).
+let GRUPOS_ESTILOS = null;
+let ESTILOS_MUSICAIS = {
   "Pop": "Leve e dançante — acordes a cada compasso, clima pop radiofônico.",
   "Rock": "Energético — acordes firmes e bateria marcada nos tempos 2 e 4.",
   "Balada": "Calmo e emotivo — acordes longos e suaves, clima intimista.",
@@ -17,16 +19,43 @@ const ESTILOS_MUSICAIS = {
   "Eletrônica": "Dançante — acordes curtos e groove constante de club.",
 };
 
+// Preenche um <select> com o catálogo (em grupos: Samba e Pagode, Pop e Rock...) — usado pela Produção e pelo Songwriter
+function preencherSelectEstilos(select) {
+  if (!select) return;
+  const anterior = select.value;
+  select.replaceChildren();
+  const novaOpcao = (nome) => { const o = document.createElement("option"); o.value = nome; o.textContent = nome; return o; };
+  if (GRUPOS_ESTILOS) {
+    GRUPOS_ESTILOS.forEach((g) => {
+      const grupo = document.createElement("optgroup");
+      grupo.label = g.grupo;
+      g.estilos.forEach((e) => grupo.appendChild(novaOpcao(e.nome)));
+      select.appendChild(grupo);
+    });
+  } else {
+    Object.keys(ESTILOS_MUSICAIS).forEach((nome) => select.appendChild(novaOpcao(nome)));
+  }
+  select.value = anterior && ESTILOS_MUSICAIS[anterior] !== undefined ? anterior : (ESTILOS_MUSICAIS["Pop"] !== undefined ? "Pop" : select.options[0].value);
+}
+
 function montarSelectEstilos() {
   const select = document.getElementById("producaoEstiloSelect");
   if (!select) return;
-  Object.keys(ESTILOS_MUSICAIS).forEach((nome) => {
-    const opt = document.createElement("option");
-    opt.value = nome;
-    opt.textContent = nome;
-    select.appendChild(opt);
-  });
+  preencherSelectEstilos(select);
   atualizarDescricaoEstilo();
+}
+
+// Busca o catálogo no servidor e refaz as listas (Produção e Songwriter). Se falhar, a lista de reserva continua valendo.
+async function carregarEstilos() {
+  try {
+    const dados = await (await fetch(`${API_BASE}/api/estilos`)).json();
+    if (!dados.grupos || !dados.grupos.length) return;
+    GRUPOS_ESTILOS = dados.grupos;
+    ESTILOS_MUSICAIS = {};
+    dados.grupos.forEach((g) => g.estilos.forEach((e) => { ESTILOS_MUSICAIS[e.nome] = e.descricao; }));
+    montarSelectEstilos();
+    if (typeof montarSelectEstiloSongwriter === "function") montarSelectEstiloSongwriter();
+  } catch (err) { /* sem servidor: fica a lista básica */ }
 }
 
 function atualizarDescricaoEstilo() {
@@ -46,6 +75,7 @@ function inicializarProducao() {
   if (!btnGerar) return;
 
   montarSelectEstilos();
+  carregarEstilos();
   select.addEventListener("change", atualizarDescricaoEstilo);
 
   const btnInterpretar = document.getElementById("btnInterpretarProducao");
@@ -116,6 +146,9 @@ function inicializarProducao() {
     const form = new FormData();
     form.append("arquivo", arquivo);
     form.append("estilo", select.value);
+    form.append("acordes_modo", document.getElementById("producaoAcordes").value);
+    const bpmManual = parseFloat(document.getElementById("producaoBpm").value);
+    if (bpmManual >= 40 && bpmManual <= 220) form.append("bpm_manual", String(bpmManual));          // em branco = detecta sozinho
     form.append("com_baixo", document.getElementById("producaoComBaixo").checked ? "true" : "false");
     form.append("com_bateria", document.getElementById("producaoComBateria").checked ? "true" : "false");
     form.append("com_acordes", document.getElementById("producaoComAcordes").checked ? "true" : "false");
@@ -132,10 +165,12 @@ function inicializarProducao() {
       }
       const bpm = resp.headers.get("X-BPM");
       const tom = resp.headers.get("X-Tom");
+      const modo = resp.headers.get("X-Modo");
+      const acordes = decodeURIComponent(resp.headers.get("X-Acordes") || "");
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
 
-      document.getElementById("producaoInfo").textContent = `Detectado: ${bpm} BPM · Tom: ${tom} · Estilo: ${select.value}${textoAvisoDuracao(resp.headers.get("X-Aviso"))}`;
+      document.getElementById("producaoInfo").textContent = `Detectado: ${bpm} BPM · Tom: ${tom}${modo ? " " + modo : ""} · Estilo: ${select.value}${acordes ? " · Acordes que seguem a sua melodia: " + acordes : ""}${textoAvisoDuracao(resp.headers.get("X-Aviso"))}`;
       criarPlayer(document.getElementById("producaoPlayerContainer"), { src: url, nomeArquivo: "producao_orange_harmony.wav" });
 
       resultadoEl.hidden = false;

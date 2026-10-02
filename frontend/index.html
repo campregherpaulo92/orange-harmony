@@ -207,6 +207,19 @@
         </div>
         <p id="producaoEstiloDescricao" class="oh-hint"></p>
 
+        <div class="oh-row" style="margin-top:6px;">
+          <label>⏱️ Andamento (BPM) — opcional
+            <input type="number" id="producaoBpm" class="oh-input-texto" min="40" max="220" step="1" placeholder="automático">
+          </label>
+          <label>🎼 Acordes
+            <select id="producaoAcordes">
+              <option value="melodia">Seguir a minha melodia (automático)</option>
+              <option value="estilo">Usar a sequência fixa do estilo</option>
+            </select>
+          </label>
+        </div>
+        <p class="oh-hint">No modo automático, o app ouve a sua gravação, descobre o tom (maior ou menor) e escolhe os acordes que combinam com as notas que você cantou ou tocou; o baixo, o teclado e os acordes seguem essa harmonia, e a banda toca mais forte ou mais fraca conforme a sua voz. É uma estimativa: se não combinar, tente a sequência fixa do estilo.</p>
+
         <div class="oh-row" style="margin-top:10px;">
           <label class="oh-radio"><input type="checkbox" id="producaoComBaixo" checked> Gerar baixo</label>
           <label class="oh-radio"><input type="checkbox" id="producaoComBateria" checked> Gerar bateria</label>
