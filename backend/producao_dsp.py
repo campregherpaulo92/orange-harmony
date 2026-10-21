@@ -7,28 +7,10 @@ import numpy as np
 import librosa
 from audio_analysis import NOMES_NOTAS, extrair_pitch
 
-ESTILOS_MUSICAIS = {
-    "Pop": "Leve e dançante — acordes a cada compasso, clima pop radiofônico.",
-    "Rock": "Energético — acordes firmes e bateria marcada nos tempos 2 e 4.",
-    "Balada": "Calmo e emotivo — acordes longos e suaves, clima intimista.",
-    "Sertanejo": "Violão marcado — acordes abertos e andamento médio.",
-    "Funk": "Ritmado — acordes curtos e groove constante.",
-    "MPB": "Melódico e sofisticado — acordes abertos e clima brasileiro.",
-    "Gospel": "Emocional e edificante — acordes longos e clima de adoração.",
-    "Reggae": "Descontraído — batida no contratempo e acordes abertos.",
-    "Blues": "Clima de bar — progressão de blues e swing leve.",
-    "Jazz": "Sofisticado — acordes com tensão (7ª) e andamento médio.",
-    "Forró": "Animado — baião/xote com acordes marcados.",
-    "Eletrônica": "Dançante — acordes curtos e groove constante de club.",
-    "Samba": "Suingado — cavaquinho/violão sincopado, clima de roda de samba.",
-    "Pagode": "Suave e suingado — acordes abertos, clima de churrasco.",
-    "Axé": "Empolgante — acordes curtos e batida forte, clima de carnaval.",
-    "Bossa Nova": "Sofisticado e suave — acordes longos com tensão sutil.",
-    "Country": "Direto e alegre — acordes abertos, clima de estrada.",
-    "R&B": "Suave e groovado — acordes com 7ª, clima urbano noturno.",
-    "Trap": "Denso e moderno — acordes curtos, graves marcados.",
-    "Metal": "Pesado e intenso — acordes firmes, bateria marcada e agressiva.",
-}
+import ritmos as _ritmos
+
+# Lista de estilos (nome → descrição): vem do catálogo único em ritmos.py
+ESTILOS_MUSICAIS = _ritmos.descricoes()
 
 
 def nota_para_midi(nome, oitava):

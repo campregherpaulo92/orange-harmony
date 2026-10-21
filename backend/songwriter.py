@@ -17,6 +17,7 @@ import unicodedata
 import numpy as np
 
 import gemini_client
+import ritmos
 import avaliacao
 import audio_analysis
 import converter_audio
@@ -48,7 +49,7 @@ def gerar_letra(tema, estilo):
     contexto = _contexto_vocal()
     prompt = (
         "Você é um letrista profissional de música popular brasileira e internacional. "
-        f'Escreva a letra de uma música original sobre: "{tema}", no estilo {estilo}.\n'
+        f'Escreva a letra de uma música original sobre: "{tema}", no estilo {estilo} ({ritmos.obter(estilo)["desc"]}).\n'
         "Formate com seções marcadas por '#' (ex: # Verso 1, # Refrão, # Ponte) e cifras "
         "simples entre colchetes antes das linhas relevantes (ex: [Am] [F] [C] [G]).\n"
         + (f"O cantor tem {contexto} — escreva pensando nessa tessitura.\n" if contexto else "")
@@ -113,7 +114,7 @@ def gerar_prompt_musical(letra, estilo, tema=None, descricao_referencia=None):
         + (f" A voz principal deve soar como {contexto}." if contexto else "")
         + (f"\n\nTema da música: {tema}" if tema else "")
         + (f"\n\nReferência sonora analisada: {descricao_referencia}" if descricao_referencia else "")
-        + f"\n\nEstilo: {estilo}\n\nLetra:\n{letra}\n\n"
+        + f"\n\nEstilo: {estilo} (referência em inglês para descrever o gênero: {ritmos.tags_en(estilo)})\n\nLetra:\n{letra}\n\n"
         "Responda APENAS com o parágrafo do prompt, em inglês, sem comentários antes ou depois."
     )
     resposta, erro = gemini_client.chamar_texto(prompt)
