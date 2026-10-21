@@ -6,7 +6,7 @@
 function montarSelectEstiloSongwriter() {
   const select = document.getElementById("songwriterEstilo");
   if (!select || typeof ESTILOS_MUSICAIS === "undefined") return;
-  select.innerHTML = Object.keys(ESTILOS_MUSICAIS).map((nome) => `<option value="${nome}">${nome}</option>`).join("");
+  preencherSelectEstilos(select);                    // mesma lista agrupada da Produção (vem de /api/estilos)
 }
 
 function inicializarSongwriter() {

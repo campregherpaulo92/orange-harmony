@@ -81,6 +81,7 @@ async function enviarMensagemLaranjinha() {
   const mensagens = document.getElementById("laranjinhaMensagens");
   const texto = (input.value || "").trim();
   if (!texto) return;
+  pararDitadoLaranjinha(true);                       // se estava ditando, encerra sem deixar texto atrasado voltar para a caixa
 
   input.value = "";
   input.style.height = "auto";
@@ -102,6 +103,113 @@ async function enviarMensagemLaranjinha() {
   mensagens.scrollTop = mensagens.scrollHeight;
 }
 
+// ── Ditado por voz (botão do microfone) ─────────────────────────────────────────────
+// Usa o reconhecimento de fala do próprio navegador: não passa pelo nosso servidor e não gasta cota do Gemini.
+// O que você fala vira texto na caixa; dá para corrigir antes de enviar. (O áudio é processado pelo serviço de voz do
+// navegador: Google no Chrome, Apple no Safari.)
+const ditadoLaranjinha = { rec: null, ativo: false, base: "", descartar: false, programatico: false, timerAviso: null };
+const MENSAGENS_DITADO = {
+  "not-allowed": "O navegador bloqueou o microfone. Permita o acesso ao microfone para este site e tente de novo.",
+  "service-not-allowed": "O ditado por voz está desligado neste aparelho. No iPhone: Ajustes › Geral › Teclado › Ativar Ditado.",
+  "audio-capture": "Não encontrei um microfone neste aparelho.",
+  "network": "Sem conexão com o serviço de voz do navegador. Tente de novo.",
+  "no-speech": "Não ouvi nada. Tente de novo, mais perto do microfone.",
+  "language-not-supported": "O ditado em português não está disponível neste navegador.",
+};
+
+// tela de toque (celular/tablet sem mouse): não há tecla Shift, e focar a caixa abriria o teclado na cara da pessoa
+function ehTelaDeToque() {
+  return !!(window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches);
+}
+
+function avisoDeVozLaranjinha(texto) {
+  const el = document.getElementById("laranjinhaVozAviso");
+  if (!el) return;
+  clearTimeout(ditadoLaranjinha.timerAviso);
+  if (!texto) { el.hidden = true; return; }
+  el.textContent = texto;
+  el.hidden = false;
+  ditadoLaranjinha.timerAviso = setTimeout(() => { el.hidden = true; }, 8000);
+}
+
+function atualizarBotaoMicLaranjinha(ativo) {
+  const btn = document.getElementById("btnMicLaranjinha");
+  if (!btn) return;
+  btn.classList.toggle("gravando", ativo);
+  btn.setAttribute("aria-pressed", ativo ? "true" : "false");
+  btn.title = ativo ? "Parar o ditado" : "Falar para escrever (ditado por voz)";
+}
+
+// descartar = true: encerra na hora e ignora o que ainda estava a caminho (usado ao enviar/fechar)
+function pararDitadoLaranjinha(descartar = false) {
+  const d = ditadoLaranjinha;
+  if (!d.rec || !d.ativo) return;
+  d.descartar = descartar;
+  try { descartar ? d.rec.abort() : d.rec.stop(); } catch (e) { /* já encerrou */ }
+}
+
+function inicializarDitadoLaranjinha(input) {
+  const btn = document.getElementById("btnMicLaranjinha");
+  if (!btn) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    btn.disabled = true;
+    btn.title = "Este navegador não tem ditado por voz. No celular, use o microfone do teclado.";
+    return;
+  }
+  const d = ditadoLaranjinha;
+
+  btn.addEventListener("click", () => {
+    if (d.ativo) { pararDitadoLaranjinha(false); return; }          // 2º toque: para e mantém o texto
+    const rec = new SR();
+    rec.lang = "pt-BR";
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    d.descartar = false;
+    d.base = input.value && !/\s$/.test(input.value) ? input.value + " " : input.value;   // o ditado continua de onde o texto está
+
+    rec.onstart = () => { d.ativo = true; atualizarBotaoMicLaranjinha(true); avisoDeVozLaranjinha(null); };
+    rec.onresult = (ev) => {
+      if (d.descartar || d.rec !== rec) return;                      // ditado encerrado/descartado: ignora fala atrasada
+      let fala = "";
+      for (let i = 0; i < ev.results.length; i++) {
+        const trecho = ev.results[i][0].transcript;
+        fala = !fala ? trecho.replace(/^\s+/, "") : (/\s$/.test(fala) || /^\s/.test(trecho) ? fala + trecho : fala + " " + trecho);
+      }
+      input.value = d.base + fala;
+      d.programatico = true;
+      input.dispatchEvent(new Event("input"));                      // a caixa cresce conforme o texto
+      d.programatico = false;
+    };
+    rec.onerror = (ev) => {
+      if (ev.error === "aborted") return;
+      avisoDeVozLaranjinha(MENSAGENS_DITADO[ev.error] || `Não consegui usar o microfone (${ev.error}).`);
+    };
+    rec.onend = () => {
+      d.ativo = false; d.rec = null; d.descartar = false;
+      atualizarBotaoMicLaranjinha(false);
+      if (!ehTelaDeToque()) input.focus();
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) { /* ok */ }
+    };
+    d.rec = rec;
+    try {
+      rec.start();
+      d.ativo = true;
+      atualizarBotaoMicLaranjinha(true);
+      if (!ehTelaDeToque()) input.focus();                           // o foco volta para a caixa: Enter envia, digitar continua funcionando
+    } catch (e) {
+      d.rec = null; d.ativo = false;
+      avisoDeVozLaranjinha("Não consegui iniciar o microfone. Tente de novo.");
+    }
+  });
+
+  // se a pessoa começa a digitar enquanto o ditado está ligado, o ditado para (senão ele sobrescreveria o que foi digitado)
+  input.addEventListener("input", () => {
+    if (!d.programatico && d.ativo) pararDitadoLaranjinha(false);
+  });
+}
+
 function inicializarLaranjinha() {
   const painel = document.getElementById("laranjinhaPainel");
   const btnFechar = document.getElementById("btnFecharLaranjinha");
@@ -118,6 +226,7 @@ function inicializarLaranjinha() {
 
   fab.addEventListener("click", async () => {
     painel.hidden = !painel.hidden;
+    if (painel.hidden) pararDitadoLaranjinha(true);
     if (!painel.hidden) {
       input.focus();
       if (!jaCarregou) {
@@ -126,14 +235,24 @@ function inicializarLaranjinha() {
       }
     }
   });
-  btnFechar.addEventListener("click", () => { painel.hidden = true; });
+  btnFechar.addEventListener("click", () => { pararDitadoLaranjinha(true); painel.hidden = true; });
   btnEnviar.addEventListener("click", enviarMensagemLaranjinha);
+
+  // Quebra de linha e envio:
+  //  • computador: Enter envia · Shift+Enter quebra a linha · Ctrl/Cmd+Enter também envia
+  //  • celular (tela de toque, sem tecla Shift): Enter quebra a linha e o botão ➤ envia
+  const ehToque = ehTelaDeToque();
+  input.enterKeyHint = ehToque ? "enter" : "send";
+  input.placeholder = ehToque ? "Escreva sua mensagem..." : "Escreva sua mensagem... (Shift+Enter quebra a linha)";
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key !== "Enter" || e.isComposing) return;                  // não envia no meio de uma composição de acento
+    const enviar = e.ctrlKey || e.metaKey || (!e.shiftKey && !ehToque);
+    if (enviar) {
       e.preventDefault();
       enviarMensagemLaranjinha();
     }
   });
+  inicializarDitadoLaranjinha(input);
   input.addEventListener("input", () => {
     input.style.height = "auto";
     input.style.height = `${Math.min(input.scrollHeight, 96)}px`;

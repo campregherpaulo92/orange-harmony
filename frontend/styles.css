@@ -1198,3 +1198,34 @@ canvas#curvaPitch { width: 100%; background: #0d0d0d; border-radius: 12px; }
 .sg-feedback-ativo { opacity: 1; }
 
 .sg-vocalise { margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); }
+
+
+/* Laranjinha: microfone (ditado por voz) */
+.oh-chat-mic {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  color: #fff;
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+.oh-chat-mic:hover { background: rgba(255,255,255,0.16); }
+.oh-chat-mic[disabled] { opacity: 0.4; cursor: not-allowed; }
+.oh-chat-mic.gravando { background: #ef4444; border-color: #ef4444; animation: ohMicPulso 1.1s ease-in-out infinite; }
+@keyframes ohMicPulso {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.55); }
+  50% { box-shadow: 0 0 0 9px rgba(239,68,68,0); }
+}
+.oh-chat-voz-aviso {
+  margin: 0 14px 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  background: rgba(249,115,22,0.16);
+  color: #fdba74;
+}
+.oh-chat-voz-aviso[hidden] { display: none; }
