@@ -533,7 +533,7 @@ def _extrair_chamada_ferramenta(texto):
     return None
 
 
-def conversar(mensagem, chat_id=None):
+def _conversar(mensagem, chat_id=None):
     """Roda o loop de "ferramentas via JSON em texto" e devolve o texto de
     resposta final. Se chat_id for passado, a mensagem do usuário e a resposta
     final são salvas nesse chat (Firestore) automaticamente.
@@ -556,7 +556,7 @@ def conversar(mensagem, chat_id=None):
     else:
         historico_conversa = [{"role": "user", "content": mensagem}]
 
-    instrucao_sistema = CONHECIMENTO_APP + "\n\n" + _catalogo_ferramentas_texto()
+    instrucao_sistema = CONHECIMENTO_APP + "\n\n" + _catalogo_ferramentas_texto() + _REGRA_SO_MENSAGEM_ATUAL
     try:
         outras = _resumo_outras_conversas(chat_id) if chat_id else []
         if outras:
@@ -623,3 +623,49 @@ def conversar(mensagem, chat_id=None):
             del historico_conversa[:-_MAX_MSGS_POR_CHAT]
 
     return texto_final
+
+
+# ───────────── pedido interrompido por queda do servidor ─────────────
+# A mensagem do usuário é salva ANTES de a ação rodar e a resposta só no FIM. Se o servidor cai no meio (ex.: sem memória),
+# o pedido fica no histórico sem resposta, e na próxima mensagem (até um "oi") a IA o retomava sozinha — e derrubava o servidor
+# de novo. Agora o pedido órfão é fechado com um aviso, e a IA só executa o que está na mensagem mais recente.
+_REGRA_SO_MENSAGEM_ATUAL = (
+    "\n\n## REGRA IMPORTANTE\n"
+    "Execute ferramentas SOMENTE para o que o usuário pedir na mensagem MAIS RECENTE. Pedidos anteriores da conversa — "
+    "mesmo os que ficaram sem resposta ou foram interrompidos — NÃO devem ser retomados nem repetidos, a menos que o usuário "
+    "peça de novo. Se a mensagem mais recente for só uma saudação ou conversa, apenas converse."
+)
+AVISO_PEDIDO_INTERROMPIDO = (
+    "⚠️ O pedido anterior foi interrompido (o servidor reiniciou ou ficou sem memória antes de eu terminar) e "
+    "NÃO foi executado. Se ainda quiser, é só pedir de novo."
+)
+_em_processamento = set()      # chats com uma resposta sendo gerada AGORA; vive na memória, então some se o servidor cair
+
+
+def _fechar_pedido_interrompido(chat_id):
+    """Se a conversa termina num pedido do usuário SEM resposta (e ninguém o está processando), ele foi interrompido."""
+    historico = _historico_do_chat(chat_id)
+    if historico and historico[-1].get("role") == "user":
+        chats.salvar_mensagem(chat_id, "model", AVISO_PEDIDO_INTERROMPIDO)
+        with _trava_cache:
+            historico.append({"role": "model", "content": AVISO_PEDIDO_INTERROMPIDO})
+
+
+def conversar(mensagem, chat_id=None):
+    dono = False
+    if chat_id:
+        with _trava_cache:
+            dono = chat_id not in _em_processamento
+            if dono:
+                _em_processamento.add(chat_id)
+    try:
+        if dono:
+            try:
+                _fechar_pedido_interrompido(chat_id)
+            except Exception:
+                pass
+        return _conversar(mensagem, chat_id)
+    finally:
+        if dono:
+            with _trava_cache:
+                _em_processamento.discard(chat_id)
