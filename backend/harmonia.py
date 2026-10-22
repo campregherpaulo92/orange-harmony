@@ -10,6 +10,7 @@ import numpy as np
 import librosa
 
 import ritmos as R
+from espectro_leve import chroma_stft_em_blocos
 
 NOMES = R.NOMES_NOTAS
 PERFIL_MAIOR = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
@@ -64,7 +65,7 @@ def _chroma(audio, sr):
     x = np.asarray(audio[: int(sr * 150)], dtype=np.float32)
     if len(x) < N_FFT:
         x = np.pad(x, (0, N_FFT - len(x)))
-    c = librosa.feature.chroma_stft(y=x, sr=sr, n_fft=N_FFT, hop_length=HOP, tuning=0.0, norm=None)
+    c = chroma_stft_em_blocos(x, sr, N_FFT, HOP, tuning=0.0)         # em blocos: mesmo resultado, uma fração da memória
     return c / (np.max(c) + 1e-9)
 
 

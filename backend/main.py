@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import Response, JSONResponse
 import os
 import time
+import functools
 import threading
 from contextlib import asynccontextmanager
 
@@ -30,6 +31,7 @@ import estudio_fila
 import acordes
 import escalas
 from urllib.parse import quote
+from espectro_leve import tarefa_pesada, ServidorOcupado
 
 import news
 import ritmos
@@ -50,6 +52,19 @@ async def _ciclo_de_vida(_app):
             audio_analysis.aquecer_bibliotecas()
         threading.Thread(target=_aquecer, daemon=True).start()
     yield
+
+
+def somente_uma_pesada(func):
+    """Só UMA tarefa pesada por vez (análise, produção, edição, conversão): o plano gratuito tem 512 MB e duas ao mesmo
+    tempo estouram a memória (o servidor é morto e reinicia). A segunda espera a primeira terminar."""
+    @functools.wraps(func)
+    def interno(*args, **kwargs):
+        try:
+            with tarefa_pesada():
+                return func(*args, **kwargs)
+        except ServidorOcupado as e:
+            raise HTTPException(status_code=503, detail=str(e))
+    return interno
 
 
 app = FastAPI(title="Orange Harmony API", version="0.1.0", lifespan=_ciclo_de_vida)
@@ -81,6 +96,7 @@ def health():
 
 
 @app.post("/api/analyze")
+@somente_uma_pesada
 def analisar(
     arquivo: UploadFile = File(...),
     modo: str = Form("completa"),
@@ -421,6 +437,7 @@ def renomear_gravacao_rota(doc_id: str, novo_nome: str = Form(...)):
 # AVALIAÇÃO VOCAL INICIAL
 # ══════════════════════════════════════════════════════════════
 @app.post("/api/avaliacao/exercicio")
+@somente_uma_pesada
 def analisar_exercicio_rota(arquivo: UploadFile = File(...)):
     dados = arquivo.file.read()
     resultado = avaliacao.analisar_exercicio(dados, arquivo.filename or "audio.wav")
@@ -512,6 +529,7 @@ def excluir_composicao_rota(doc_id: str):
 # CONVERSOR
 # ══════════════════════════════════════════════════════════════
 @app.post("/api/converter")
+@somente_uma_pesada
 def converter_rota(arquivo: UploadFile = File(...), formato: str = Form(...)):
     dados = arquivo.file.read()
     audio, sr = carregar_audio_bytes(dados, arquivo.filename or "audio.wav")
@@ -536,6 +554,7 @@ def _limitar_duracao(audio, sr, max_s=120):
 # PRODUÇÃO (backing track: baixo, bateria, acordes, teclado, solo)
 # ══════════════════════════════════════════════════════════════
 @app.post("/api/producao")
+@somente_uma_pesada
 def gerar_producao_rota(
     arquivo: UploadFile = File(...),
     estilo: str = Form("Pop"),
@@ -560,6 +579,8 @@ def gerar_producao_rota(
     # Harmonia: "melodia" = os acordes seguem as notas que você cantou/tocou; "estilo" = sequência fixa do estilo
     info = harmonia.preparar(audio, sr, estilo, bpm, beat_times, acordes_modo if acordes_modo in ("melodia", "estilo") else "melodia")
     tom, harm = info["tom"], info["harmonia"]
+    liberar_memoria()
+    env_voz = producao_dsp.envelope_voz(audio) if qualidade_pro else None      # calculado UMA vez e usado no ducking de todas as camadas
 
     # Cada trilha é gerada, (opcionalmente) passa pelo ducking, é SOMADA à mixagem e
     # liberada na hora — em vez de segurar todas ao mesmo tempo na memória.
@@ -578,9 +599,10 @@ def gerar_producao_rota(
                 continue
             trilha = gerar()
             if qualidade_pro and ducking is not None:
-                trilha = producao_dsp.aplicar_ducking(trilha, audio, sr, intensidade=ducking)
+                trilha = producao_dsp.aplicar_ducking(trilha, audio, sr, intensidade=ducking, envelope=env_voz)
             producao_ritmos.somar_nivelado(mix, trilha, ref, nome_camada, estilo)
             del trilha
+            liberar_memoria()                                # devolve ao sistema a memória temporária da camada
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar produção: {e}")
 
@@ -604,6 +626,48 @@ def gerar_producao_rota(
     return Response(content=wav_bytes, media_type="audio/wav", headers=cabecalhos)
 
 
+@app.get("/api/memoria")
+def memoria_do_servidor():
+    """Memória do servidor agora e o pico desde que ele ligou (para ver quanto sobra no plano gratuito)."""
+    import resource
+    from espectro_leve import memoria_em_uso_mb, limite_de_memoria_mb, margem_de_memoria_mb
+    uso, limite = memoria_em_uso_mb(), limite_de_memoria_mb()
+    return {"em_uso_mb": None if uso is None else round(uso, 1),
+            "pico_desde_que_ligou_mb": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0, 1),
+            "limite_mb": limite, "margem_exigida_mb": margem_de_memoria_mb(),
+            "folga_mb": None if (uso is None or limite is None) else round(limite - uso, 1),
+            "aceita_tarefa_pesada": None if (uso is None or limite is None) else bool(limite - uso >= margem_de_memoria_mb())}
+
+
+@app.get("/api/diagnostico")
+def diagnostico_do_firebase():
+    """Testa DE VERDADE o acesso ao Firestore e ao Storage. As rotas de dados escondem erros (devolvem lista vazia), então
+    sem isto uma falta de permissão pareceria 'perdi todos os meus dados'."""
+    import firebase_config
+    r = {"erro_na_subida": firebase_config.get_erro()}
+    db = firebase_config.get_db()
+    try:
+        if db is None:
+            r["firestore"] = "sem conexão (nenhuma credencial encontrada)"
+        else:
+            r["firestore_leitura"] = "ok"
+            r["gravacoes_no_firestore"] = len(list(db.collection("gravacoes_web").limit(50).stream()))
+            r["firestore"] = "ok"
+    except Exception as e:
+        r["firestore"] = f"ERRO: {type(e).__name__}: {str(e)[:140]}"
+    bucket = firebase_config.get_bucket()
+    try:
+        if bucket is None:
+            r["storage"] = "sem bucket configurado (defina FIREBASE_STORAGE_BUCKET)"
+        else:
+            list(bucket.list_blobs(max_results=1))
+            r["storage"] = "ok"
+    except Exception as e:
+        r["storage"] = f"ERRO: {type(e).__name__}: {str(e)[:140]}"
+    r["tudo_certo"] = r.get("firestore") == "ok" and r.get("storage") == "ok"
+    return r
+
+
 @app.get("/api/estilos")
 def listar_estilos():
     """Catálogo de estilos (agrupado) — única fonte da lista usada pela Produção e pelo Songwriter."""
@@ -623,6 +687,7 @@ def interpretar_producao_rota(descricao: str = Form(...)):
 # EDIÇÃO VOCAL (efeitos manuais — interpretação por IA entra na fase final)
 # ══════════════════════════════════════════════════════════════
 @app.post("/api/edicao")
+@somente_uma_pesada
 def aplicar_edicao_rota(
     arquivo: UploadFile = File(...),
     reduzir_ruido: bool = Form(False),
@@ -654,6 +719,7 @@ def aplicar_edicao_rota(
 
 
 @app.post("/api/edicao/comando")
+@somente_uma_pesada
 def aplicar_edicao_por_comando_rota(arquivo: UploadFile = File(...), comando: str = Form(...)):
     """Aplica edição vocal interpretando um comando em português (ex: 'limpa o
     ruído e deixa mais grave') — a mesma IA usada pelo agente do Estúdio, agora

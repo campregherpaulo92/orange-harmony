@@ -34,6 +34,11 @@ def _carregar_credencial():
             info = json.load(f)
         return credentials.Certificate(caminho), info.get("project_id")
 
+    # Rodando no Google Cloud Run (a plataforma define K_SERVICE): usa a identidade do PRÓPRIO serviço, sem chave em arquivo.
+    # Precisa só da variável FIREBASE_STORAGE_BUCKET para o Storage.
+    if os.environ.get("K_SERVICE"):
+        return credentials.ApplicationDefault(), os.environ.get("GOOGLE_CLOUD_PROJECT")
+
     return None, None
 
 

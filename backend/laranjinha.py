@@ -21,6 +21,7 @@ import chats
 import escalas as teoria_escalas
 import ritmos
 import harmonia as harmonia_auto
+from espectro_leve import tarefa_pesada, ServidorOcupado
 import producao_ritmos
 import acordes as teoria_acordes   # (não chamar de 'acordes': já existe uma variável local com esse nome)
 
@@ -268,7 +269,21 @@ def _resumo_escala(d):
     return saida
 
 
+_FERRAMENTAS_PESADAS = {"analisar_gravacao", "gerar_producao", "aplicar_edicao_vocal"}
+
+
 def _executar_ferramenta(nome_func, args):
+    """As ferramentas que processam áudio entram na fila de UMA tarefa pesada por vez (o servidor gratuito tem 512 MB)."""
+    if nome_func in _FERRAMENTAS_PESADAS:
+        try:
+            with tarefa_pesada():
+                return _executar_ferramenta_interna(nome_func, args)
+        except ServidorOcupado as e:
+            return {"erro": str(e)}
+    return _executar_ferramenta_interna(nome_func, args)
+
+
+def _executar_ferramenta_interna(nome_func, args):
     if nome_func == "consultar_escala":
         par = teoria_escalas.interpretar_escala(str(args.get("nome", "")))
         if par is None:
@@ -376,10 +391,11 @@ def _executar_ferramenta(nome_func, args):
         except Exception as e:
             return {"erro": f"Erro ao gerar produção: {e}"}
         if args.get("qualidade_pro", True):
+            env_voz = producao_dsp.envelope_voz(audio)               # uma vez só, para as duas camadas
             if baixo is not None:
-                baixo = producao_dsp.aplicar_ducking(baixo, audio, sr, 0.30)
+                baixo = producao_dsp.aplicar_ducking(baixo, audio, sr, 0.30, envelope=env_voz)
             if acordes is not None:
-                acordes = producao_dsp.aplicar_ducking(acordes, audio, sr, 0.40)
+                acordes = producao_dsp.aplicar_ducking(acordes, audio, sr, 0.40, envelope=env_voz)
         mix = producao_ritmos.mixar_estilo(audio, estilo, baixo=baixo, bateria=bateria, acordes=acordes)
         if args.get("qualidade_pro", True):
             mix = producao_dsp.aplicar_reverb(mix, sr, 0.08)

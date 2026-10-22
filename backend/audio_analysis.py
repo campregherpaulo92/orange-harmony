@@ -13,6 +13,9 @@ import threading
 import numpy as np
 import librosa
 
+# liberar_memoria, tarefa_pesada e o espectro em blocos moram em espectro_leve.py (re-exportados aqui)
+from espectro_leve import liberar_memoria, tarefa_pesada, ServidorOcupado, envelopes_de_onsets, tempo_leve
+
 # ── Limites de recurso ──
 # O plano grátis do Render tem só 512 MB de RAM e 0.1 CPU. Medido: sem esses
 # limites, um áudio de 3 min pedia ~670 MB (o servidor era morto e reiniciava,
@@ -20,18 +23,6 @@ import librosa
 LIMITE_ANALISE_S = 120      # analisa no máximo os primeiros 120 s do áudio
 BLOCO_PITCH_S = 20          # o pyin roda em blocos de 20 s (memória constante)
 JANELA_TOM_BPM_S = 60       # tom/BPM são estáveis: 60 s do meio bastam
-
-
-def liberar_memoria():
-    """Devolve memória ao sistema operacional depois de uma análise pesada.
-    O Python solta os arrays, mas o alocador do Linux costuma ficar com a
-    memória reservada — malloc_trim faz ela voltar (senão o pico vira permanente)."""
-    gc.collect()
-    try:
-        import ctypes
-        ctypes.CDLL("libc.so.6").malloc_trim(0)
-    except Exception:
-        pass
 
 
 def limitar_duracao(audio, sr, max_s=LIMITE_ANALISE_S):
@@ -363,13 +354,29 @@ def classificar_vibrato_v4(taxa, extensao, deslize, periodicidade):
 
 
 # ══════════════════ BPM / TOM / COVER ══════════════════
-def _bpm_beats_beat_track(audio, sr):
-    """Método original (librosa.beat_track). Funciona bem com percussão/violão marcado; com melodia suave pode não achar batida nenhuma."""
+def _tempo_librosa(onset_envelope, sr, hop_length=512, **kw):
+    """Estimativa de andamento da librosa pela API PÚBLICA (librosa.feature.tempo; nas versões antigas, librosa.beat.tempo),
+    com o tempograma calculado em blocos (mesmo resultado, ~90 MB a menos de pico)."""
+    return tempo_leve(onset_envelope, sr, hop_length, **kw)
+
+
+def _bpm_beats_beat_track(audio, sr, env_mediana=None):
+    """Método original (librosa.beat_track). Funciona bem com percussão/violão marcado; com melodia suave pode não achar batida nenhuma.
+    env_mediana: envelope de ataques (o beat_track usa o de MEDIANA) já calculado em blocos — dá o mesmo resultado com muito menos memória."""
     try:
         # BPM é estável ao longo da música: analisa até JANELA_TOM_BPM_S*2 segundos
         # (as batidas depois disso são extrapoladas pela grade do BPM abaixo).
         trecho = audio[: int(JANELA_TOM_BPM_S * 2 * sr)]
-        tempo, beat_frames = librosa.beat.beat_track(y=trecho, sr=sr)
+        if env_mediana is not None:
+            try:
+                # O beat_track estima o andamento por dentro (tempograma completo, ~90 MB de pico). Aqui o andamento é estimado
+                # em blocos, com os MESMOS parâmetros que ele usaria (start_bpm=120), e entregue pronto: batidas idênticas.
+                bpm_est = float(np.atleast_1d(tempo_leve(env_mediana, sr, 512, start_bpm=120.0))[0])
+                tempo, beat_frames = librosa.beat.beat_track(onset_envelope=env_mediana, sr=sr, bpm=bpm_est)
+            except Exception:
+                tempo, beat_frames = librosa.beat.beat_track(onset_envelope=env_mediana, sr=sr)
+        else:
+            tempo, beat_frames = librosa.beat.beat_track(y=trecho, sr=sr)
         bpm = float(np.atleast_1d(tempo)[0])
         if bpm < 50 or bpm > 200 or np.isnan(bpm):
             bpm = 90.0
@@ -397,21 +404,24 @@ def _beats_confiaveis(bpm, beat_times):
     return med > 0 and float(np.std(d)) / med < 0.2 and abs(med - 60.0 / bpm) / (60.0 / bpm) < 0.15
 
 
-def _bpm_beats_por_onsets(audio, sr, bpm_forcado=None):
+def _bpm_beats_por_onsets(audio, sr, bpm_forcado=None, env_media=None):
     """Andamento e batidas pelos ataques das notas (vale para voz/melodia sem percussão): estima o andamento pela
     periodicidade dos ataques, refina andamento e fase com um 'pente' sobre os ataques e põe a 1ª batida no 1º ataque
     (quem grava costuma começar a música no tempo 1). Devolve None se não há ataques suficientes."""
     try:
-        x = np.asarray(audio[: int(JANELA_TOM_BPM_S * 2 * sr)], dtype=np.float32)
         hop = 512
-        o = librosa.onset.onset_strength(y=x, sr=sr, hop_length=hop)
+        if env_media is not None:
+            o = env_media
+        else:
+            x = np.asarray(audio[: int(JANELA_TOM_BPM_S * 2 * sr)], dtype=np.float32)
+            o = librosa.onset.onset_strength(y=x, sr=sr, hop_length=hop)
         if len(o) < 40 or float(np.max(o)) < 1e-6:
             return None
         fr = sr / hop
         if bpm_forcado:                                                   # o usuário disse o andamento: só acha a fase das batidas
             tempo = float(bpm_forcado)
         else:
-            tempo = float(librosa.feature.rhythm.tempo(onset_envelope=o, sr=sr, hop_length=hop, aggregate=np.median, start_bpm=100)[0])
+            tempo = float(_tempo_librosa(o, sr, hop, aggregate=np.median, start_bpm=100)[0])
             if not np.isfinite(tempo) or tempo <= 0:
                 return None
             while tempo < 70:
@@ -446,14 +456,25 @@ def _bpm_beats_por_onsets(audio, sr, bpm_forcado=None):
 
 def detectar_bpm_e_beats(audio, sr, bpm_forcado=None):
     """bpm_forcado: andamento informado pelo usuário (se houver); senão detecta sozinho."""
-    if bpm_forcado:
-        alt = _bpm_beats_por_onsets(audio, sr, bpm_forcado)
-        return alt if alt is not None else (round(float(bpm_forcado), 1), np.arange(0.0, len(audio) / sr, 60.0 / float(bpm_forcado)))
-    bpm, beat_times = _bpm_beats_beat_track(audio, sr)
-    if _beats_confiaveis(bpm, beat_times):
-        return bpm, beat_times                                              # o método original funcionou: mantém
-    alternativo = _bpm_beats_por_onsets(audio, sr)
-    return alternativo if alternativo is not None else (bpm, beat_times)
+    # O espectro do áudio (a parte pesada) é calculado UMA vez, em blocos, e serve aos dois métodos.
+    # Antes cada método calculava o seu, de uma vez só: ~85 MB de pico a mais.
+    env_media = env_mediana = None
+    try:
+        env_media, env_mediana = envelopes_de_onsets(audio[: int(JANELA_TOM_BPM_S * 2 * sr)], sr)
+    except Exception:
+        pass                                                                # sem o atalho: cada método calcula o seu, como antes
+    try:
+        if bpm_forcado:
+            alt = _bpm_beats_por_onsets(audio, sr, bpm_forcado, env_media=env_media)
+            return alt if alt is not None else (round(float(bpm_forcado), 1), np.arange(0.0, len(audio) / sr, 60.0 / float(bpm_forcado)))
+        bpm, beat_times = _bpm_beats_beat_track(audio, sr, env_mediana=env_mediana)
+        if _beats_confiaveis(bpm, beat_times):
+            return bpm, beat_times                                          # o método original funcionou: mantém
+        alternativo = _bpm_beats_por_onsets(audio, sr, env_media=env_media)
+        return alternativo if alternativo is not None else (bpm, beat_times)
+    finally:
+        del env_media, env_mediana
+        liberar_memoria()
 
 
 def detectar_tom(audio, sr):
@@ -474,6 +495,7 @@ def analisar_cover(audio, sr, calibracao=440.0):
         return resultado
     resultado["duracao_s"] = round(len(audio) / sr, 1)
     tom = detectar_tom(audio, sr)
+    liberar_memoria()                                    # cada etapa começa com a memória da anterior já devolvida
     resultado["tom"] = tom
     bpm, _ = detectar_bpm_e_beats(audio, sr)
     resultado["bpm"] = bpm
@@ -529,6 +551,7 @@ def analisar_audio_completo(dados: bytes, nome_arquivo: str, modo: str = "comple
                          f"{LIMITE_ANALISE_S}s (limite do servidor gratuito).")
 
     tempos, f0 = extrair_pitch(audio, sr)
+    liberar_memoria()
     f0_limpo = np.where((f0 >= 80) & (f0 <= 1000), f0, 0.0)
 
     # Curva de pitch decimada para o gráfico (evita mandar milhares de pontos pro navegador)
@@ -579,17 +602,24 @@ def aquecer_bibliotecas():
     """A 1ª análise depois de o servidor ligar gasta a maior parte do tempo
     carregando/compilando numba, scipy e cia (medido: 18 s de 19 s). Rodando uma
     análise mínima em segundo plano logo na inicialização, quem chegar depois
-    já encontra tudo pronto."""
+    já encontra tudo pronto. Roda DENTRO da fila de tarefas pesadas: se alguém pedir uma análise durante o
+    aquecimento, ela espera o aquecimento terminar em vez de somar os picos de memória.
+    SEM_AQUECIMENTO=1 (variável de ambiente) desliga o aquecimento; e se a memória estiver apertada ele é pulado sozinho."""
+    if os.environ.get("SEM_AQUECIMENTO"):
+        return
     try:
-        t = np.linspace(0, 1.5, int(22050 * 1.5), endpoint=False)
-        tom = (0.3 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
-        for passo in (lambda: extrair_pitch(tom, 22050),
-                      lambda: detectar_tom(tom, 22050),
-                      lambda: detectar_bpm_e_beats(tom, 22050)):
-            try:
-                passo()
-            except Exception:
-                pass
+        with tarefa_pesada():
+            t = np.linspace(0, 1.5, int(22050 * 1.5), endpoint=False)
+            tom = (0.3 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+            for passo in (lambda: extrair_pitch(tom, 22050),
+                          lambda: detectar_tom(tom, 22050),
+                          lambda: detectar_bpm_e_beats(tom, 22050)):
+                try:
+                    passo()
+                except Exception:
+                    pass
+    except Exception:
+        pass
     finally:
         liberar_memoria()
 

@@ -331,7 +331,7 @@ def finalizar_mix(total):
     pico_final = float(np.max(np.abs(total))) + 1e-9
     if pico_final > 1.0:
         total /= pico_final
-    return total.astype(np.float32)
+    return np.asarray(total, dtype=np.float32)
 
 
 def mixar(audio, baixo, bateria, acordes=None, teclado=None, solo=None):
@@ -342,7 +342,15 @@ def mixar(audio, baixo, bateria, acordes=None, teclado=None, solo=None):
     return finalizar_mix(total)
 
 
-def aplicar_ducking(trilha, audio_referencia, sr, intensidade=0.35):
+def envelope_voz(audio_referencia, hop=512):
+    """Envelope de volume da voz, normalizado (0 a 1). Calculado em blocos e UMA vez por produção: antes cada camada
+    (baixo, acordes...) recalculava o envelope do áudio inteiro, ~40-50 MB de pico por camada."""
+    from espectro_leve import rms_em_blocos
+    rms = rms_em_blocos(audio_referencia, frame_length=2048, hop_length=hop)
+    return (rms / (np.max(rms) + 1e-9)).astype(np.float32)
+
+
+def aplicar_ducking(trilha, audio_referencia, sr, intensidade=0.35, envelope=None):
     """Reduz o volume da trilha (baixo/acordes) quando a voz de referência está mais forte —
     simula o efeito de sidechain usado em produções profissionais.
     Envelope calculado em float32 e por blocos: a versão antiga criava ~4 arrays
@@ -350,9 +358,7 @@ def aplicar_ducking(trilha, audio_referencia, sr, intensidade=0.35):
     if trilha is None:
         return None
     try:
-        hop = 512
-        rms = librosa.feature.rms(y=audio_referencia, frame_length=2048, hop_length=hop)[0]
-        rms_norm = (rms / (np.max(rms) + 1e-9)).astype(np.float32)
+        rms_norm = envelope if envelope is not None else envelope_voz(audio_referencia)
         n = len(trilha)
         xp = np.arange(len(rms_norm), dtype=np.float32)
         escala = (len(rms_norm) - 1) / max(1, n - 1)
@@ -387,11 +393,21 @@ def aplicar_reverb(sinal, sr, quantidade=0.12):
     try:
         from scipy.signal import oaconvolve
         ir = gerar_reverb_ir(sr)
-        molhado = oaconvolve(sinal, ir)[:len(sinal)].astype(np.float32)
-        pico_molhado = float(np.max(np.abs(molhado))) + 1e-9
-        pico_seco = float(np.max(np.abs(sinal))) + 1e-9
+        n = len(sinal)
+        # Convolução em blocos de 10 s (a convolução é linear: somar a "cauda" de cada bloco no seguinte dá o mesmo resultado
+        # que convoluir tudo de uma vez) — o pico de memória cai de ~37 MB para ~12 MB numa música de 2 min.
+        molhado = np.zeros(n, dtype=np.float32)
+        bloco = int(sr * 10)
+        for i in range(0, n, bloco):
+            y = oaconvolve(np.asarray(sinal[i:i + bloco], dtype=np.float32), ir)
+            fim = min(n, i + len(y))
+            molhado[i:fim] += y[: fim - i].astype(np.float32)
+        pico_molhado = float(max(molhado.max(), -molhado.min())) + 1e-9
+        pico_seco = float(max(np.max(sinal), -np.min(sinal))) + 1e-9
         molhado *= np.float32(pico_seco / pico_molhado * quantidade)
-        molhado += sinal * np.float32(1 - quantidade)
+        seco = np.float32(1 - quantidade)
+        for i in range(0, n, bloco):
+            molhado[i:i + bloco] += sinal[i:i + bloco] * seco
         return molhado
     except Exception:
         return sinal

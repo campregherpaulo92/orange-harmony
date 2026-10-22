@@ -362,11 +362,14 @@ def rms_voz(audio):
 def nivelar(trilha, rms_alvo, pico_max=0.85, saturacao=2.0):
     """Leva a camada ao volume médio pedido. Uma saturação suave (como o 'bus' de uma bateria) segura os picos
     e levanta o corpo; o ganho nunca passa do que mantém o pico em `pico_max`."""
-    x = np.asarray(trilha, dtype=np.float32)
-    pico = float(np.max(np.abs(x))) + 1e-9
-    x = np.tanh(saturacao * x / pico) / np.tanh(saturacao)
-    rms = float(np.sqrt(np.mean(x ** 2))) + 1e-9
-    return (x * min(rms_alvo / rms, pico_max)).astype(np.float32)
+    x = np.array(trilha, dtype=np.float32, copy=True)               # a ÚNICA cópia; o resto é feito no lugar (antes: 4 arrays temporários)
+    pico = float(max(x.max(), -x.min())) + 1e-9
+    x *= np.float32(saturacao / pico)
+    np.tanh(x, out=x)
+    x /= np.float32(np.tanh(saturacao))
+    rms = float(np.sqrt(np.einsum("i,i->", x, x, dtype=np.float64) / len(x))) + 1e-9
+    x *= np.float32(min(rms_alvo / rms, pico_max))
+    return x
 
 
 def somar_nivelado(mix, trilha, ref, camada, estilo="Pop"):
