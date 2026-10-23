@@ -218,7 +218,7 @@ def gerar_baixo_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None):
         raiz_pc, qual = _acorde(esp, tonica, c, harmonia)
         raiz = 36 + raiz_pc                                           # baixo elétrico: C2..B2
         prox_pc, _ = _acorde(esp, tonica, c + 1, harmonia)
-        terca = 3 if qual in ("m", "m7", "dim", "m7b5") else 4
+        terca = 3 if qual in R.QUALIDADES_MENORES else 4
         notas = {"r": raiz, "5": raiz + 7, "8": raiz + 12, "3": raiz + terca, "6": raiz + 9, "7": raiz + 10, "a": 36 + prox_pc - 1}
         eventos = _eventos(barras[c % len(barras)], notas)
         fim_barra = g.fim_do_compasso(c)
@@ -315,30 +315,76 @@ def gerar_teclado_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None)
     return trilha[:len(audio)]
 
 
-def gerar_solo_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, modo="maior"):
-    """Linha melódica que caminha pela escala do estilo (maior, pentatônica ou blues), com pausas."""
+def _voz_por_quadro(audio, sr, hop=512):
+    """Volume da sua gravação a cada ~12 ms, de 0 a 1 em relação aos trechos mais fortes. (None, 0) se for silêncio."""
+    x = np.asarray(audio, dtype=np.float32)
+    n = (len(x) // hop) * hop
+    if n == 0:
+        return None, 0.0
+    r = np.sqrt(np.mean(x[:n].reshape(-1, hop) ** 2, axis=1))
+    ref = float(np.percentile(r, 90))
+    if ref < 1e-6:
+        return None, 0.0
+    return np.minimum(1.0, r / ref).astype(np.float32), hop / float(sr)
+
+
+def _fracao_voz(quadros, dt, t0, t1):
+    if quadros is None:
+        return 0.0
+    seg = quadros[int(t0 / dt): int(t1 / dt) + 1]
+    return float(np.mean(seg)) if len(seg) else 0.0
+
+
+def _escala_para_modo(nome, modo):
+    """A escala do estilo, ajustada ao modo da música: música menor com escala maior (ou o contrário) cai na pentatônica certa."""
+    if modo == "menor" and nome in ("maior", "pent_maior", "mixolidio"):
+        return "pent_menor"
+    if modo != "menor" and nome in ("dorico", "menor_natural"):
+        return "pent_maior"
+    return nome
+
+
+def solo_eventos(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, modo="maior"):
+    """As notas do solo: [(tempo_s, duração_s, nota_midi, volume)].
+    A linha caminha pela escala do estilo, mas RESPEITA a gravação: nos tempos fortes pousa numa nota do ACORDE daquele
+    compasso (o mesmo que o baixo e o teclado tocam) e dá espaço à sua voz (mais pausas e volume menor quando você canta forte)."""
     esp = R.obter(estilo)
     sr = int(sr)
     tonica = NOMES_NOTAS.index(tom) if tom in NOMES_NOTAS else 0
     nome_escala, por_compasso = esp["solo"]
-    if modo == "menor" and nome_escala in ("maior", "pent_maior"):
-        nome_escala = "pent_menor"                                    # música em tom menor: o solo caminha pela pentatônica menor
-    escala = [60 + tonica + i for i in R.ESCALAS_SOLO[nome_escala]]
+    escala = [60 + tonica + i for i in R.ESCALAS_SOLO[_escala_para_modo(nome_escala, modo)]]
     g = _Grade(audio, sr, bpm, beat_times, esp)
-    trilha = _nova_trilha(audio, sr)
+    quadros, dt = _voz_por_quadro(audio, sr)
     rng = np.random.default_rng(21)
     espaco = esp["passos"] / por_compasso
     indice = len(escala) // 2
+    eventos = []
     for c in g.compassos:
+        raiz_pc, qual = _acorde(esp, tonica, c, harmonia)
+        tons_do_acorde = {(raiz_pc + i) % 12 for i in R.QUALIDADES[qual]}
         for i in range(por_compasso):
-            passo = int(round(i * espaco))
-            t0 = g.tempo(c, passo)
+            t0 = g.tempo(c, int(round(i * espaco)))
             if t0 is None:
                 continue
             indice = max(0, min(len(escala) - 1, indice + int(rng.choice([-2, -1, -1, 0, 1, 1, 2]))))
-            if rng.random() < 0.35:
-                continue                                              # pausa: dá respiro à linha
-            _somar(trilha, D.gerar_nota_solo(D.midi_para_freq(escala[indice]), max(0.1, espaco * g.dur_passo * 0.85), sr, volume=0.20), int(t0 * sr), g.din.get(c, 1.0))
+            dur = max(0.1, espaco * g.dur_passo * 0.85)
+            voz = _fracao_voz(quadros, dt, t0, t0 + dur)
+            if rng.random() < 0.30 + 0.35 * voz:
+                continue                                              # pausa: mais espaço onde você está cantando forte
+            if i % 2 == 0:                                            # tempo forte: nota do acorde mais próxima
+                candidatos = [k for k, n in enumerate(escala) if n % 12 in tons_do_acorde]
+                if candidatos:
+                    indice = min(candidatos, key=lambda k: abs(k - indice))
+            eventos.append((t0, dur, escala[indice], 0.20 * (1.0 - 0.30 * voz) * g.din.get(c, 1.0)))
+    return eventos
+
+
+def gerar_solo_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, modo="maior"):
+    """Linha melódica de solo (veja solo_eventos): escala do estilo + acordes do compasso + espaço para a sua voz."""
+    sr = int(sr)
+    trilha = _nova_trilha(audio, sr)
+    for t0, dur, nota, vol in solo_eventos(audio, sr, tom, bpm, beat_times, estilo, harmonia, modo):
+        _somar(trilha, D.gerar_nota_solo(D.midi_para_freq(nota), dur, sr, volume=vol), int(t0 * sr), 1.0)
     return trilha[:len(audio)]
 
 

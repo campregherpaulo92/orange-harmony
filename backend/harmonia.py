@@ -24,13 +24,15 @@ PARAMS = dict(k=8.0, w_raiz=1.0, w_terca=0.8, w_quinta=0.4, pen_fora=1.4, prior=
 # acordes de cada modo: (semitons acima da tônica, qualidade, probabilidade de aparecer)
 ACORDES_MAIOR = [(0, "M", 0.30), (5, "M", 0.20), (7, "M", 0.20), (9, "m", 0.15), (2, "m", 0.08), (4, "m", 0.04), (11, "dim", 0.03)]
 ACORDES_MENOR = [(0, "m", 0.30), (8, "M", 0.15), (5, "m", 0.15), (7, "M", 0.12), (10, "M", 0.12), (3, "M", 0.08), (7, "m", 0.05), (2, "dim", 0.03)]
-SUFIXO = {"M": "", "m": "m", "7": "7", "m7": "m7", "maj7": "7M", "5": "5", "dim": "dim", "m7b5": "m7(b5)", "sus4": "sus4"}
+SUFIXO = {"M": "", "m": "m", "7": "7", "m7": "m7", "maj7": "7M", "5": "5", "dim": "dim", "m7b5": "m7(b5)", "sus4": "sus4",
+          "sus2": "sus2", "add9": "add9", "madd9": "m(add9)", "6": "6", "m6": "m6", "9": "9", "m9": "m9", "maj9": "7M(9)",
+          "7sus4": "7sus4", "aug": "aug", "dim7": "dim7"}
 
 
 def nome_acorde(raiz_pc, qual):
     """Nome na cifra: Bb, Eb e Ab (e Db nos maiores) em vez de A#, D# e G#."""
     pc = raiz_pc % 12
-    menor = qual in ("m", "m7", "dim", "m7b5")
+    menor = qual in R.QUALIDADES_MENORES
     bemol = pc in (3, 10) or (pc in (1, 8) and not menor)
     return (R.NOMES_BEMOL_CIFRA[pc] if bemol else NOMES[pc]) + SUFIXO.get(qual, qual)
 
@@ -40,6 +42,8 @@ def tipo_do_estilo(esp):
     quals = [q for _, q in esp["prog"]]
     if len(quals) == 12:
         return "fixo"
+    if esp.get("cor"):                  # escolhido de propósito para o estilo (campo `cor` em ritmos.py)
+        return esp["cor"]
     if all(q == "5" for q in quals):
         return "5"
     if any(q in ("maj7", "m7", "7") for q in quals):
@@ -51,6 +55,16 @@ def _adaptar(funcao, qual, tipo):
     """Põe o 'sotaque' do estilo no acorde escolhido (power chord no rock, sétimas no samba/jazz...)."""
     if tipo == "5":
         return "5"
+    if tipo == "7d":                      # blues, boogie, soul sulista: dominantes em tudo
+        return {"M": "7", "m": "m7", "dim": "m7b5"}.get(qual, qual)
+    if tipo == "add9":                    # indie, dream pop: o brilho da nona
+        return {"M": "add9", "m": "madd9"}.get(qual, qual)
+    if tipo == "9":                       # neo-soul, jazz-pop, city pop: maj9 / m9 e dominante com nona
+        return {"M": "9" if funcao == 7 else "maj9", "m": "m9", "dim": "m7b5"}.get(qual, qual)
+    if tipo == "9d":                      # funk e soul: nonas dominantes
+        return {"M": "9", "m": "m9", "dim": "m7b5"}.get(qual, qual)
+    if tipo == "6":                       # swing, bossa: sextas
+        return {"M": "6", "m": "m6"}.get(qual, qual)
     if tipo == "7":
         if qual == "M":
             return "7" if funcao == 7 else "maj7"

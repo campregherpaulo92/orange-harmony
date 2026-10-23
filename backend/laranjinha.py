@@ -23,6 +23,7 @@ import ritmos
 import harmonia as harmonia_auto
 from espectro_leve import tarefa_pesada, ServidorOcupado
 import producao_ritmos
+import producao_pipeline
 import acordes as teoria_acordes   # (não chamar de 'acordes': já existe uma variável local com esse nome)
 
 CONHECIMENTO_APP = """
@@ -36,14 +37,19 @@ Você conhece TODO o aplicativo e tem ferramentas reais para LER dados E EXECUTA
 4. Histórico: evolução das análises salvas, com devolutiva do professor.
 5. Composições: letras com cifras [Am] e seções (#), versionamento.
 6. Conversor: WAV/MP3/FLAC/OGG/M4A.
-7. Produção: gera baixo, bateria, acordes, teclado e solo a partir de uma gravação, em mais de 70 estilos (samba, pagode, bossa nova, forró, baião, axé, sertanejo, funk carioca, MPB, pop, pop rock, rock, metal, jazz, blues, reggae, salsa, eletrônica, trap e muitos outros), cada um com bateria, baixo e acordes PRÓPRIOS. A produção SE ADAPTA à gravação: acompanha o andamento (o usuário pode informar o BPM se a detecção errar), descobre o tom (maior ou menor), escolhe os acordes que combinam com a melodia cantada ou tocada (o baixo, o teclado e os acordes seguem essa harmonia; há também a opção de usar a sequência fixa do estilo) e toca mais forte ou mais fraco conforme a voz. A harmonia é uma estimativa e pode errar em melodias ambíguas.
+7. Produção: gera baixo, bateria, acordes, teclado e solo a partir de uma gravação, em mais de 270 estilos organizados em 21 grupos: rock e suas vertentes (clássico, indie e alternativo, pesado — heavy, power, death, doom, stoner, nu metal, punk, pop punk, emo, shoegaze, post-punk…), blues (delta, Chicago, Texas, shuffle, slow, boogie-woogie, soul blues… e as formas fixas de 12 compassos), soul, R&B e funk (Motown, southern, northern, neo-soul, quiet storm, new jack swing, P-funk, go-go…), pop (synth-pop, dance-pop, K-pop, J-pop, city pop, soft rock, power ballad…), jazz (bebop, cool, modal, latino, gypsy, smooth, fusion, waltz…), eletrônico e hip hop (house, techno, trance, synthwave, boom bap, drill, phonk…), Brasil (samba, pagode, bossa, forró, sertanejo, regionais gaúchos e nordestinos, tecnobrega, funk, rock nacional…), country e folk, gospel e música do mundo (Caribe, África, Américas, Europa). Cada estilo tem bateria, baixo e acordes PRÓPRIOS. O nome aceita apelidos ('indie', 'rnb', 'baile funk', 'rock n roll'); se o nome não existir, a produção usa Pop e AVISA (a ferramenta devolve `aviso_estilo` com sugestões — conte isso ao usuário). Os estilos mudam o RITMO, a HARMONIA (cada um veste os acordes da melodia com a sua cor: power chords no metal, nonas no neo-soul, dominantes no blues, add9 no indie…), o swing e a energia; o TIMBRE dos instrumentos é o mesmo em todos — não prometa o som exato de uma guitarra ou sintetizador específico. A produção SE ADAPTA à gravação: acompanha o andamento (o usuário pode informar o BPM se a detecção errar), descobre o tom (maior ou menor), escolhe os acordes que combinam com a melodia cantada ou tocada (o baixo, o teclado e os acordes seguem essa harmonia; há também a opção de usar a sequência fixa do estilo) e toca mais forte ou mais fraco conforme a voz. O solo pousa nas notas do acorde de cada compasso e dá espaço à voz (menos notas e mais suave onde o usuário canta forte). A harmonia é uma estimativa e pode errar em melodias ambíguas. Teclado e solo são camadas opcionais (desligadas por padrão). Blues, Blues Rock e Rockabilly sempre usam a sequência fixa de 12 compassos. Usa até 2 minutos da gravação. Depois de gerar, a tela mostra BPM, tom, estilo e os acordes escolhidos. A tela e a sua ferramenta gerar_producao usam o MESMO motor, então o resultado é igual.
 8. Edição Vocal: redução de ruído, normalização, tom, EQ, compressão, sibilância, reverb.
 9. Avaliação: 5 exercícios que geram o perfil vocal (classificação, extensão, tessitura).
 10. Orange Studio: separação de stems (voz/instrumental) via Demucs no Colab.
-11. Songwriter: geração de música via Hugging Face + letra via você mesma (Gemini).
+11. Songwriter: (a) gera a LETRA (Gemini) a partir de tema e estilo; (b) aceita um áudio de referência (upload ou gravação) que é só DESCRITO em texto para montar o prompt musical; (c) gera a MÚSICA COMPLETA, com voz cantando a letra, no modelo YuE2 (Hugging Face), e guarda a melodia dela como partitura; (d) \"Criar a partir da minha gravação\": extrai a MELODIA da gravação do usuário como partitura editável (ABC), ele revisa, escreve a letra e o estilo (em inglês) e o app gera uma nova versão com banda seguindo as NOTAS dele — a voz e o arranjo saem novos, a entonação e a batida do violão NÃO são copiadas; (e) \"trocar só a letra\": numa música gerada, edita a letra e gera de novo com a MESMA melodia. Limites: cada geração gasta a cota de GPU gratuita da Hugging Face e pode demorar minutos ou falhar; o modelo não lista o português entre os idiomas (use \"detectar sozinho\" ou espanhol na extração); a letra precisa ter número de versos parecido com o da melodia; os pesos do modelo são de uso NÃO comercial. Você NÃO executa o Songwriter por ferramenta: oriente o usuário a usar a aba Songwriter.
 12. Acordes: braço de violão clicável — o usuário marca as notas nas cordas e o app identifica o acorde (nome, notas, onde se encaixa: tonalidades e escalas); também procura um acorde por nome e mostra posições no braço.
 13. Newsletter (Orange News): jornal do app, com manchete e dicas do dia (afinação, composição, violão com a levada do dia, teoria, produção, IA e curiosidades) e notícias de fora sobre música, com resumo curto em português e link.
 14. Singergame: jogos de afinação com a voz. Modo Livre e modo Escala (uma bolinha atravessa anéis que são notas; há um afinômetro em tempo real e a margem é ±75, ±50 ou ±25 cents conforme a dificuldade) e o VOCALISE ("eu faço, você copia": o piano toca um padrão — escadinha, arpejo ou alternando duas notas — e o aluno repete no mesmo andamento; a cada rodada o padrão sobe meio tom e depois desce; cada nota é julgada pelo centro do que ele cantou). O app só confere a ALTURA da nota, não a vogal (i, e, a) — as vogais são orientação.
+
+15. Este chat: tem um botão 🎤 para ditar por voz (não gasta cota de IA). No computador, Enter envia e Shift+Enter quebra a linha; no celular, Enter quebra a linha e o botão ➤ envia.
+
+## Limites do servidor
+As tarefas pesadas (analisar_gravacao, gerar_producao, aplicar_edicao_vocal) rodam UMA POR VEZ. Se o servidor estiver ocupado ou com pouca memória, a ferramenta devolve um erro: explique em português, sugira tentar de novo em cerca de 1 minuto e NÃO repita a ferramenta sozinha.
 
 ## Suas ferramentas (você EXECUTA, não só descreve)
 - listar_gravacoes, avaliar_gravacao (ouve o áudio de verdade), analisar_gravacao (roda
@@ -87,8 +93,12 @@ Ferramentas disponíveis:
 - ler_perfil_vocal() — lê o perfil vocal do usuário (classificação, extensão, tessitura).
 - listar_composicoes(limite?: int) — lista as composições salvas.
 - salvar_composicao(titulo: str, tom?: str, letra: str) — cria/salva uma composição.
-- gerar_producao(nome_gravacao: str, estilo?: str, com_baixo?: bool, com_bateria?: bool,
-  com_acordes?: bool, qualidade_pro?: bool) — gera backing track e salva como nova gravação.
+- gerar_producao(nome_gravacao: str, estilo?: str, com_baixo?: bool, com_bateria?: bool, com_acordes?: bool,
+  com_teclado?: bool, com_solo?: bool, qualidade_pro?: bool, harmonia?: "melodia"|"estilo", bpm?: number) — gera o backing
+  track com o MESMO motor da tela de Produção e salva como nova gravação. Padrão: baixo, bateria e acordes LIGADOS; teclado e
+  solo DESLIGADOS (ligue se o usuário pedir). `harmonia`: "melodia" (padrão) = os acordes seguem as notas cantadas; "estilo" =
+  sequência fixa do estilo. `bpm`: só se o usuário informar um andamento (ou disser que a detecção errou). Usa até 2 minutos da
+  gravação. Devolve estilo, camadas usadas, BPM, tom e os acordes escolhidos — conte isso ao usuário.
 - aplicar_edicao_vocal(nome_gravacao: str, comando: str) — aplica edição vocal interpretando
   o comando em português, salva como nova gravação.
 - renomear_gravacao(nome_atual: str, novo_nome: str) — renomeia uma gravação.
@@ -283,6 +293,28 @@ def _executar_ferramenta(nome_func, args):
     return _executar_ferramenta_interna(nome_func, args)
 
 
+def _como_bool(valor, padrao):
+    """O modelo pode devolver true/false, 'sim'/'não' ou nada: interpreta com tolerância."""
+    if valor is None or valor == "":
+        return padrao
+    if isinstance(valor, bool):
+        return valor
+    return str(valor).strip().lower() in ("true", "1", "sim", "s", "yes", "y", "ligado", "ligar", "com")
+
+
+def _como_numero(valor, padrao):
+    try:
+        return float(valor)
+    except (TypeError, ValueError):
+        return padrao
+
+
+def _modo_harmonia(valor):
+    """'melodia' (padrão) = acordes seguem as notas cantadas; 'estilo' = sequência fixa do estilo."""
+    v = str(valor or "").strip().lower()
+    return "estilo" if v in ("estilo", "fixa", "fixo", "sequencia", "sequência", "sequencia fixa", "sequência fixa") else "melodia"
+
+
 def _executar_ferramenta_interna(nome_func, args):
     if nome_func == "consultar_escala":
         par = teoria_escalas.interpretar_escala(str(args.get("nome", "")))
@@ -375,38 +407,37 @@ def _executar_ferramenta_interna(nome_func, args):
         del conteudo
         if audio is None:
             return {"erro": "Não consegui ler esse áudio."}
-        audio, _ = audio_analysis.limitar_duracao(audio, sr)
-        bpm, beat_times = audio_analysis.detectar_bpm_e_beats(audio, sr)
-        estilo = ritmos.nome_canonico(args.get("estilo", "Pop"))
-        info = harmonia_auto.preparar(audio, sr, estilo, bpm, beat_times, "melodia")         # os acordes seguem a melodia da gravação
-        tom, harm = info["tom"], info["harmonia"]
-        baixo = bateria = acordes = None
+        audio, _ = audio_analysis.limitar_duracao(audio, sr, 120)           # mesmo limite (2 min) da tela de Produção
+        pedido_estilo = str(args.get("estilo", "Pop") or "Pop")
+        estilo, estilo_achado = ritmos.resolver(pedido_estilo)          # aceita apelidos; desconhecido cai em Pop e é AVISADO
+        opcoes = {
+            "baixo": _como_bool(args.get("com_baixo"), True), "bateria": _como_bool(args.get("com_bateria"), True),
+            "acordes": _como_bool(args.get("com_acordes"), True), "teclado": _como_bool(args.get("com_teclado"), False),
+            "solo": _como_bool(args.get("com_solo"), False),
+        }
         try:
-            if args.get("com_baixo", True):
-                baixo = producao_ritmos.gerar_baixo_estilo(audio, sr, tom, bpm, beat_times, estilo, harm)
-            if args.get("com_bateria", True):
-                bateria = producao_ritmos.gerar_bateria_estilo(audio, sr, bpm, beat_times, estilo)
-            if args.get("com_acordes", True):
-                acordes = producao_ritmos.gerar_acordes_estilo(audio, sr, tom, bpm, beat_times, estilo, harm)
-        except Exception as e:
+            # o MESMO caminho da tela (producao_pipeline): mesmas camadas, mesma mixagem, mesma harmonia
+            wav_bytes, resumo = producao_pipeline.produzir(
+                audio, sr, estilo, com_baixo=opcoes["baixo"], com_bateria=opcoes["bateria"], com_acordes=opcoes["acordes"],
+                com_teclado=opcoes["teclado"], com_solo=opcoes["solo"],
+                qualidade_pro=_como_bool(args.get("qualidade_pro"), True),
+                acordes_modo=_modo_harmonia(args.get("harmonia") or args.get("acordes_modo")),
+                bpm_manual=_como_numero(args.get("bpm") or args.get("bpm_manual"), 0.0))
+        except producao_pipeline.ErroProducao as e:
             return {"erro": f"Erro ao gerar produção: {e}"}
-        if args.get("qualidade_pro", True):
-            env_voz = producao_dsp.envelope_voz(audio)               # uma vez só, para as duas camadas
-            if baixo is not None:
-                baixo = producao_dsp.aplicar_ducking(baixo, audio, sr, 0.30, envelope=env_voz)
-            if acordes is not None:
-                acordes = producao_dsp.aplicar_ducking(acordes, audio, sr, 0.40, envelope=env_voz)
-        mix = producao_ritmos.mixar_estilo(audio, estilo, baixo=baixo, bateria=bateria, acordes=acordes)
-        if args.get("qualidade_pro", True):
-            mix = producao_dsp.aplicar_reverb(mix, sr, 0.08)
-        wav_bytes = converter_audio.audio_para_wav_bytes(mix, sr)
-        del mix, baixo, bateria, acordes, audio
+        del audio
         audio_analysis.liberar_memoria()
         novo_nome = f"{g['nome']} (Produção {estilo})"
         doc_id, erro = gravacoes.salvar_gravacao(novo_nome, wav_bytes, "producao.wav", "audio/wav")
         if erro:
             return {"erro": erro}
-        return {"gerado": True, "nome_novo": novo_nome, "bpm": bpm, "tom": f"{info['tom_detectado']} {info['modo_detectado']}", "acordes_usados": info["acordes"]}
+        retorno = {"gerado": True, "nome_novo": novo_nome, "estilo": estilo, "camadas": [n for n, ativa in opcoes.items() if ativa],
+                   "bpm": round(resumo["bpm"], 1), "tom": f"{resumo['tom_detectado']} {resumo['modo_detectado']}",
+                   "acordes_usados": resumo["acordes"]}
+        if not estilo_achado:
+            retorno["aviso_estilo"] = (f"O estilo '{pedido_estilo}' não existe no app; usei Pop. Estilos parecidos: "
+                                       + ", ".join(ritmos.sugerir(pedido_estilo, 5)) + ". Conte isso ao usuário.")
+        return retorno
 
     if nome_func == "aplicar_edicao_vocal":
         g = _achar_gravacao_por_nome(args.get("nome_gravacao", ""))
@@ -579,6 +610,7 @@ def _conversar(mensagem, chat_id=None):
             linhas_conversa.append(f"{papel}: {texto}")
 
     execucoes_registradas = []
+    pesadas_com_erro = set()       # ferramentas pesadas que já falharam NESTA resposta: não são repetidas sozinhas
     texto_final = None
     ultimo_erro = ""
 
@@ -603,7 +635,15 @@ def _conversar(mensagem, chat_id=None):
         if chamada:
             nome_func = chamada.get("ferramenta")
             args = chamada.get("argumentos") or {}
-            resultado = _executar_ferramenta(nome_func, args)
+            if nome_func in _FERRAMENTAS_PESADAS and nome_func in pesadas_com_erro:
+                # Trava no CÓDIGO (não só no prompt): se uma tarefa pesada falhou (ex.: pouca memória), o modelo não a repete em
+                # seguida. Sem isso, até 5 tentativas seguidas poderiam derrubar o servidor.
+                resultado = {"erro": "Essa ferramenta já falhou nesta resposta e não será repetida sozinha. "
+                                     "Explique o erro ao usuário e sugira tentar de novo em cerca de 1 minuto."}
+            else:
+                resultado = _executar_ferramenta(nome_func, args)
+                if nome_func in _FERRAMENTAS_PESADAS and isinstance(resultado, dict) and resultado.get("erro"):
+                    pesadas_com_erro.add(nome_func)
             execucoes_registradas.append(f"- {nome_func}({args}) → {resultado}")
             continue
 
@@ -633,7 +673,8 @@ _REGRA_SO_MENSAGEM_ATUAL = (
     "\n\n## REGRA IMPORTANTE\n"
     "Execute ferramentas SOMENTE para o que o usuário pedir na mensagem MAIS RECENTE. Pedidos anteriores da conversa — "
     "mesmo os que ficaram sem resposta ou foram interrompidos — NÃO devem ser retomados nem repetidos, a menos que o usuário "
-    "peça de novo. Se a mensagem mais recente for só uma saudação ou conversa, apenas converse."
+    "peça de novo. Se a mensagem mais recente for só uma saudação ou conversa, apenas converse. "
+    "Se uma ferramenta devolver erro (servidor ocupado, pouca memória, limite), explique ao usuário e NÃO chame a mesma ferramenta de novo na mesma resposta."
 )
 AVISO_PEDIDO_INTERROMPIDO = (
     "⚠️ O pedido anterior foi interrompido (o servidor reiniciou ou ficou sem memória antes de eu terminar) e "

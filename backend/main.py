@@ -38,6 +38,7 @@ import news
 import ritmos
 import harmonia
 import producao_ritmos
+import producao_pipeline
 import singergame
 import chats
 import songwriter
@@ -568,7 +569,8 @@ def gerar_producao_rota(
     acordes_modo: str = Form("melodia"),
     bpm_manual: float = Form(0.0),
 ):
-    estilo = ritmos.nome_canonico(estilo)           # estilo desconhecido cai em Pop (e o cabeçalho X-Estilo avisa qual foi usado)
+    pedido = estilo
+    estilo, achou = ritmos.resolver(estilo)         # aceita apelidos ('indie', 'rnb'); desconhecido cai em Pop e AVISA no cabeçalho X-Aviso-Estilo
     dados = arquivo.file.read()
     audio, sr = carregar_audio_bytes(dados, arquivo.filename or "audio.wav")
     del dados                       # solta os bytes do upload (até ~16 MB)
@@ -576,54 +578,29 @@ def gerar_producao_rota(
         raise HTTPException(status_code=400, detail="Não foi possível ler o áudio. Tente outro formato.")
     audio, aviso = _limitar_duracao(audio, sr)
 
-    bpm, beat_times = detectar_bpm_e_beats(audio, sr, bpm_manual if 40 <= bpm_manual <= 220 else None)
-    # Harmonia: "melodia" = os acordes seguem as notas que você cantou/tocou; "estilo" = sequência fixa do estilo
-    info = harmonia.preparar(audio, sr, estilo, bpm, beat_times, acordes_modo if acordes_modo in ("melodia", "estilo") else "melodia")
-    tom, harm = info["tom"], info["harmonia"]
-    liberar_memoria()
-    env_voz = producao_dsp.envelope_voz(audio) if qualidade_pro else None      # calculado UMA vez e usado no ducking de todas as camadas
-
-    # Cada trilha é gerada, (opcionalmente) passa pelo ducking, é SOMADA à mixagem e
-    # liberada na hora — em vez de segurar todas ao mesmo tempo na memória.
-    mix = producao_dsp.iniciar_mix(audio)
-    ref = producao_ritmos.rms_voz(mix)              # volume médio da voz: cada camada é nivelada em relação a ele
     try:
-        camadas = [
-            (com_baixo,   "baixo",   lambda: producao_ritmos.gerar_baixo_estilo(audio, sr, tom, bpm, beat_times, estilo, harm),   0.30),
-            (com_bateria, "bateria", lambda: producao_ritmos.gerar_bateria_estilo(audio, sr, bpm, beat_times, estilo),      None),
-            (com_acordes, "acordes", lambda: producao_ritmos.gerar_acordes_estilo(audio, sr, tom, bpm, beat_times, estilo, harm), 0.40),
-            (com_teclado, "teclado", lambda: producao_ritmos.gerar_teclado_estilo(audio, sr, tom, bpm, beat_times, estilo, harm), 0.35),
-            (com_solo,    "solo",    lambda: producao_ritmos.gerar_solo_estilo(audio, sr, tom, bpm, beat_times, estilo, harm, info["modo"]),     0.30),
-        ]
-        for ativa, nome_camada, gerar, ducking in camadas:
-            if not ativa:
-                continue
-            trilha = gerar()
-            if qualidade_pro and ducking is not None:
-                trilha = producao_dsp.aplicar_ducking(trilha, audio, sr, intensidade=ducking, envelope=env_voz)
-            producao_ritmos.somar_nivelado(mix, trilha, ref, nome_camada, estilo)
-            del trilha
-            liberar_memoria()                                # devolve ao sistema a memória temporária da camada
-    except Exception as e:
+        wav_bytes, resumo = producao_pipeline.produzir(
+            audio, sr, estilo, com_baixo=com_baixo, com_bateria=com_bateria, com_acordes=com_acordes,
+            com_teclado=com_teclado, com_solo=com_solo, qualidade_pro=qualidade_pro,
+            acordes_modo=acordes_modo, bpm_manual=bpm_manual)      # o MESMO caminho usado pela Laranjinha
+    except producao_pipeline.ErroProducao as e:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar produção: {e}")
-
-    mix = producao_dsp.finalizar_mix(producao_ritmos.limitar(mix))
-    if qualidade_pro:
-        mix = producao_dsp.aplicar_reverb(mix, sr, quantidade=0.08)
-
-    wav_bytes = converter_audio.audio_para_wav_bytes(mix, sr)
-    del mix, audio
+    del audio
     liberar_memoria()
     cabecalhos = {
-        "X-BPM": f"{bpm:.1f}",
-        "X-Tom": info["tom_detectado"],
-        "X-Modo": info["modo_detectado"],
+        "X-BPM": f"{resumo['bpm']:.1f}",
+        "X-Tom": resumo["tom_detectado"],
+        "X-Modo": resumo["modo_detectado"],
         "X-Estilo": quote(estilo),
-        "X-Acordes": quote(" – ".join(info["acordes"])),         # acordes escolhidos a partir da sua melodia (vazio na sequência fixa)
-        "Access-Control-Expose-Headers": "X-BPM, X-Tom, X-Modo, X-Aviso, X-Estilo, X-Acordes",
+        "X-Acordes": quote(" – ".join(resumo["acordes"])),       # acordes escolhidos a partir da sua melodia (vazio na sequência fixa)
+        "Access-Control-Expose-Headers": "X-BPM, X-Tom, X-Modo, X-Aviso, X-Estilo, X-Acordes, X-Aviso-Estilo",
     }
     if aviso:
         cabecalhos["X-Aviso"] = aviso
+    if not achou and (pedido or "").strip():
+        nome_ascii = (pedido.strip().encode("ascii", "ignore").decode() or "?")[:40]      # cabeçalho HTTP só aceita texto simples
+        cabecalhos["X-Aviso-Estilo"] = f"Estilo '{nome_ascii}' nao existe; usei Pop. Parecidos: " + ", ".join(
+            x.encode("ascii", "ignore").decode() for x in ritmos.sugerir(pedido, 4))
     return Response(content=wav_bytes, media_type="audio/wav", headers=cabecalhos)
 
 

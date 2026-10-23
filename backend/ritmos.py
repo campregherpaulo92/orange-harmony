@@ -15,6 +15,7 @@
 # São versões SIMPLIFICADAS e reconhecíveis de cada ritmo, tocadas por sons sintetizados
 # (não são gravações de instrumentos reais).
 # ══════════════════════════════════════════════════════════════
+import unicodedata
 import numpy as np
 
 NOMES_NOTAS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -24,13 +25,25 @@ NOMES_BEMOL_CIFRA = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb",
 QUALIDADES = {            # intervalos (semitons) de cada tipo de acorde
     "M": (0, 4, 7), "m": (0, 3, 7), "7": (0, 4, 7, 10), "m7": (0, 3, 7, 10),
     "maj7": (0, 4, 7, 11), "5": (0, 7, 12), "sus4": (0, 5, 7), "dim": (0, 3, 6), "m7b5": (0, 3, 6, 10),
+    # acordes com "cor" (indie, soul, jazz-pop, blues...): usados pela harmonização via o campo `cor` do estilo
+    "sus2": (0, 2, 7), "add9": (0, 4, 7, 14), "madd9": (0, 3, 7, 14), "6": (0, 4, 7, 9), "m6": (0, 3, 7, 9),
+    "9": (0, 4, 7, 10, 14), "m9": (0, 3, 7, 10, 14), "maj9": (0, 4, 7, 11, 14), "7sus4": (0, 5, 7, 10),
+    "aug": (0, 4, 8), "dim7": (0, 3, 6, 9),
 }
+# acordes de sonoridade menor (a terça é menor): o baixo e a grafia precisam saber
+QUALIDADES_MENORES = {"m", "m7", "dim", "m7b5", "madd9", "m6", "m9", "dim7"}
+# "cor" harmônica do estilo (como a harmonização, que segue a SUA melodia, "veste" os acordes):
+#   5 = power chords · 7 = sétimas de jazz (maj7/m7) · 7d = dominantes de blues · 9 = nonas de jazz-pop (maj9/m9)
+#   9d = nonas dominantes de funk/soul · add9 = indie/dream pop · 6 = sextas (swing, bossa) · tri = tríades puras
+CORES = {None, "5", "7", "7d", "9", "9d", "add9", "6", "tri"}
 INSTRUMENTOS = {"kick", "snare", "hat", "open", "ride", "crash", "rim", "clap", "tom", "shaker", "pandeiro", "tamborim",
                 "surdo", "conga", "agogo", "cowbell", "triangulo", "zabumba", "caixa", "clave"}
 ESCALAS_SOLO = {
     "maior": (0, 2, 4, 5, 7, 9, 11, 12), "pent_maior": (0, 2, 4, 7, 9, 12),
     "pent_menor": (0, 3, 5, 7, 10, 12), "blues": (0, 3, 5, 6, 7, 10, 12),
+    "dorico": (0, 2, 3, 5, 7, 9, 10, 12), "mixolidio": (0, 2, 4, 5, 7, 9, 10, 12), "menor_natural": (0, 2, 3, 5, 7, 8, 10, 12),
 }
+ESCALAS_MENORES = {"pent_menor", "blues", "dorico", "menor_natural"}
 ARPEJO_PADRAO = {16: "1.2.3.4.3.2.3.2.", 12: "1.2.3.2.3.2.", 8: "1.2.3.2."}
 
 # padrões comuns (16 passos)
@@ -49,20 +62,28 @@ IVIVV = [(0, "M"), (5, "M"), (7, "7"), (0, "M")]                      # I – IV
 JAZZ = [(0, "maj7"), (9, "m7"), (2, "m7"), (7, "7")]                  # I – vi – ii – V
 MENOR_POP = [(9, "m"), (5, "M"), (0, "M"), (7, "M")]                  # vi – IV – I – V (toda dentro do tom detectado)
 
-GRUPOS = ["Brasil — Samba, Pagode e Bossa", "Brasil — Nordeste e Norte", "Brasil — Sertanejo, Funk e Fé",
-          "Pop e Rock", "Urbano e Eletrônico", "Jazz e Blues", "Latino e Mundo"]
+G1, G2, G3 = "Brasil — Samba, Pagode e Bossa", "Brasil — Nordeste e Norte", "Brasil — Sertanejo, Funk e Fé"
+G4, G5, G6, G7 = "Pop e Rock", "Urbano e Eletrônico", "Jazz e Blues", "Latino e Mundo"
+# catálogo ampliado (ritmos_catalogo2.py)
+GB = "Brasil — Regional e Raiz"
+GR1, GR2, GR3 = "Rock — Clássico e Raízes", "Rock — Alternativo e Indie", "Rock — Pesado"
+GP, GBL, GS = "Pop — Vertentes", "Blues", "Soul, R&B e Funk"
+GJ, GE, GH = "Jazz e Swing — Vertentes", "Eletrônico e Dance", "Hip Hop e Urbano — Vertentes"
+GC, GG = "Country, Folk e Americana", "Gospel e Espiritual"
+GM1, GM2 = "Mundo — Caribe, África e Américas", "Mundo — Europa e Ásia"
+GRUPOS = [G1, G2, G3, GB, G4, GR1, GR2, GR3, GP, GBL, GS, G6, GJ, G5, GE, GH, G7, GM1, GM2, GC, GG]      # ordem de exibição
 
 RITMOS = {}
+ENERGIA = {}          # preenchido no fim do arquivo (valores por estilo) e pelo campo `energia` de _r
 
 
 def _r(nome, grupo, desc, tags, bat, baixo, acordes, prog, passos=16, batidas=4, swing=0.0, solo=("maior", 8),
-       crash=0, teclado=None, baixo_dur=0.9, acorde_compassos=1):
+       crash=0, teclado=None, baixo_dur=0.9, acorde_compassos=1, cor=None, energia=None):
     RITMOS[nome] = dict(grupo=grupo, desc=desc, tags=tags, bateria=bat, baixo=baixo, acordes=acordes, prog=prog,
                         passos=passos, batidas=batidas, swing=swing, solo=solo, crash=crash,
-                        teclado=teclado or ARPEJO_PADRAO[passos], baixo_dur=baixo_dur, acorde_compassos=acorde_compassos)
-
-
-G1, G2, G3, G4, G5, G6, G7 = GRUPOS
+                        teclado=teclado or ARPEJO_PADRAO[passos], baixo_dur=baixo_dur, acorde_compassos=acorde_compassos, cor=cor)
+    if energia is not None:
+        ENERGIA[nome] = energia
 
 # ───────────────────────── Brasil — Samba, Pagode e Bossa ─────────────────────────
 _r("Samba", G1, "Suingado — surdo marcando o 2, pandeiro e tamborim sincopados, clima de roda de samba.",
@@ -377,22 +398,63 @@ def nomes():
     return list(RITMOS)
 
 
-def obter(estilo):
-    """Estilo pelo nome (sem diferenciar maiúsculas); estilo desconhecido cai em 'Pop'."""
+ALIASES = {}      # apelido (já normalizado por _chave) → nome do estilo; preenchido em ritmos_catalogo2.py
+
+
+def _chave(texto):
+    """Compara nomes sem acento, espaço, hífen ou símbolo: 'Samba-canção' = 'samba cancao'; 'Rock'n'Roll' = 'rock n roll'."""
+    t = unicodedata.normalize("NFKD", str(texto or "")).encode("ascii", "ignore").decode().lower()
+    return "".join(ch for ch in t if ch.isalnum())
+
+
+_cache_chaves = {"n": -1, "mapa": {}}
+
+
+def _mapa_chaves():
+    """{nome normalizado: nome do estilo}, refeito só se o catálogo mudar de tamanho."""
+    if _cache_chaves["n"] != len(RITMOS):
+        _cache_chaves["mapa"] = {_chave(n): n for n in RITMOS}
+        _cache_chaves["n"] = len(RITMOS)
+    return _cache_chaves["mapa"]
+
+
+def resolver(estilo):
+    """(nome_do_estilo, achou). Aceita maiúsculas, acentos e hífens diferentes e apelidos ('indie', 'rnb', 'baile funk').
+    Estilo desconhecido → ('Pop', False): quem chama pode AVISAR o usuário em vez de trocar em silêncio."""
     if estilo in RITMOS:
-        return RITMOS[estilo]
-    chave = (estilo or "").strip().lower()
-    for nome, esp in RITMOS.items():
-        if nome.lower() == chave:
-            return esp
-    return RITMOS["Pop"]
+        return estilo, True
+    k = _chave(estilo)
+    mapa = _mapa_chaves()
+    if k in mapa:
+        return mapa[k], True
+    if k in ALIASES:
+        return ALIASES[k], True
+    return "Pop", False
+
+
+def sugerir(texto, n=5):
+    """Estilos parecidos com um nome que não existe (contém o texto, ou é bem próximo dele)."""
+    import difflib
+    k = _chave(texto)
+    if not k:
+        return []
+    mapa = _mapa_chaves()
+    achados = [mapa[c] for c in difflib.get_close_matches(k, list(mapa), n=n, cutoff=0.6)]       # os mais parecidos primeiro
+    achados += [nome for c, nome in mapa.items() if k in c or (len(c) >= 4 and c in k)]
+    saida = []
+    for nome in achados:
+        if nome not in saida:
+            saida.append(nome)
+    return saida[:n]
+
+
+def obter(estilo):
+    """Estilo pelo nome ou apelido; estilo desconhecido cai em 'Pop' (use resolver() para saber se achou)."""
+    return RITMOS[resolver(estilo)[0]]
 
 
 def nome_canonico(estilo):
-    if estilo in RITMOS:
-        return estilo
-    chave = (estilo or "").strip().lower()
-    return next((n for n in RITMOS if n.lower() == chave), "Pop")
+    return resolver(estilo)[0]
 
 
 def descricoes():
@@ -441,6 +503,10 @@ def validar():
             erros.append(f"{nome}: {ex}")
         if e["grupo"] not in GRUPOS:
             erros.append(f"{nome}: grupo inválido")
+        if e.get("cor") not in CORES:
+            erros.append(f"{nome}: cor harmônica inválida '{e.get('cor')}'")
+        if len(e["bateria"]) == 0:
+            erros.append(f"{nome}: sem nenhum instrumento de bateria/percussão")
     return erros
 
 
@@ -474,11 +540,15 @@ def construir_grade(beat_times, bpm, duracao, passos_por_batida, batidas_por_com
     return tempos[validos], compasso[validos], passo[validos]
 
 
-# Quão "forte" cada estilo toca em relação à voz (1.0 = padrão). Os suaves ficam mais baixos, os pesados no máximo.
-ENERGIA = {"Samba-canção": 0.55, "Bolero": 0.55, "Folk": 0.55, "Bossa Nova": 0.65, "Balada": 0.65, "Lo-fi": 0.65, "Arrocha": 0.75,
-           "Pagode Romântico": 0.75, "MPB": 0.75, "Jazz": 0.75, "Valsa": 0.7, "Gospel": 0.8, "Louvor": 0.85, "Choro": 0.85, "Country": 0.85,
-           "Reggae": 0.85, "R&B": 0.85, "Samba de Roda": 0.85, "Soul": 0.9, "Balada Rock": 0.9, "Metal": 1.0, "Thrash Metal": 1.0}
-
-
 def energia(estilo):
     return ENERGIA.get(nome_canonico(estilo), 1.0)
+
+
+# Quão "forte" cada estilo toca em relação à voz (1.0 = padrão). Os suaves ficam mais baixos, os pesados no máximo.
+ENERGIA.update({"Samba-canção": 0.55, "Bolero": 0.55, "Folk": 0.55, "Bossa Nova": 0.65, "Balada": 0.65, "Lo-fi": 0.65, "Arrocha": 0.75,
+           "Pagode Romântico": 0.75, "MPB": 0.75, "Jazz": 0.75, "Valsa": 0.7, "Gospel": 0.8, "Louvor": 0.85, "Choro": 0.85, "Country": 0.85,
+           "Reggae": 0.85, "R&B": 0.85, "Samba de Roda": 0.85, "Soul": 0.9, "Balada Rock": 0.9, "Metal": 1.0, "Thrash Metal": 1.0})
+
+
+# catálogo ampliado (rock, blues, soul, pop, jazz, eletrônico, Brasil, mundo…): fica por último porque usa _r, ENERGIA e GRUPOS daqui
+import ritmos_catalogo2  # noqa: E402,F401
