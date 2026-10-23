@@ -21,6 +21,7 @@ import ritmos
 import avaliacao
 import audio_analysis
 import converter_audio
+from espectro_leve import tarefa_pesada, ServidorOcupado
 
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 ESPACO_YUE2 = "mrfakename/yue2-3b"
@@ -206,7 +207,7 @@ def _explicar_erro(erro, etapa):
     """Traduz o erro técnico da Hugging Face pra uma frase que diz o que fazer."""
     bruto = str(erro)
     b = bruto.lower()
-    sem_token = "" if _token_hf() else " (O HF_TOKEN não está configurado no Render — configure pra ter cota de GPU.)"
+    sem_token = "" if _token_hf() else " (O HF_TOKEN não está configurado no servidor — configure pra ter cota de GPU.)"
     if "quota" in b or "exceeded" in b and "gpu" in b:
         return ("Acabou a cota de GPU grátis da Hugging Face por hoje — contas gratuitas têm só alguns "
                 "minutos de GPU por dia, e cada música consome 2 a 5. Tente amanhã, ou use uma conta PRO." + sem_token)
@@ -218,21 +219,54 @@ def _explicar_erro(erro, etapa):
     return f"Erro na geração da música: {bruto[:250]}" + sem_token
 
 
-def gerar_musica_ia(prompt_musical, letra):
-    """Gera a música completa (com voz e letra) via YuE2-3B, no Hugging Face,
-    usando gradio_client — o mesmo espaço/API que o app original usava (não a
-    API genérica de Inference da Hugging Face, que não tem esse modelo)."""
+# ── Resultado do Space: uma tupla [0]=MP3, [1]=FLAC, [2]=partitura ABC (melodia + acordes), [3]=texto ──
+def _item_do_resultado(resultado, indice):
+    item = resultado
+    if isinstance(resultado, (list, tuple)):
+        item = resultado[indice] if len(resultado) > indice else None
+    elif indice != 0:
+        return None
+    if isinstance(item, dict):
+        item = item.get("path") or item.get("value") or (list(item.values())[0] if item else None)
+    return item
+
+
+def _partitura_do_resultado(resultado):
+    item = _item_do_resultado(resultado, 2)
+    return item.strip() if isinstance(item, str) and item.strip() else None
+
+
+def _wav_do_resultado(resultado):
+    """(wav_bytes, erro): lê o MP3 devolvido pelo Space e converte para WAV mono.
+    A fila de tarefas pesadas só é usada AQUI (conversão local), nunca durante a espera do Space, que dura minutos."""
+    try:
+        caminho = _item_do_resultado(resultado, 0)
+        import soundfile as sf
+        with tarefa_pesada():
+            audio_ia, sr_ia = sf.read(caminho)
+            if audio_ia.ndim > 1:
+                audio_ia = audio_ia.mean(axis=1)
+            return converter_audio.audio_para_wav_bytes(audio_ia.astype(np.float32), int(sr_ia)), None
+    except ServidorOcupado as e:
+        return None, str(e)
+    except Exception as e:
+        return None, f"A música foi gerada, mas não consegui ler o arquivo devolvido: {str(e)[:250]}"
+
+
+def gerar_musica_ia_completa(prompt_musical, letra):
+    """Gera a música completa (com voz e letra) via YuE2 e devolve (wav_bytes, partitura_abc, erro).
+    A partitura (melodia + acordes) vem junto: guardá-la permite refazer a música com OUTRA letra mantendo a melodia."""
     try:
         import gradio_client  # noqa: F401
     except ImportError:
-        return None, "Biblioteca ausente no servidor (gradio_client)."
+        return None, None, "Biblioteca ausente no servidor (gradio_client)."
 
     if not letra or not letra.strip():
-        return None, "Gere a letra primeiro (botão 'Gerar letra') — ela é usada na composição."
+        return None, None, "Gere a letra primeiro (botão 'Gerar letra') — ela é usada na composição."
 
     cliente, erro = _conectar_space()
     if cliente is None:
-        return None, _explicar_erro(erro, "conectar")
+        return None, None, _explicar_erro(erro, "conectar")
 
     estilo = (prompt_musical or "").strip()[:1000]          # limite do Space: 1.000 caracteres
     letra_yue = preparar_letra_para_yue(letra)
@@ -241,27 +275,116 @@ def gerar_musica_ia(prompt_musical, letra):
 
     try:
         resultado = cliente.predict(
-            estilo,        # style
-            letra_yue,     # lyrics (com seções [Verse]/[Chorus])
-            "full",        # planning_mode: melodia + acordes
-            16,            # render_quality: rápido (16 passos)
-            42,            # seed
+            style=estilo,
+            lyrics=letra_yue,              # com seções [Verse]/[Chorus]
+            planning_mode="full",          # melodia + acordes
+            render_quality="16",           # rápido (16 passos)
+            seed=42,
             api_name="/generate_song",
         )
     except Exception as e:
-        return None, _explicar_erro(e, "gerar")
+        return None, None, _explicar_erro(e, "gerar")
+
+    wav, erro = _wav_do_resultado(resultado)
+    return wav, _partitura_do_resultado(resultado), erro
+
+
+def gerar_musica_ia(prompt_musical, letra):
+    """Versão de sempre: (wav_bytes, erro)."""
+    wav, _partitura, erro = gerar_musica_ia_completa(prompt_musical, letra)
+    return wav, erro
+
+
+# ── Cover: nova música SEGUINDO a melodia de uma gravação (ou de uma música gerada antes) ──
+IDIOMAS_ANALISE = ("Auto-detect", "English", "Chinese", "Cantonese", "Japanese", "Korean", "Spanish")
+DURACAO_MAX_ANALISE_S = 300
+_MAX_ABC = 60000
+
+
+def extrair_melodia_da_gravacao(audio_bytes, nome_arquivo, idioma="Auto-detect"):
+    """Manda a gravação ao Space, que extrai a MELODIA como partitura ABC editável + a letra associada.
+    Devolve (partitura_abc, letra_associada, resumo, erro)."""
+    try:
+        from gradio_client import handle_file
+    except ImportError:
+        return None, None, None, "Biblioteca ausente no servidor (gradio_client)."
+    if not audio_bytes:
+        return None, None, None, "Nenhum áudio recebido."
+    if idioma not in IDIOMAS_ANALISE:
+        idioma = "Auto-detect"
 
     try:
-        caminho = resultado
-        if isinstance(caminho, (list, tuple)):
-            caminho = caminho[0]
-        if isinstance(caminho, dict):
-            caminho = caminho.get("path") or caminho.get("value") or list(caminho.values())[0]
-        import soundfile as sf
-        audio_ia, sr_ia = sf.read(caminho)
-        if audio_ia.ndim > 1:
-            audio_ia = audio_ia.mean(axis=1)
-        wav_bytes = converter_audio.audio_para_wav_bytes(audio_ia.astype(np.float32), int(sr_ia))
-        return wav_bytes, None
+        with tarefa_pesada():
+            audio, sr = audio_analysis.carregar_audio_bytes(audio_bytes, nome_arquivo or "gravacao.webm")
+            if audio is None or len(audio) == 0:
+                return None, None, None, "Não consegui ler esse áudio. Tente WAV ou MP3."
+            audio = np.asarray(audio, dtype=np.float32)[: int(sr * DURACAO_MAX_ANALISE_S)]
+            wav = converter_audio.audio_para_wav_bytes(audio, int(sr))
+    except ServidorOcupado as e:
+        return None, None, None, str(e)
     except Exception as e:
-        return None, f"A música foi gerada, mas não consegui ler o arquivo devolvido: {str(e)[:250]}"
+        return None, None, None, f"Não consegui ler o áudio enviado: {str(e)[:200]}"
+
+    cliente, erro = _conectar_space()
+    if cliente is None:
+        return None, None, None, _explicar_erro(erro, "conectar")
+
+    caminho = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(wav)
+            caminho = f.name
+        resultado = cliente.predict(audio_path=handle_file(caminho), language=idioma, api_name="/analyze_cover_source")
+    except Exception as e:
+        msg = _explicar_erro(e, "analisar")
+        return None, None, None, msg.replace("Erro na geração da música:", "Erro ao analisar a gravação:")
+    finally:
+        if caminho and os.path.exists(caminho):
+            os.remove(caminho)
+
+    abc, letra, resumo = (_item_do_resultado(resultado, i) for i in range(3))
+    if not isinstance(abc, str) or not abc.strip():
+        return None, None, None, ("O modelo não conseguiu extrair a melodia dessa gravação. "
+                                  "Tente um trecho só com a voz, ou um trecho mais curto.")
+    return (abc.strip(), letra.strip() if isinstance(letra, str) else "",
+            resumo if isinstance(resumo, str) else "", None)
+
+
+def gerar_cover(estilo, letra, abc, qualidade="16", seed=831001):
+    """Gera uma música nova SEGUINDO a melodia (partitura ABC) dada, com a letra e o estilo informados.
+    Devolve (wav_bytes, partitura_do_resultado, erro)."""
+    try:
+        import gradio_client  # noqa: F401
+    except ImportError:
+        return None, None, "Biblioteca ausente no servidor (gradio_client)."
+    abc = (abc or "").strip()
+    if not abc:
+        return None, None, "Falta a melodia (ABC). Extraia da gravação, ou gere uma música primeiro."
+    if len(abc) > _MAX_ABC:
+        return None, None, "A partitura está grande demais para o modelo. Use um trecho mais curto."
+    if not (letra or "").strip():
+        return None, None, "Escreva ou cole a letra primeiro."
+    estilo = (estilo or "").strip()[:1000] or "Pop, warm vocal, acoustic guitar, steady drums"
+    qualidade = str(qualidade) if str(qualidade) in ("16", "32") else "16"
+    try:
+        seed = int(seed)
+    except (TypeError, ValueError):
+        seed = 831001
+
+    cliente, erro = _conectar_space()
+    if cliente is None:
+        return None, None, _explicar_erro(erro, "conectar")
+    try:
+        resultado = cliente.predict(
+            style=estilo,
+            lyrics=preparar_letra_para_yue(letra),
+            abc_score=abc,
+            render_quality=qualidade,
+            seed=seed,
+            api_name="/generate_cover",
+        )
+    except Exception as e:
+        return None, None, _explicar_erro(e, "gerar")
+
+    wav, erro = _wav_do_resultado(resultado)
+    return wav, _partitura_do_resultado(resultado), erro

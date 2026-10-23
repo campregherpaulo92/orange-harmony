@@ -7,6 +7,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import Response, JSONResponse
+import base64
 import os
 import time
 import functools
@@ -779,12 +780,41 @@ def gerar_prompt_musical_rota(
     return {"prompt": prompt_texto}
 
 
+def _cabecalho_partitura(abc):
+    """A partitura ABC (melodia + acordes) segue no cabeçalho X-Partitura-ABC, em base64, para o app guardá-la e poder
+    refazer a música com outra letra. Se for grande demais para um cabeçalho, simplesmente não vai."""
+    if not abc:
+        return {}
+    b64 = base64.b64encode(abc.encode("utf-8")).decode("ascii")
+    return {"X-Partitura-ABC": b64} if len(b64) <= 32000 else {}
+
+
 @app.post("/api/songwriter/musica")
 def gerar_musica_rota(prompt_musical: str = Form(...), letra: str = Form(...)):
-    audio_bytes, erro = songwriter.gerar_musica_ia(prompt_musical, letra)
+    audio_bytes, partitura, erro = songwriter.gerar_musica_ia_completa(prompt_musical, letra)
     if erro:
         raise HTTPException(status_code=502, detail=erro)
-    return Response(content=audio_bytes, media_type="audio/wav")
+    return Response(content=audio_bytes, media_type="audio/wav", headers=_cabecalho_partitura(partitura))
+
+
+@app.post("/api/songwriter/analisar-gravacao")
+def analisar_gravacao_rota(arquivo: UploadFile = File(...), idioma: str = Form("Auto-detect")):
+    """Extrai a melodia (partitura ABC editável) e a letra associada de uma gravação."""
+    dados = arquivo.file.read()
+    abc, letra, resumo, erro = songwriter.extrair_melodia_da_gravacao(dados, arquivo.filename or "gravacao.webm", idioma)
+    if erro:
+        raise HTTPException(status_code=502, detail=erro)
+    return {"abc": abc, "letra": letra, "resumo": resumo}
+
+
+@app.post("/api/songwriter/cover")
+def gerar_cover_rota(estilo: str = Form(...), letra: str = Form(...), abc: str = Form(...),
+                     qualidade: str = Form("16"), seed: int = Form(831001)):
+    """Gera uma música nova seguindo a melodia (ABC) dada, com a letra e o estilo informados."""
+    audio_bytes, partitura, erro = songwriter.gerar_cover(estilo, letra, abc, qualidade, seed)
+    if erro:
+        raise HTTPException(status_code=502, detail=erro)
+    return Response(content=audio_bytes, media_type="audio/wav", headers=_cabecalho_partitura(partitura))
 
 
 # ── Serve o frontend estático na raiz (montado por ÚLTIMO, depois das rotas /api/*
