@@ -688,6 +688,47 @@
         <div id="songwriterGravador" class="oh-gravador"></div>
       </div>
 
+      <div class="oh-card" id="songwriterCoverCard">
+        <div class="oh-section-title"><span>🎼</span> Criar a partir da minha gravação (fiel à melodia)<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Usa o <b>áudio de referência</b> acima (upload ou gravação). O app extrai a <b>melodia</b> como partitura, você revisa, escreve a letra e gera uma versão com banda seguindo as <b>suas notas</b>. A voz e o arranjo saem novos: a sua entonação e a batida do violão não são copiadas.</p>
+        <div class="oh-row" style="margin-top:10px; align-items:flex-end;">
+          <label>Idioma cantado na gravação
+            <select id="songwriterCoverIdioma">
+              <option value="Auto-detect">Detectar sozinho</option>
+              <option value="Spanish">Espanhol (o mais próximo do português)</option>
+              <option value="English">Inglês</option>
+              <option value="Chinese">Chinês</option>
+              <option value="Cantonese">Cantonês</option>
+              <option value="Japanese">Japonês</option>
+              <option value="Korean">Coreano</option>
+            </select>
+          </label>
+          <button id="btnExtrairMelodia" class="oh-btn">🎧 Extrair a melodia da gravação</button>
+        </div>
+        <p id="songwriterStatusCover" class="oh-status"></p>
+        <div id="songwriterCoverBloco" hidden>
+          <p class="oh-label-campo">🎹 Melodia (ABC) — pode revisar e editar</p>
+          <textarea id="songwriterAbcTexto" class="oh-textarea" rows="9" spellcheck="false" style="font-family:monospace; font-size:0.82rem;"></textarea>
+          <p id="songwriterCoverDica" class="oh-hint"></p>
+          <div id="songwriterCoverModeloBox" hidden>
+            <p class="oh-label-campo" style="margin-top:14px;">📄 Letra reconhecida (use como modelo de quantos versos cabem na melodia)</p>
+            <textarea id="songwriterLetraModelo" class="oh-textarea" rows="5" readonly></textarea>
+          </div>
+          <p class="oh-label-campo" style="margin-top:14px;">🎛️ Estilo da nova versão (em inglês)</p>
+          <textarea id="songwriterCoverEstilo" class="oh-textarea" rows="3" placeholder="Ex: pop rock, male vocal, drums, bass, keyboards, backing vocals, warm"></textarea>
+          <div class="oh-row" style="margin-top:10px; align-items:flex-end;">
+            <label>Qualidade
+              <select id="songwriterCoverQualidade">
+                <option value="16">Rápida (16 passos)</option>
+                <option value="32">Melhor (32 passos, demora mais)</option>
+              </select>
+            </label>
+            <button id="btnGerarCover" class="oh-btn">🎛️ Gerar versão com banda (mesma melodia)</button>
+          </div>
+          <div id="songwriterCoverResultado" hidden></div>
+        </div>
+      </div>
+
       <div class="oh-card" id="songwriterLetraCard" hidden>
         <div class="oh-section-title"><span>📝</span> Letra gerada<i class="oh-title-line"></i></div>
         <textarea id="songwriterLetraTexto" class="oh-textarea" rows="14"></textarea>
