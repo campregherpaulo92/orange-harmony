@@ -278,7 +278,7 @@ def gerar_musica_ia_completa(prompt_musical, letra):
             style=estilo,
             lyrics=letra_yue,              # com seções [Verse]/[Chorus]
             planning_mode="full",          # melodia + acordes
-            render_quality="16",           # rápido (16 passos)
+            render_quality=16,             # NÚMERO (16 = rápido, 32 = melhor). A documentação do Space diz texto, mas o Space só aceita número.
             seed=42,
             api_name="/generate_song",
         )
@@ -365,7 +365,7 @@ def gerar_cover(estilo, letra, abc, qualidade="16", seed=831001):
     if not (letra or "").strip():
         return None, None, "Escreva ou cole a letra primeiro."
     estilo = (estilo or "").strip()[:1000] or "Pop, warm vocal, acoustic guitar, steady drums"
-    qualidade = str(qualidade) if str(qualidade) in ("16", "32") else "16"
+    qualidade = int(qualidade) if str(qualidade) in ("16", "32") else 16     # NÚMERO: o Space recusa o texto "16"
     try:
         seed = int(seed)
     except (TypeError, ValueError):
