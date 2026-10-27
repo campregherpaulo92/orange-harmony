@@ -248,6 +248,9 @@ function renderizarNoticias(d) {
     lista.appendChild(jEl("p", "oh-jornal-vazio", "As notícias de fora não carregaram agora. As seções acima continuam valendo — tente atualizar daqui a pouco."));
     if (abaNoticias !== "bandas") return;
   }
+  if (d && d.fontes && d.fontes.total && d.fontes.ok / d.fontes.total < 0.6) {
+    lista.appendChild(jEl("p", "oh-jornal-vazio", `Só ${d.fontes.ok} de ${d.fontes.total} fontes de notícias responderam agora. Toque em ↻ Atualizar daqui a alguns minutos.`));
+  }
   if (d && d.status === "cache_antigo") lista.appendChild(jEl("p", "oh-jornal-vazio", "Mostrando a última seleção salva (não consegui atualizar agora)."));
   const itens = itensDaAba(abaNoticias);
   if (!itens.length) {
