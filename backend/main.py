@@ -35,6 +35,7 @@ from urllib.parse import quote
 from espectro_leve import tarefa_pesada, ServidorOcupado
 
 import news
+import news_enquete
 import ritmos
 import harmonia
 import producao_ritmos
@@ -298,9 +299,28 @@ def news_edicao():
 
 
 @app.get("/api/news/noticias")
-def news_noticias(atualizar: bool = False):
-    """Notícias de fora, filtradas e resumidas em português (com cache de 6 h)."""
-    return news.obter_noticias(forcar=atualizar)
+def news_noticias(atualizar: bool = False, bandas: str = ""):
+    """Notícias do mundo da música. `bandas` = nomes separados por vírgula (as que o leitor acompanha) → 'suas_bandas'."""
+    return news.obter_noticias(forcar=atualizar, bandas=[b for b in bandas.split(",") if b.strip()][:12])
+
+
+@app.get("/api/news/fontes")
+def news_fontes():
+    """Quais fontes de notícias estão respondendo agora (para diagnóstico; não usa o cache)."""
+    return {"fontes": news.diagnosticar_fontes()}
+
+
+@app.get("/api/news/enquete")
+def news_enquete_do_dia(cliente: str = ""):
+    return news_enquete.estado(news_enquete.enquete_do_dia(), cliente)
+
+
+@app.post("/api/news/enquete/votar")
+def news_enquete_votar(id: str = Form(...), opcao: int = Form(...), cliente: str = Form(...)):
+    resultado, erro = news_enquete.votar(id, opcao, cliente)
+    if erro:
+        raise HTTPException(status_code=404 if "não encontrada" in erro else 400, detail=erro)
+    return resultado
 
 
 # ══════════════════════════════════════════════════════════════
