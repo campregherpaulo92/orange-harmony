@@ -307,7 +307,9 @@ def news_noticias(atualizar: bool = False, bandas: str = ""):
 @app.get("/api/news/fontes")
 def news_fontes():
     """Quais fontes de notícias estão respondendo agora (para diagnóstico; não usa o cache)."""
-    return {"fontes": news.diagnosticar_fontes()}
+    diag = news.diagnosticar_fontes()
+    por_tipo = {t: {"ok": sum(1 for d in diag if d["tipo"] == t and d["ok"]), "total": sum(1 for d in diag if d["tipo"] == t)} for t in ("google", "direto")}
+    return {"resumo": {"ok": sum(1 for d in diag if d["ok"]), "total": len(diag), **por_tipo}, "fontes": diag}
 
 
 @app.get("/api/news/enquete")

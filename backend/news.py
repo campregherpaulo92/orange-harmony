@@ -10,6 +10,7 @@
 import concurrent.futures
 import html
 import json
+import random
 import re
 import threading
 import time
@@ -86,6 +87,12 @@ def _g(nome, consulta, idioma, regiao, rock_sempre=False, especializada=False, d
                 rock_sempre=rock_sempre, especializada=especializada, dias=dias, exige_musica=exige_musica)
 
 
+def _d(nome, url, idioma, regiao, rock_sempre=False, especializada=False, dias=4, exige_musica=False):
+    """Feed direto de um site de música (não passa pelo Google, traz o trecho da matéria e o link original)."""
+    return dict(fonte=nome, url=url, google=False, idioma=idioma, regiao=regiao, categoria="geral",
+                rock_sempre=rock_sempre, especializada=especializada, dias=dias, exige_musica=exige_musica)
+
+
 def _p(nome, url):
     """Feed direto de um site de produção musical (inglês)."""
     return dict(fonte=nome, url=url, google=False, idioma="en", regiao="mundo", categoria="producao",
@@ -124,6 +131,21 @@ FONTES = [
     _g("Shows e turnês (mundo)", '(tour OR concert OR festival OR "tour dates") (rock OR metal OR band) when:3d', "en", "mundo", dias=7, exige_musica=True),
     _g("Lançamentos (mundo)", '("new album" OR "new single" OR "new song" OR "album review") (rock OR metal OR band) when:3d', "en", "mundo", dias=6, exige_musica=True),
     _g("Música no mundo", "music news (artist OR album OR tour OR festival) when:1d", "en", "mundo", dias=3, exige_musica=True),
+    # ── Os próprios sites (reserva e complemento: se o Google Notícias recusar os pedidos, estes continuam) ──
+    _d("Igor Miranda", "https://igormiranda.com.br/feed/", "pt", "br", rock_sempre=True, especializada=True, dias=5),
+    _d("Rock Bizz", "https://rockbizz.com.br/feed/", "pt", "br", rock_sempre=True, especializada=True, dias=6),
+    _d("Tenho Mais Discos Que Amigos", "https://www.tenhomaisdiscosqueamigos.com/feed/", "pt", "br", especializada=True, dias=6),
+    _d("Rolling Stone Brasil", "https://rollingstone.com.br/feed/", "pt", "br", dias=5, exige_musica=True),
+    _d("Billboard Brasil", "https://billboard.com.br/feed/", "pt", "br", dias=5, exige_musica=True),
+    _d("Loudwire", "https://loudwire.com/feed/", "en", "mundo", rock_sempre=True, especializada=True, dias=4),
+    _d("Ultimate Classic Rock", "https://ultimateclassicrock.com/feed/", "en", "mundo", rock_sempre=True, especializada=True, dias=4),
+    _d("Metal Injection", "https://metalinjection.net/feed", "en", "mundo", rock_sempre=True, especializada=True, dias=4),
+    _d("NME", "https://www.nme.com/feed", "en", "mundo", dias=4, exige_musica=True),
+    _d("Consequence", "https://consequence.net/feed/", "en", "mundo", dias=4, exige_musica=True),
+    _d("Stereogum", "https://www.stereogum.com/feed/", "en", "mundo", especializada=True, dias=4, exige_musica=True),
+    _d("Pitchfork", "https://pitchfork.com/feed/feed-news/rss", "en", "mundo", especializada=True, dias=5, exige_musica=True),
+    _d("Rolling Stone", "https://www.rollingstone.com/music/feed/", "en", "mundo", dias=4, exige_musica=True),
+    _d("Louder", "https://www.loudersound.com/feeds/all", "en", "mundo", rock_sempre=True, especializada=True, dias=5),
     # ── Produção e equipamento (os sites que o jornal já usava) ──
     _p("MusicTech", "https://musictech.com/feed/"),
     _p("Attack Magazine", "https://www.attackmagazine.com/feed/"),
@@ -137,6 +159,8 @@ MAX_POR_CATEGORIA = 10
 MAX_ROCK_POR_CATEGORIA = 7       # o rock vem primeiro, mas ao menos 3 de cada 10 são de outros gêneros (quando houver)
 MAX_POR_FONTE = 4                # por categoria
 TTL_S = 3 * 3600                 # as notícias valem por 3 horas
+TTL_POUCO_S = 10 * 60            # …mas se a seleção veio pobre (poucas fontes responderam), tenta de novo em 10 minutos
+MIN_BOAS = 8                     # quantas notícias de fora da Produção contam como seleção 'boa'
 TTL_BANDA_S = 2 * 3600
 ESPERA_APOS_FALHA_S = 300        # se tudo falhar, só tenta de novo daqui a 5 min
 MAX_BANDAS = 8
@@ -223,10 +247,27 @@ def _nome_da_fonte(nome):
     return NOMES_FONTES.get(str(nome or "").strip().lower(), str(nome or "").strip())
 
 
+_sem_google = threading.Semaphore(4)     # no máximo 4 pedidos ao Google ao mesmo tempo (muitos de uma vez é lido como abuso)
+_sem_livre = threading.Semaphore(16)
+
+
 def _baixar_feed(url):
-    r = requests.get(url, timeout=(4, 8), headers=HEADERS)
-    r.raise_for_status()
-    return r.content
+    """Baixa um feed. Se o servidor responder 'muitos pedidos' (429/503) ou a conexão falhar, espera um pouco e tenta mais uma vez."""
+    ultimo = None
+    for tentativa in range(2):
+        try:
+            with (_sem_google if "news.google.com" in url else _sem_livre):
+                r = requests.get(url, timeout=(4, 8), headers=HEADERS)
+            if r.status_code in (429, 503) and tentativa == 0:
+                time.sleep(1.5 + random.random())
+                continue
+            r.raise_for_status()
+            return r.content
+        except (requests.ConnectionError, requests.Timeout) as e:
+            ultimo = e
+            if tentativa == 0:
+                time.sleep(1.0)
+    raise ultimo
 
 
 def _coletar_feeds(baixar=_baixar_feed, fontes=None):
@@ -234,19 +275,22 @@ def _coletar_feeds(baixar=_baixar_feed, fontes=None):
     fontes = fontes if fontes is not None else FONTES
 
     def um(f):
+        tipo = "google" if f.get("google") else "direto"
         try:
             itens = parse_feed(baixar(f["url"]), f["fonte"], f.get("google", False))
-            return itens, {"fonte": f["fonte"], "ok": True, "itens": len(itens), "erro": ""}
+            return itens, {"fonte": f["fonte"], "tipo": tipo, "ok": True, "itens": len(itens), "erro": ""}
         except Exception as e:
-            return [], {"fonte": f["fonte"], "ok": False, "itens": 0, "erro": f"{type(e).__name__}: {str(e)[:90]}"}
+            return [], {"fonte": f["fonte"], "tipo": tipo, "ok": False, "itens": 0, "erro": f"{type(e).__name__}: {str(e)[:110]}"}
     itens, diag = [], []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(fontes))) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(14, len(fontes)))) as pool:
         futuros = [(f, pool.submit(um, f)) for f in fontes]
+        concurrent.futures.wait([x for _, x in futuros], timeout=40)          # prazo total; o que não chegou fica de fora
         for f, fut in futuros:
-            try:
-                brutos, d = fut.result(timeout=14)
-            except Exception:
-                brutos, d = [], {"fonte": f["fonte"], "ok": False, "itens": 0, "erro": "demorou demais"}
+            if fut.done():
+                brutos, d = fut.result()
+            else:
+                fut.cancel()
+                brutos, d = [], {"fonte": f["fonte"], "tipo": "google" if f.get("google") else "direto", "ok": False, "itens": 0, "erro": "demorou demais"}
             for it in brutos:
                 it.update(idioma=f["idioma"], regiao=f["regiao"], cat_fonte=f["categoria"], rock_sempre=f["rock_sempre"],
                           especializada=f["especializada"], dias=f["dias"], exige_musica=f["exige_musica"])
@@ -395,7 +439,7 @@ def selecionar(itens, agora=None):
         if _RE_LIXO.search(it["titulo"]):
             continue
         titulo_norm = _norm(it["titulo"])
-        if it.get("exige_musica") and not _RE_MUSICA.search(titulo_norm):
+        if it.get("exige_musica") and not (_RE_MUSICA.search(titulo_norm) or _RE_ROCK.search(titulo_norm) or _RE_BANDAS_ROCK.search(titulo_norm)):
             continue
         cat = classificar(it["titulo"], it["regiao"], it.get("cat_fonte", "geral"))
         if cat == "producao" and pontuar(it["titulo"], it.get("trecho", "")) < 3:
@@ -618,7 +662,7 @@ _trava = threading.Lock()
 def _principal(forcar, baixar):
     with _trava:
         agora = time.time()
-        if not forcar and _cache["dados"] and agora - _cache["ts"] < TTL_S:
+        if not forcar and _cache["dados"] and agora - _cache["ts"] < _cache.get("ttl", TTL_S):
             return _cache["dados"], _cache["pool"]
         if not forcar and not _cache["dados"] and agora - _cache["falha_ts"] < ESPERA_APOS_FALHA_S:
             return {"status": "indisponivel", "itens": [], "atualizado_em": None}, []
@@ -627,7 +671,8 @@ def _principal(forcar, baixar):
         if itens:
             dados = {"status": "ok", "itens": itens, "atualizado_em": datetime.now(timezone.utc).isoformat(),
                      "fontes": {"ok": sum(1 for d in diag if d["ok"]), "total": len(diag)}}
-            _cache.update(ts=agora, dados=dados, pool=brutos)
+            boas = sum(1 for x in itens if x["categoria"] != "producao")
+            _cache.update(ts=agora, dados=dados, pool=brutos, ttl=TTL_S if boas >= MIN_BOAS else TTL_POUCO_S)
             return dados, brutos
         _cache["falha_ts"] = agora
         if _cache["dados"]:
