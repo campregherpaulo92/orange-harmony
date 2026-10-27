@@ -1229,3 +1229,23 @@ canvas#curvaPitch { width: 100%; background: #0d0d0d; border-radius: 12px; }
   color: #fdba74;
 }
 .oh-chat-voz-aviso[hidden] { display: none; }
+
+/* ── Orange News: abas das notícias, suas bandas e enquete do dia ── */
+.oh-jornal-abas { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 6px; }
+.oh-jornal-aba { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.76rem; background: transparent; color: var(--tinta); border: 1.5px solid var(--tinta); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.oh-jornal-aba:hover { background: rgba(217, 88, 10, 0.14); }
+.oh-jornal-aba-ativa, .oh-jornal-aba-ativa:hover { background: var(--tinta); color: var(--papel); }
+.oh-jornal-selo { display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 3px; background: var(--laranja); color: #fff; font-size: 0.62rem; font-weight: 900; letter-spacing: 0.12em; vertical-align: middle; }
+.oh-bandas { margin: 10px 0 6px; padding: 10px 14px 12px; border: 1.5px dashed var(--tinta); border-radius: 4px; background: rgba(29, 27, 24, 0.03); }
+.oh-bandas-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.oh-bandas-input { flex: 1 1 220px; font: inherit; font-size: 0.95rem; padding: 6px 10px; border: 1.5px solid var(--tinta); border-radius: 4px; background: rgba(255, 255, 255, 0.6); color: var(--tinta); }
+.oh-banda-chip { display: inline-flex; align-items: center; gap: 4px; margin: 8px 6px 0 0; padding: 3px 4px 3px 11px; border: 1.5px solid var(--laranja); border-radius: 999px; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.8rem; color: #8a3a06; }
+.oh-banda-chip button { border: 0; background: transparent; color: inherit; font-weight: 900; font-size: 1rem; line-height: 1; padding: 0 6px; cursor: pointer; }
+.oh-enquete { margin: 20px 0; padding: 16px 20px 14px; border: 2px solid var(--tinta); border-radius: 4px; background: rgba(217, 88, 10, 0.07); }
+.oh-enquete-opcao { display: block; width: 100%; text-align: left; margin: 7px 0; padding: 8px 12px; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 0.92rem; color: var(--tinta); background: rgba(255, 255, 255, 0.55); border: 1.5px solid var(--tinta); border-radius: 4px; cursor: pointer; }
+.oh-enquete-opcao:hover { background: var(--laranja); border-color: var(--laranja); color: #fff; }
+.oh-enquete-linha { position: relative; margin: 7px 0; padding: 7px 12px; border: 1.5px solid var(--linha); border-radius: 4px; overflow: hidden; background: rgba(255, 255, 255, 0.4); }
+.oh-enquete-barra { position: absolute; top: 0; bottom: 0; left: 0; background: rgba(217, 88, 10, 0.3); }
+.oh-enquete-texto { position: relative; display: flex; justify-content: space-between; gap: 10px; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 0.9rem; }
+.oh-enquete-minha { border-color: var(--laranja); }
+@media (max-width: 560px) { .oh-enquete { padding: 14px 12px; } .oh-enquete-texto { flex-direction: column; gap: 2px; } }
