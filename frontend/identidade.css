@@ -221,3 +221,33 @@ h1, h2, h3 {
   color: #f4a261;
   margin-top: 14px;
 }
+
+/* ═══════════════ MENU LATERAL: recolhido vira uma faixa de ícones ═══════════════
+   (só em telas de computador; no celular o menu continua em bloco, como antes) */
+@media (min-width: 801px) {
+  .oh-sidebar {
+    transition: width 0.2s ease;
+  }
+  .oh-sidebar.oh-sidebar-colapsada {
+    margin-left: 0 !important;
+    width: 72px !important;
+    min-width: 72px !important;
+    padding: 70px 10px 24px;          /* espaço para o botão ☰ */
+    overflow: hidden;
+  }
+  .oh-sidebar.oh-sidebar-colapsada .oh-sidebar-logo,
+  .oh-sidebar.oh-sidebar-colapsada .oh-sidebar-resize { display: none; }
+  .oh-sidebar.oh-sidebar-colapsada .oh-nav-item {
+    justify-content: center;
+    padding: 10px 0;
+    gap: 0;
+  }
+  .oh-sidebar.oh-sidebar-colapsada .oh-nav-item span { display: none; }
+  .oh-sidebar.oh-sidebar-colapsada .oh-nav-item .oh-ic { margin: 0; }
+}
+
+/* ═══════════════ CONTEÚDO: usa a largura inteira da tela ═══════════════ */
+.oh-content {
+  max-width: none;
+  padding: 24px clamp(20px, 3vw, 48px) 60px;
+}
