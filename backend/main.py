@@ -3,7 +3,7 @@
 # Fase 1: só a Análise Vocal, pra validar o pipeline upload -> análise -> JSON.
 # Rodar localmente: uvicorn main:app --reload --port 8000
 # ══════════════════════════════════════════════════════════════
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import Response, JSONResponse
@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 from audio_analysis import analisar_audio_completo, carregar_audio_bytes, detectar_bpm_e_beats, detectar_tom, liberar_memoria
 import audio_analysis
 import gravacoes
+import audio_http
 import historico
 import composicoes
 import producao_dsp
@@ -431,18 +432,21 @@ def listar_gravacoes_rota():
 
 
 @app.get("/api/gravacoes/{doc_id}")
-def baixar_gravacao_rota(doc_id: str):
-    """Devolve o áudio de uma gravação (para tocar no <audio> ou baixar)."""
-    conteudo, content_type, nome = gravacoes.baixar_gravacao(doc_id)
-    if conteudo is None:
+def baixar_gravacao_rota(doc_id: str, request: Request):
+    """Devolve o áudio de uma gravação (para tocar no <audio> ou baixar). Aceita pedir trechos (Range): é o que permite pular na
+    linha do tempo do player e tocar no Safari do iPhone. Os últimos arquivos ficam num cache pequeno em memória."""
+    item = audio_http.obter(doc_id, gravacoes.baixar_gravacao)
+    if item is None:
         raise HTTPException(status_code=404, detail="Gravação não encontrada.")
-    return Response(content=conteudo, media_type=content_type)
+    conteudo, content_type, _nome = item
+    return audio_http.resposta(conteudo, content_type, request.headers.get("range"))
 
 
 @app.delete("/api/gravacoes/{doc_id}")
 def excluir_gravacao_rota(doc_id: str):
     """Exclui uma gravação (Storage + índice no Firestore)."""
     ok = gravacoes.excluir_gravacao(doc_id)
+    audio_http.esquecer(doc_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Gravação não encontrada.")
     return {"excluido": True}
