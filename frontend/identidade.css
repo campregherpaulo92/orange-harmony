@@ -194,3 +194,30 @@ h1, h2, h3 {
   position: sticky; top: 0; z-index: 1;
   background: #141414;
 }
+
+/* ═══════════════ LOGO DE ENTRADA: sem o círculo preto, proporção correta ═══════════════
+   O PNG tem fundo preto. "screen" faz o preto sumir sobre o fundo escuro do app
+   e deixa só a laranja e o brilho. */
+.oh-logo-imagem {
+  width: min(78vw, 360px);
+  height: auto;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  mix-blend-mode: screen;
+}
+.oh-subtitle {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-size: 1.05rem;
+}
+
+/* Linha técnica abaixo do logo: menor e mais discreta */
+.oh-subtitle {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #f4a261;
+  margin-top: 14px;
+}
