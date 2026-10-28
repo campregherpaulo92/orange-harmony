@@ -1249,3 +1249,31 @@ canvas#curvaPitch { width: 100%; background: #0d0d0d; border-radius: 12px; }
 .oh-enquete-texto { position: relative; display: flex; justify-content: space-between; gap: 10px; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 0.9rem; }
 .oh-enquete-minha { border-color: var(--laranja); }
 @media (max-width: 560px) { .oh-enquete { padding: 14px 12px; } .oh-enquete-texto { flex-direction: column; gap: 2px; } }
+
+/* ── 📚 Escolher da biblioteca (botão ao lado dos campos de envio + janela de escolha) ── */
+.oh-bib-linha { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin: 0 0 12px; }
+.oh-bib-abrir { font-family: 'Baloo 2', sans-serif; font-weight: 600; font-size: 0.82rem; color: #fff; background: rgba(249, 115, 22, 0.12); border: 1px solid rgba(249, 115, 22, 0.55); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+.oh-bib-abrir:hover { background: rgba(249, 115, 22, 0.26); }
+.oh-bib-nota { font-size: 0.8rem; color: #fdba74; overflow-wrap: anywhere; }
+body.oh-bib-aberta { overflow: hidden; }
+.oh-bib-fundo { position: fixed; inset: 0; z-index: 9800; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, 0.72); }
+.oh-bib-fundo[hidden] { display: none; }
+.oh-bib-janela { width: min(580px, 100%); max-height: min(82vh, 680px); display: flex; flex-direction: column; gap: 10px; padding: 16px; background: #141414; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); color: #fff; }
+.oh-bib-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.oh-bib-titulo { margin: 0; font-family: 'Baloo 2', sans-serif; font-size: 1.1rem; }
+.oh-bib-fechar { background: rgba(255, 255, 255, 0.06); color: #fff; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; width: 34px; height: 34px; cursor: pointer; font-size: 1rem; }
+.oh-bib-busca { width: 100%; box-sizing: border-box; padding: 9px 12px; font: inherit; font-size: 0.92rem; color: #fff; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 10px; }
+.oh-bib-lista { flex: 1 1 auto; min-height: 60px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px; }
+.oh-bib-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; }
+.oh-bib-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 180px; }
+.oh-bib-nome { font-family: 'Baloo 2', sans-serif; font-size: 0.95rem; overflow-wrap: anywhere; }
+.oh-bib-meta { font-size: 0.76rem; color: rgba(255, 255, 255, 0.55); }
+.oh-bib-acoes { display: flex; gap: 8px; flex: 0 0 auto; }
+.oh-bib-botao { font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 0.82rem; color: #fff; background: linear-gradient(135deg, var(--oh-orange), var(--oh-orange-dark)); border: none; border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+.oh-bib-botao:disabled { opacity: 0.6; cursor: wait; }
+.oh-bib-botao-sec { background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15); font-weight: 600; }
+.oh-bib-player { flex: 1 0 100%; width: 100%; height: 38px; }
+.oh-bib-vazio { text-align: center; padding: 18px 8px; color: rgba(255, 255, 255, 0.75); }
+.oh-bib-vazio p { margin: 0 0 12px; }
+.oh-bib-status { margin: 0; min-height: 1.1em; font-size: 0.8rem; color: rgba(255, 255, 255, 0.6); }
+@media (max-width: 560px) { .oh-bib-fundo { padding: 8px; align-items: flex-end; } .oh-bib-janela { max-height: 88vh; border-radius: 16px 16px 12px 12px; } .oh-bib-acoes { width: 100%; } .oh-bib-acoes .oh-bib-botao { flex: 1; } }
