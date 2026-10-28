@@ -24,17 +24,17 @@ function criarPlayer(container, opcoes = {}) {
     <div class="oh-player-box">
       <canvas class="oh-player-canvas"></canvas>
       <div class="oh-player-controles">
-        <button type="button" class="oh-player-play" aria-label="Tocar">▶</button>
+        <button type="button" class="oh-player-play" aria-label="Tocar">${ICONE("play")}</button>
         <span class="oh-player-tempo">0:00 / 0:00</span>
         <input type="range" class="oh-player-progresso" min="0" max="100" value="0">
-        <button type="button" class="oh-player-mute" aria-label="Mudo">🔊</button>
+        <button type="button" class="oh-player-mute" aria-label="Mudo">${ICONE("alto")}</button>
         <select class="oh-player-velocidade" aria-label="Velocidade">
           <option value="0.5">0.5x</option>
           <option value="1" selected>1x</option>
           <option value="1.5">1.5x</option>
           <option value="2">2x</option>
         </select>
-        ${semDownload ? "" : `<a class="oh-player-download" download="${nomeArquivo}" aria-label="Baixar">⬇️</a>`}
+        ${semDownload ? "" : `<a class="oh-player-download" download="${nomeArquivo}" aria-label="Baixar">${ICONE("baixar")}</a>`}
       </div>
       <audio class="oh-player-audio" preload="metadata"></audio>
     </div>
@@ -120,17 +120,17 @@ function criarPlayer(container, opcoes = {}) {
   });
 
   audio.addEventListener("play", () => {
-    btnPlay.textContent = "⏸";
+    btnPlay.innerHTML = ICONE("pausa");
     animando = true;
     redimensionarCanvas();
     desenharEspectro();
   });
   audio.addEventListener("pause", () => {
-    btnPlay.textContent = "▶";
+    btnPlay.innerHTML = ICONE("play");
     animando = false;
   });
   audio.addEventListener("ended", () => {
-    btnPlay.textContent = "▶";
+    btnPlay.innerHTML = ICONE("play");
     animando = false;
     ctx2d.clearRect(0, 0, canvas.width, canvas.height);
   });
@@ -154,7 +154,7 @@ function criarPlayer(container, opcoes = {}) {
 
   btnMute.addEventListener("click", () => {
     audio.muted = !audio.muted;
-    btnMute.textContent = audio.muted ? "🔇" : "🔊";
+    btnMute.innerHTML = audio.muted ? ICONE("mudo") : ICONE("alto");
   });
 
   selectVel.addEventListener("change", () => {
