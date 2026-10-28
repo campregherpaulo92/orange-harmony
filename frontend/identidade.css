@@ -1,0 +1,100 @@
+/* ═══════════════ IDENTIDADE VISUAL: ajustes de fonte e sem caixas cinza ═══════════════
+   Carregar DEPOIS do styles.css no index.html:
+   <link rel="stylesheet" href="identidade.css">
+   Para desfazer: remover essa linha. Nada do styles.css foi alterado. */
+
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap");
+
+/* Fonte de títulos e botões: Bricolage Grotesque */
+.oh-section-title,
+.oh-bib-titulo,
+.oh-bib-nome,
+.oh-btn,
+.oh-btn-secundario,
+.oh-dropzone-btn,
+.oh-bib-abrir,
+.oh-bib-botao,
+.oh-nav-item,
+.oh-metric-value,
+.oh-table th,
+.oh-rec-status,
+.oh-gravacao-nome,
+.oh-bib-botao-sec,
+h1, h2, h3 {
+  font-family: 'Bricolage Grotesque', sans-serif;
+}
+.oh-section-title,
+.oh-bib-titulo,
+h1, h2, h3 {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.oh-btn,
+.oh-btn-secundario,
+.oh-dropzone-btn,
+.oh-bib-abrir,
+.oh-bib-botao,
+.oh-bib-botao-sec {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Sem caixas cinza: botões secundários viram contorno laranja fino */
+.oh-btn-secundario {
+  background: transparent;
+  color: var(--oh-orange);
+  border: 1px solid rgba(249, 115, 22, 0.6);
+  box-shadow: none;
+  border-radius: 999px;
+}
+.oh-btn-secundario:hover {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: var(--oh-orange);
+  transform: none;
+  box-shadow: none;
+}
+
+/* Botão "Upload" e "Escolher da biblioteca": só contorno laranja, sem fundo */
+.oh-dropzone-btn,
+.oh-bib-abrir {
+  background: transparent;
+  color: var(--oh-orange);
+  border: 1px solid rgba(249, 115, 22, 0.6);
+  border-radius: 999px;
+}
+.oh-bib-abrir:hover,
+.oh-dropzone-btn:hover {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: var(--oh-orange);
+}
+
+/* Área de envio: fundo removido, tracejado laranja fino */
+.oh-dropzone {
+  background: transparent;
+  border: 1px dashed rgba(249, 115, 22, 0.35);
+  border-radius: 14px;
+}
+
+/* "Subir e descer": texto limpo, sem caixa */
+.oh-radio {
+  background: transparent !important;
+  border: none !important;
+  color: var(--oh-orange) !important;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 700 !important;
+}
+
+/* Janela da biblioteca: fundo sem o cinza chapado */
+.oh-bib-item {
+  background: transparent;
+  border-color: rgba(249, 115, 22, 0.25);
+}
+.oh-bib-botao-sec {
+  background: transparent;
+  color: var(--oh-orange);
+  border: 1px solid rgba(249, 115, 22, 0.6);
+}
+.oh-bib-fechar {
+  background: transparent;
+  border-color: rgba(249, 115, 22, 0.4);
+}
