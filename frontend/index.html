@@ -329,7 +329,7 @@
       </div>
 
       <div class="oh-card">
-        <div class="oh-section-title"><span>⚡</span> Modo agulha<i class="oh-title-line"></i></div>
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="raio"></i></span> Modo agulha<i class="oh-title-line"></i></div>
         <button id="btnAfinadorToggle" class="oh-btn"><i class="oh-ic" data-ic="mic"></i> Iniciar</button>
         <div id="afinadorVisual" class="oh-afinador-visual" hidden>
           <div class="oh-afinador-nota-grande" id="afinadorNotaGrande">—</div>
@@ -518,12 +518,14 @@
     <section class="oh-page" id="page-historico">
       <div class="oh-card">
         <div class="oh-section-title"><span><i class="oh-ic" data-ic="chart"></i></span> Tabela de Evolução/Performance<i class="oh-title-line"></i></div>
+        <div class="oh-tabela-rolante">
         <table class="oh-table">
           <thead>
             <tr><th>Análise</th><th>Data</th><th>Nota</th><th>Desvio (cents)</th><th>Tendência</th><th>% Afinado</th><th></th></tr>
           </thead>
           <tbody id="historicoTabelaCorpo"></tbody>
         </table>
+        </div>
       </div>
       <div class="oh-card">
         <div class="oh-section-title"><span><i class="oh-ic" data-ic="chart"></i></span> Evolução da performance<i class="oh-title-line"></i></div>

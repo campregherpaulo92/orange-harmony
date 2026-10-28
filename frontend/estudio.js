@@ -419,7 +419,7 @@ function montarDownloads() {
     const rotulo = f.nomeCustom || NOME_PADRAO_FAIXA[chave];
     const url = URL.createObjectURL(f.blob);
     const extensao = f.blob.type.includes("wav") ? "wav" : "mp3";
-    return `<a class="oh-btn oh-btn-secundario" href="${url}" download="${rotulo.replace(/[^\w-]/g, "_")}.${extensao}">⬇️ ${rotulo}</a>`;
+    return `<a class="oh-btn oh-btn-secundario" href="${url}" download="${rotulo.replace(/[^\w-]/g, "_")}.${extensao}">${ICONE("baixar")} ${rotulo}</a>`;
   }).join("");
 }
 

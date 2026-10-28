@@ -22,6 +22,7 @@
     diapasao: '<path d="M9 3.5h2v9.2a1 1 0 0 0 2 0V3.5h2v9.2a3 3 0 0 1-6 0z"/><path d="M11 13.5h2v7h-2z"/>',
     acorde: '<circle cx="8" cy="7" r="2.6"/><circle cx="16" cy="7" r="2.6"/><circle cx="12" cy="15.5" r="2.6"/><circle cx="6.5" cy="20" r="0" />',
     partitura: '<path d="M4 7.5h16M4 10.5h16M4 13.5h16M4 16.5h16" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="15.2" r="2.1"/><path d="M10 15.2V8.4l5-1.2v6.6" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="15" cy="13.8" r="2"/>',
+    raio: '<path d="M13.2 2.8 5.5 13.4h5.4L9.6 21.2 18.5 10h-5.6z"/>',
     mudo: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.2 9.2l5.6 5.6M20.8 9.2l-5.6 5.6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
     alto: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15 9a4.2 4.2 0 0 1 0 6M17.6 6.8a7.6 7.6 0 0 1 0 10.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     lapis: '<path d="M16.8 4.2a2.2 2.2 0 0 1 3.1 3.1L9.2 17.9l-4.1 1 1-4.1z"/>',

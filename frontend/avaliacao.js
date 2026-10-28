@@ -33,9 +33,9 @@ function inicializarAvaliacao() {
   function atualizarBotaoGerar() {
     const quantos = Object.keys(resultadosExercicios).length;
     btnGerar.disabled = quantos < 3;
-    btnGerar.textContent = quantos < 3
-      ? `📊 Gerar minha avaliação (${quantos}/3 mínimo)`
-      : `📊 Gerar minha avaliação (${quantos}/5)`;
+    btnGerar.innerHTML = quantos < 3
+      ? `${ICONE("chart")} Gerar minha avaliação (${quantos}/3 mínimo)`
+      : `${ICONE("chart")} Gerar minha avaliação (${quantos}/5)`;
   }
 
   EXERCICIOS_AVALIACAO.forEach((chave) => {

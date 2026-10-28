@@ -91,8 +91,8 @@ async function carregarHistorico() {
         <td>${a.tendencia || "—"}</td>
         <td>${a.pct_afinado ?? 0}%</td>
         <td>
-          <button class="oh-btn-icone" data-detalhe="${a.id}">👁️</button>
-          <button class="oh-btn-icone oh-btn-excluir" data-excluir-hist="${a.id}">🗑️</button>
+          <button class="oh-btn-icone" data-detalhe="${a.id}">${ICONE("olho")}</button>
+          <button class="oh-btn-icone oh-btn-excluir" data-excluir-hist="${a.id}">${ICONE("lixo")}</button>
         </td>
       </tr>
     `).join("");

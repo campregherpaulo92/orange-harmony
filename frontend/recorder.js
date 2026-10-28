@@ -84,7 +84,7 @@ function criarGravador(container, opcoes = {}) {
         <span class="oh-rec-status">Toque para gravar</span>
         <span class="oh-rec-tempo">00:00</span>
       </div>
-      <button type="button" class="oh-rec-excluir" hidden title="Descartar esta gravação">🗑️</button>
+      <button type="button" class="oh-rec-excluir" hidden title="Descartar esta gravação">${ICONE("lixo")}</button>
     </div>
     <div class="oh-rec-player-container" hidden></div>
   `;

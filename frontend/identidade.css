@@ -167,3 +167,30 @@ h1, h2, h3 {
   font-weight: 700; letter-spacing: -0.01em;
   color: var(--oh-orange);
 }
+
+/* ═══════════════ BOTÕES DE AÇÃO (renomear, baixar, excluir, ver) ═══════════════ */
+.oh-btn-icone {
+  display: inline-grid; place-items: center;
+  width: 34px; height: 34px; padding: 0; cursor: pointer;
+  background: transparent; border: 1px solid rgba(249, 115, 22, 0.45); border-radius: 50%;
+  color: var(--oh-orange);
+  text-decoration: none;
+}
+.oh-btn-icone:hover { background: rgba(249, 115, 22, 0.14); border-color: var(--oh-orange); }
+.oh-btn-icone .oh-ic { width: 26px; height: 26px; min-width: 26px; margin: 0; box-shadow: none; }
+.oh-btn-icone .oh-ic svg { width: 56%; height: 56%; }
+.oh-btn-excluir { border-color: rgba(239, 68, 68, 0.45); }
+.oh-btn-excluir:hover { background: rgba(239, 68, 68, 0.14); border-color: #ef4444; }
+
+/* ═══════════════ TABELA COM ROLAGEM (histórico) ═══════════════ */
+.oh-tabela-rolante {
+  max-height: 460px;
+  overflow: auto;
+  border-radius: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(249, 115, 22, 0.5) transparent;
+}
+.oh-tabela-rolante .oh-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: #141414;
+}

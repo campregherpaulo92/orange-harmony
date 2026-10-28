@@ -694,9 +694,9 @@ async function carregarListaGravacoes() {
           <span class="oh-gravacao-meta">${formatarData(g.data)} · ${formatarTamanho(g.tamanho_bytes)}</span>
         </div>
         <div class="oh-gravacao-acoes">
-          <button class="oh-btn-icone" data-renomear="${escaparHtmlGravacao(g.id)}" title="Renomear">✏️</button>
-          <a class="oh-btn-icone" href="${API_BASE}/api/gravacoes/${encodeURIComponent(g.id)}" download="${escaparHtmlGravacao(g.nome)}" title="Baixar">⬇️</a>
-          <button class="oh-btn-icone oh-btn-excluir" data-excluir="${escaparHtmlGravacao(g.id)}" title="Excluir">🗑️</button>
+          <button class="oh-btn-icone" data-renomear="${escaparHtmlGravacao(g.id)}" title="Renomear">${ICONE("lapis")}</button>
+          <a class="oh-btn-icone" href="${API_BASE}/api/gravacoes/${encodeURIComponent(g.id)}" download="${escaparHtmlGravacao(g.nome)}" title="Baixar">${ICONE("baixar")}</a>
+          <button class="oh-btn-icone oh-btn-excluir" data-excluir="${escaparHtmlGravacao(g.id)}" title="Excluir">${ICONE("lixo")}</button>
         </div>
       </div>
     `).join("");
