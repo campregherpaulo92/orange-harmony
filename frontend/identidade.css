@@ -98,3 +98,29 @@ h1, h2, h3 {
   background: transparent;
   border-color: rgba(249, 115, 22, 0.4);
 }
+
+/* ═══════════════ MINI PLAYER: ícones próprios (círculo laranja, silhueta preta) ═══════════════ */
+.oh-mp-btn {
+  width: 40px; height: 40px; min-width: 40px; padding: 0;
+  display: inline-grid; place-items: center;
+  border: 1px solid rgba(255, 138, 42, 0.25);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffa04d, #f26b10);
+  color: #0d0a08;
+  box-shadow: 0 4px 14px rgba(242, 107, 16, 0.25);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.oh-mp-btn:hover { background: radial-gradient(circle at 35% 30%, #ffb070, #f26b10); transform: translateY(-1px); }
+.oh-mp-btn svg { width: 20px; height: 20px; fill: #0d0a08; display: block; }
+.oh-mp-btn svg path[fill="none"], .oh-mp-btn svg circle + path { fill: none; }
+.oh-mp-btn .oh-mp-icone-svg, .oh-mp-btn[class*="oh-mp-velocidade"] { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: 0.8rem; }
+.oh-mp-play { width: 48px; height: 48px; min-width: 48px; }
+.oh-mp-play svg { width: 22px; height: 22px; }
+.oh-mp-btn.oh-mp-ligado { box-shadow: 0 0 0 2px #ffb070, 0 0 16px rgba(255, 138, 42, 0.55); }
+.oh-mp-btn:focus-visible { outline: 2px solid #ffb070; outline-offset: 2px; }
+
+/* Cabeçalho e botões de janela */
+.oh-mp-icone-svg { width: 28px; height: 28px; border-radius: 50%; display: inline-grid; place-items: center; background: radial-gradient(circle at 35% 30%, #ffa04d, #f26b10); color: #0d0a08; }
+.oh-mp-icone-svg svg { width: 16px; height: 16px; }
+.oh-mp-minimizar svg, .oh-mp-fechar svg { width: 14px; height: 14px; display: block; margin: auto; }
+.oh-mp-minimizar, .oh-mp-fechar { display: inline-grid; place-items: center; color: var(--oh-orange); border-color: rgba(249, 115, 22, 0.45); }

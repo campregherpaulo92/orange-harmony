@@ -35,6 +35,20 @@
   let audioCtx = null, analisador = null;
 
   // ───────────── utilidades ─────────────
+  // Ícones próprios do Orange Harmony: silhueta preta sobre círculo laranja (ver identidade.css)
+  const ICONES = {
+    aleatorio: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h3.2c1.6 0 2.6.7 3.4 1.9l1.9 2.9 1.9-2.9C14.2 6.7 15.2 6 16.8 6H21v2.2h-4.2c-.6 0-1 .3-1.4.8L13.4 12l2 3c.4.5.8.8 1.4.8H21V18h-4.2c-1.6 0-2.6-.7-3.4-1.9l-1.9-2.9-1.9 2.9C9 17.3 8 18 6.4 18H3v-2.2h3.4c.6 0 1-.3 1.4-.8L10.6 12l-1.8-3c-.4-.5-.8-.8-1.4-.8H3z"/><path d="M17.5 3.5 21 6.5l-3.5 3z"/><path d="M17.5 14.5 21 17.5l-3.5 3z"/></svg>',
+    anterior: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="6" width="2.4" height="12" rx=".6"/><path d="M19 6v12l-9-6z"/></svg>',
+    proxima: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6v12l9-6z"/><rect x="16.6" y="6" width="2.4" height="12" rx=".6"/></svg>',
+    tocar: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13c0 .7.8 1.1 1.4.7l10-6.5c.5-.3.5-1.1 0-1.4l-10-6.5C8.8 4.4 8 4.8 8 5.5z"/></svg>',
+    pausar: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+    repetir: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10.5a2.5 2.5 0 0 1 2.5 2.5V11h-2.2V9.5a.3.3 0 0 0-.3-.3H7a.3.3 0 0 0-.3.3V11H4.5V9.5A2.5 2.5 0 0 1 7 7z"/><path d="M17 17H6.5A2.5 2.5 0 0 1 4 14.5V13h2.2v1.5c0 .2.1.3.3.3H17c.2 0 .3-.1.3-.3V13H19.5v1.5A2.5 2.5 0 0 1 17 17z"/><path d="M15.5 3.8 19.4 7l-3.9 3.2z"/><path d="M8.5 13.2 4.6 17l3.9 3.2z"/></svg>',
+    repetirUma: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10.5a2.5 2.5 0 0 1 2.5 2.5V11h-2.2V9.5a.3.3 0 0 0-.3-.3H7a.3.3 0 0 0-.3.3V11H4.5V9.5A2.5 2.5 0 0 1 7 7z"/><path d="M17 17H6.5A2.5 2.5 0 0 1 4 14.5V13h2.2v1.5c0 .2.1.3.3.3H17c.2 0 .3-.1.3-.3V13H19.5v1.5A2.5 2.5 0 0 1 17 17z"/><path d="M15.5 3.8 19.4 7l-3.9 3.2z"/><path d="M8.5 13.2 4.6 17l3.9 3.2z"/><text x="12" y="14.3" font-size="6.5" font-weight="800" text-anchor="middle" fill="#fff" stroke="#0d0a08" stroke-width=".6" font-family="sans-serif">1</text></svg>',
+    nota: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17.5V6.2l10-2v11.3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="6.8" cy="17.6" r="2.6"/><circle cx="16.8" cy="15.6" r="2.6"/></svg>',
+    descer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    subir: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    fechar: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
+  };
   const el = (tag, classe, texto) => { const e = document.createElement(tag); if (classe) e.className = classe; if (texto !== undefined) e.textContent = texto; return e; };
   const limitar = (v, a, b) => Math.min(Math.max(v, a), Math.max(a, b));
   const tempo = (s) => { if (!isFinite(s) || s < 0) return "0:00"; return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`; };
@@ -70,14 +84,14 @@
     caixa.hidden = true;
 
     const topo = el("div", "oh-mp-topo");
-    topo.appendChild(el("span", "oh-mp-icone", "🎧"));
+    topo.appendChild(el("span", "oh-mp-icone oh-mp-icone-svg", "")); topo.lastChild.innerHTML = ICONES.nota;
     const titulo = el("div", "oh-mp-titulo");
     titulo.setAttribute("aria-live", "polite");
     const tituloTexto = el("span", "oh-mp-titulo-texto", "");
     titulo.appendChild(tituloTexto);
-    const minimizar = el("button", "oh-mp-minimizar", "▾");
+    const minimizar = el("button", "oh-mp-minimizar", ""); minimizar.innerHTML = ICONES.descer;
     minimizar.type = "button";
-    const fechar = el("button", "oh-mp-fechar", "✕");
+    const fechar = el("button", "oh-mp-fechar", ""); fechar.innerHTML = ICONES.fechar;
     fechar.type = "button";
     fechar.setAttribute("aria-label", "Fechar o player");
     topo.append(titulo, minimizar, fechar);
@@ -94,12 +108,12 @@
     linha.append(atual, barra, total);
 
     const controles = el("div", "oh-mp-controles");
-    const botao = (classe, texto, rotulo) => { const b = el("button", classe, texto); b.type = "button"; b.setAttribute("aria-label", rotulo); b.title = rotulo; return b; };
-    const bAleatorio = botao("oh-mp-btn oh-mp-aleatorio", "🔀", "Aleatório");
-    const bAnterior = botao("oh-mp-btn oh-mp-anterior", "⏮", "Música anterior");
-    const bPlay = botao("oh-mp-btn oh-mp-play", "▶", "Tocar");
-    const bProxima = botao("oh-mp-btn oh-mp-proxima", "⏭", "Próxima música");
-    const bRepetir = botao("oh-mp-btn oh-mp-repetir", "🔁", "Repetir: desligado");
+    const botao = (classe, texto, rotulo) => { const b = el("button", classe, ""); if (texto.startsWith("<")) b.innerHTML = texto; else b.textContent = texto; b.type = "button"; b.setAttribute("aria-label", rotulo); b.title = rotulo; return b; };
+    const bAleatorio = botao("oh-mp-btn oh-mp-aleatorio", ICONES.aleatorio, "Aleatório");
+    const bAnterior = botao("oh-mp-btn oh-mp-anterior", ICONES.anterior, "Música anterior");
+    const bPlay = botao("oh-mp-btn oh-mp-play", ICONES.tocar, "Tocar");
+    const bProxima = botao("oh-mp-btn oh-mp-proxima", ICONES.proxima, "Próxima música");
+    const bRepetir = botao("oh-mp-btn oh-mp-repetir", ICONES.repetir, "Repetir: desligado");
     const bVelocidade = botao("oh-mp-btn oh-mp-velocidade", "1x", "Velocidade");
     controles.append(bAleatorio, bAnterior, bPlay, bProxima, bRepetir, bVelocidade);
 
@@ -143,7 +157,7 @@
     if (!partes) return;
     const c = estaCompacto();
     caixa.classList.toggle("oh-mp-compacto", c);
-    partes.minimizar.textContent = c ? "▴" : "▾";
+    partes.minimizar.innerHTML = c ? ICONES.subir : ICONES.descer;
     const texto = c ? "Expandir o player" : "Minimizar o player";
     partes.minimizar.title = texto;
     partes.minimizar.setAttribute("aria-label", texto);
@@ -159,7 +173,7 @@
     partes.bAleatorio.setAttribute("aria-pressed", String(aleatorio));
     const textoAleatorio = aleatorio ? "Aleatório: ligado" : "Aleatório: desligado";
     partes.bAleatorio.title = textoAleatorio; partes.bAleatorio.setAttribute("aria-label", textoAleatorio);
-    partes.bRepetir.textContent = repetir === "uma" ? "🔂" : "🔁";
+    partes.bRepetir.innerHTML = repetir === "uma" ? ICONES.repetirUma : ICONES.repetir;
     partes.bRepetir.classList.toggle("oh-mp-ligado", repetir !== "off");
     partes.bRepetir.setAttribute("aria-pressed", String(repetir !== "off"));
     const textoRepetir = repetir === "off" ? "Repetir: desligado" : repetir === "todas" ? "Repetir: todas as músicas" : "Repetir: esta música";
@@ -171,7 +185,7 @@
 
   function desenharEstado() {
     if (!partes) return;
-    partes.bPlay.textContent = tocando ? "⏸" : "▶";
+    partes.bPlay.innerHTML = tocando ? ICONES.pausar : ICONES.tocar;
     partes.bPlay.setAttribute("aria-label", tocando ? "Pausar" : "Tocar");
     partes.bPlay.title = tocando ? "Pausar" : "Tocar";
     caixa.classList.toggle("oh-mp-tocando", tocando);
