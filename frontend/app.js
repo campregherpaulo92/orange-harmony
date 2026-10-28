@@ -653,6 +653,23 @@ function formatarTamanho(bytes) {
   return `${(kb / 1024).toFixed(1)} MB`;
 }
 
+function escaparHtmlGravacao(texto) {
+  return String(texto == null ? "" : texto).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Marca na lista da Biblioteca a música que está no mini player e troca o rótulo do botão (Tocar / Pausar / Continuar).
+function marcarGravacaoTocando() {
+  const atual = window.MiniPlayer ? window.MiniPlayer.atual() : null;
+  const tocando = window.MiniPlayer ? window.MiniPlayer.estaTocando() : false;
+  document.querySelectorAll("#listaGravacoes .oh-gravacao-item").forEach((item) => {
+    const ehAtual = !!atual && item.dataset.id === atual.id;
+    item.classList.toggle("oh-gravacao-tocando", ehAtual);
+    const botao = item.querySelector("[data-tocar]");
+    if (botao) botao.textContent = ehAtual ? (tocando ? "⏸ Pausar" : "▶ Continuar") : "▶ Tocar";
+  });
+}
+document.addEventListener("oh-mp-estado", marcarGravacaoTocando);
+
 async function carregarListaGravacoes() {
   const lista = document.getElementById("listaGravacoes");
   if (!lista) return;
@@ -665,28 +682,32 @@ async function carregarListaGravacoes() {
 
     if (itens.length === 0) {
       lista.innerHTML = `<p class="oh-em-construcao">Nenhuma gravação salva ainda. Grave e clique em "Salvar gravação" acima.</p>`;
+      if (window.MiniPlayer) window.MiniPlayer.atualizarFila([]);
       return;
     }
 
     lista.innerHTML = itens.map((g) => `
-      <div class="oh-gravacao-item" data-id="${g.id}">
+      <div class="oh-gravacao-item" data-id="${escaparHtmlGravacao(g.id)}">
+        <button type="button" class="oh-btn-tocar" data-tocar="${escaparHtmlGravacao(g.id)}" aria-label="Tocar ${escaparHtmlGravacao(g.nome)}">▶ Tocar</button>
         <div class="oh-gravacao-info">
-          <span class="oh-gravacao-nome" data-nome-de="${g.id}">${g.nome}</span>
+          <span class="oh-gravacao-nome" data-nome-de="${escaparHtmlGravacao(g.id)}">${escaparHtmlGravacao(g.nome)}</span>
           <span class="oh-gravacao-meta">${formatarData(g.data)} · ${formatarTamanho(g.tamanho_bytes)}</span>
         </div>
-        <div class="oh-gravacao-player" data-player="${g.id}"></div>
         <div class="oh-gravacao-acoes">
-          <button class="oh-btn-icone" data-renomear="${g.id}" title="Renomear">✏️</button>
-          <a class="oh-btn-icone" href="${API_BASE}/api/gravacoes/${g.id}" download="${g.nome}" title="Baixar">⬇️</a>
-          <button class="oh-btn-icone oh-btn-excluir" data-excluir="${g.id}" title="Excluir">🗑️</button>
+          <button class="oh-btn-icone" data-renomear="${escaparHtmlGravacao(g.id)}" title="Renomear">✏️</button>
+          <a class="oh-btn-icone" href="${API_BASE}/api/gravacoes/${encodeURIComponent(g.id)}" download="${escaparHtmlGravacao(g.nome)}" title="Baixar">⬇️</a>
+          <button class="oh-btn-icone oh-btn-excluir" data-excluir="${escaparHtmlGravacao(g.id)}" title="Excluir">🗑️</button>
         </div>
       </div>
     `).join("");
 
-    itens.forEach((g) => {
-      const alvo = lista.querySelector(`[data-player="${g.id}"]`);
-      if (alvo) criarPlayer(alvo, { src: `${API_BASE}/api/gravacoes/${g.id}`, nomeArquivo: `${g.nome}.webm` });
+    // Tocar uma gravação abre o mini player (flutuante) com a lista inteira da Biblioteca como fila.
+    const filaBiblioteca = itens.map((g) => ({ id: g.id, nome: g.nome }));
+    lista.querySelectorAll("[data-tocar]").forEach((btn, i) => {
+      btn.addEventListener("click", () => window.MiniPlayer && window.MiniPlayer.alternar(filaBiblioteca, i));
     });
+    if (window.MiniPlayer) window.MiniPlayer.atualizarFila(filaBiblioteca);   // renomeou ou excluiu algo: o player acompanha a lista
+    marcarGravacaoTocando();
 
     lista.querySelectorAll("[data-renomear]").forEach((btn) => {
       btn.addEventListener("click", async () => {
