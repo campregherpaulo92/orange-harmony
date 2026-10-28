@@ -251,3 +251,24 @@ h1, h2, h3 {
   max-width: none;
   padding: 24px clamp(20px, 3vw, 48px) 60px;
 }
+
+/* ═══════════════ MENU ACOMPANHA A ROLAGEM (computador) ═══════════════
+   O styles.css declarava "sticky" e depois "relative", e o relative ganhava.
+   Aqui o menu fica fixo na lateral enquanto a página rola. */
+@media (min-width: 801px) {
+  .oh-sidebar {
+    position: sticky !important;
+    top: 0;
+    height: 100vh;
+    align-self: flex-start;
+  }
+}
+
+/* ═══════════════ CELULAR (iPhone): menu recolhido some por completo ═══════════════
+   Antes, no celular, o recolhimento só empurrava o menu para fora da tela e a
+   área continuava ocupada. Agora, recolhido, ele não ocupa espaço; o botão ☰ abre. */
+@media (max-width: 800px) {
+  .oh-sidebar { margin-left: 0 !important; }
+  .oh-sidebar.oh-sidebar-colapsada { display: none !important; }
+  .oh-sidebar-toggle { top: 12px; left: 12px; }
+}
