@@ -288,3 +288,9 @@ h1, h2, h3 {
 .oh-tom-rotulo { font-size: 0.78rem; font-weight: 700; color: var(--oh-orange); min-width: 92px; text-align: center; }
 .oh-tom-processando { opacity: 0.55; pointer-events: none; }
 .oh-tom-processando .oh-tom-rotulo::after { content: " …"; }
+
+/* Controle de tom dentro do mini player: compacto, na mesma linha dos botões */
+.oh-mp-tom { display: inline-flex; }
+.oh-mp-tom .oh-tom-controle { gap: 4px; padding: 2px 3px; }
+.oh-mp-tom .oh-tom-btn { width: 24px; height: 24px; font-size: 0.9rem; }
+.oh-mp-tom .oh-tom-rotulo { min-width: 0; font-size: 0.7rem; }

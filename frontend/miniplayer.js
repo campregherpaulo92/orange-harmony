@@ -115,13 +115,14 @@
     const bProxima = botao("oh-mp-btn oh-mp-proxima", ICONES.proxima, "Próxima música");
     const bRepetir = botao("oh-mp-btn oh-mp-repetir", ICONES.repetir, "Repetir: desligado");
     const bVelocidade = botao("oh-mp-btn oh-mp-velocidade", "1x", "Velocidade");
-    controles.append(bAleatorio, bAnterior, bPlay, bProxima, bRepetir, bVelocidade);
+    const tomSlot = el("span", "oh-mp-tom");
+    controles.append(bAleatorio, bAnterior, bPlay, bProxima, bRepetir, bVelocidade, tomSlot);
 
     const alca = el("div", "oh-mp-redimensionar");
     alca.setAttribute("aria-hidden", "true");
     caixa.append(topo, canvas, linha, controles, alca);
     document.body.appendChild(caixa);
-    partes = { topo, tituloTexto, minimizar, fechar, canvas, atual, barra, total, bAleatorio, bAnterior, bPlay, bProxima, bRepetir, bVelocidade, alca, ctx2d: canvas.getContext("2d") };
+    partes = { topo, tituloTexto, minimizar, fechar, canvas, atual, barra, total, bAleatorio, bAnterior, bPlay, bProxima, bRepetir, bVelocidade, alca, tomSlot, tom: null, ctx2d: canvas.getContext("2d") };
 
     fechar.addEventListener("click", fecharPlayer);
     minimizar.addEventListener("click", () => { compacto = !estaCompacto(); guardarPreferencias(); aplicarCompacto(); });
@@ -349,6 +350,45 @@
     pos = Math.max(0, ordem.indexOf(atualIdx));
   }
 
+  // ── Tom (− / +) por gravação, guardado neste aparelho ──
+  let srcOriginal = "";
+
+  async function aplicarTom(semitons, idFaixa) {
+    const f = faixa();
+    if (!partes || !f || String(f.id) !== String(idFaixa)) return;   // trocou de música no meio do caminho
+    const estavaTocando = !audio.paused;
+    const pos = audio.currentTime;
+    const cont = partes.tom && partes.tom.el;
+    if (cont) cont.classList.add("oh-tom-processando");
+    try {
+      const url = await window.Transposicao.obterUrl(srcOriginal, semitons);
+      if (!partes || !faixa() || String(faixa().id) !== String(idFaixa)) return;
+      audio.src = url;
+      audio.addEventListener("loadedmetadata", () => {
+        audio.currentTime = pos;
+        if (estavaTocando) audio.play().catch(() => {});
+      }, { once: true });
+    } catch (erro) {
+      console.error("Falha ao mudar o tom:", erro);
+      if (partes.tom) partes.tom.definir(0);
+      alert("Não consegui mudar o tom desta gravação neste aparelho.");
+    } finally {
+      if (cont) cont.classList.remove("oh-tom-processando");
+    }
+  }
+
+  function montarTom(f) {
+    if (!partes || !window.Transposicao) return;
+    partes.tomSlot.replaceChildren();
+    const t = window.Transposicao.montarControle({
+      chave: String(f.id),
+      onMudar: (s) => aplicarTom(s, f.id),
+    });
+    partes.tom = t;
+    partes.tomSlot.appendChild(t.el);
+    if (t.semitons) aplicarTom(t.semitons, f.id);
+  }
+
   function carregar(querTocarAgora) {
     const f = faixa();
     if (!f) return;
@@ -361,6 +401,8 @@
     partes.barra.value = "0"; pintarBarra();
     partes.atual.textContent = "0:00"; partes.total.textContent = "--:--";
     audio.src = `${base()}/api/gravacoes/${encodeURIComponent(f.id)}`;
+    srcOriginal = audio.src;
+    montarTom(f);
     audio.playbackRate = velocidade;
     atualizarMediaSession();
     if (querTocarAgora) {
