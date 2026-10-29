@@ -294,3 +294,31 @@ h1, h2, h3 {
 .oh-mp-tom .oh-tom-controle { gap: 4px; padding: 2px 3px; }
 .oh-mp-tom .oh-tom-btn { width: 24px; height: 24px; font-size: 0.9rem; }
 .oh-mp-tom .oh-tom-rotulo { min-width: 0; font-size: 0.7rem; }
+
+/* ═══════════════ FICHA DE AVALIAÇÃO (papel profissional + impressão) ═══════════════ */
+.ficha-papel {
+  background: #ffffff; color: #111111; border-radius: 6px;
+  padding: 28px 30px; font-family: 'Bricolage Grotesque', sans-serif;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+.ficha-cabecalho { display: flex; align-items: center; gap: 14px; padding-bottom: 14px; border-bottom: 2px solid #f97316; margin-bottom: 14px; }
+.ficha-logo { width: 54px; height: 54px; object-fit: contain; }
+.ficha-marca { font-weight: 800; color: #f97316; font-size: 1.05rem; }
+.ficha-titulo { font-weight: 700; font-size: 1.2rem; }
+.ficha-secao { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #f97316; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px; margin: 18px 0 10px; }
+.ficha-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 18px; }
+.ficha-campos span { display: block; font-size: 0.72rem; color: #6b6b6b; }
+.ficha-campos b { display: block; font-size: 1rem; font-weight: 700; }
+.ficha-teclado { width: 100%; max-width: 460px; height: 64px; margin-top: 12px; display: block; }
+.ficha-tabela { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.ficha-tabela th { text-align: left; color: #f97316; font-weight: 700; border-bottom: 1px solid #f97316; padding: 6px 4px; }
+.ficha-tabela td { border-bottom: 1px solid #ececec; padding: 6px 4px; }
+.ficha-vazio { color: #6b6b6b; font-style: italic; }
+.ficha-rodape { margin-top: 18px; font-size: 0.72rem; color: #6b6b6b; border-top: 1px solid #e5e5e5; padding-top: 10px; line-height: 1.4; }
+
+@media print {
+  body * { visibility: hidden !important; }
+  #fichaPapel, #fichaPapel * { visibility: visible !important; }
+  #fichaPapel { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border-radius: 0; padding: 18mm; }
+  #fichaImprimir, .oh-hint, #fichaNome { display: none !important; }
+}

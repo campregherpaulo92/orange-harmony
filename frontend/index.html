@@ -310,6 +310,15 @@
         <p id="avaliacaoStatus" class="oh-status"></p>
         <div id="avaliacaoResultado" class="oh-metric-grid"></div>
       </div>
+
+      <div class="oh-card" id="fichaAvaliacaoBloco">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="documento"></i></span> Ficha da avaliação<i class="oh-title-line"></i></div>
+        <p class="oh-hint">A ficha usa a sua última avaliação salva. Escreva o nome do aluno para ele aparecer no papel.</p>
+        <label class="oh-label-campo" for="fichaNome">Nome do aluno</label>
+        <input id="fichaNome" class="oh-input" type="text" maxlength="80" placeholder="Nome para a ficha">
+        <div id="fichaSaida" style="margin-top:14px;"></div>
+        <button id="fichaImprimir" class="oh-btn" style="margin-top:14px;"><i class="oh-ic" data-ic="documento"></i> Imprimir ou salvar em PDF</button>
+      </div>
     </section>
     <section class="oh-page" id="page-afinador">
       <div class="oh-card">
@@ -958,6 +967,7 @@
 <script src="app.js"></script>
 <script src="afinador.js"></script>
 <script src="historico.js"></script>
+<script src="fichaAvaliacao.js"></script>
 <script src="composicoes.js"></script>
 <script src="conversor.js"></script>
 <script src="producao.js"></script>
