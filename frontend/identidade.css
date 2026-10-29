@@ -272,3 +272,19 @@ h1, h2, h3 {
   .oh-sidebar.oh-sidebar-colapsada { display: none !important; }
   .oh-sidebar-toggle { top: 12px; left: 12px; }
 }
+
+/* ═══════════════ CONTROLE DE TOM (− / +) ═══════════════ */
+.oh-tom-controle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 4px; border: 1px solid rgba(249, 115, 22, 0.4); border-radius: 999px;
+  font-family: 'Bricolage Grotesque', sans-serif;
+}
+.oh-tom-btn {
+  width: 28px; height: 28px; border: none; border-radius: 50%; cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, #ffa04d, #f26b10); color: #0a0a0a;
+  font-weight: 800; font-size: 1rem; line-height: 1; padding: 0;
+}
+.oh-tom-btn:hover { background: radial-gradient(circle at 35% 30%, #ffb070, #f26b10); }
+.oh-tom-rotulo { font-size: 0.78rem; font-weight: 700; color: var(--oh-orange); min-width: 92px; text-align: center; }
+.oh-tom-processando { opacity: 0.55; pointer-events: none; }
+.oh-tom-processando .oh-tom-rotulo::after { content: " …"; }

@@ -19,6 +19,8 @@ function criarPlayer(container, opcoes = {}) {
   const src = opcoes.src;
   const nomeArquivo = opcoes.nomeArquivo || "audio.wav";
   const semDownload = !!opcoes.semDownload;
+  const semTom = !!opcoes.semTom || !window.Transposicao;
+  const chaveTom = opcoes.chave || nomeArquivo;
 
   container.innerHTML = `
     <div class="oh-player-box">
@@ -34,6 +36,7 @@ function criarPlayer(container, opcoes = {}) {
           <option value="1.5">1.5x</option>
           <option value="2">2x</option>
         </select>
+        ${semTom ? "" : `<span class="oh-tom-slot"></span>`}
         ${semDownload ? "" : `<a class="oh-player-download" download="${nomeArquivo}" aria-label="Baixar">${ICONE("baixar")}</a>`}
       </div>
       <audio class="oh-player-audio" preload="metadata"></audio>
@@ -52,6 +55,42 @@ function criarPlayer(container, opcoes = {}) {
 
   audio.src = src;
   if (linkDownload) linkDownload.href = src;
+
+  // Controle de tom (− / +): só muda a reprodução e o download; o arquivo original não muda
+  const slotTom = container.querySelector(".oh-tom-slot");
+  let controleTom = null;
+  const nomeBase = nomeArquivo.replace(/\.[^.]+$/, "");
+  const extensao = (nomeArquivo.match(/\.[^.]+$/) || [".wav"])[0];
+
+  async function aplicarTom(semitons) {
+    const estavaTocando = !audio.paused;
+    const pos = audio.currentTime;
+    if (controleTom) controleTom.el.classList.add("oh-tom-processando");
+    try {
+      const url = await Transposicao.obterUrl(src, semitons);
+      audio.src = url;
+      if (linkDownload) {
+        linkDownload.href = url;
+        linkDownload.download = semitons ? `${nomeBase}_tom${semitons > 0 ? "+" : ""}${semitons}${extensao}` : nomeArquivo;
+      }
+      audio.addEventListener("loadedmetadata", () => {
+        audio.currentTime = pos;
+        if (estavaTocando) audio.play();
+      }, { once: true });
+    } catch (erro) {
+      console.error("Falha ao mudar o tom:", erro);
+      controleTom.definir(0);
+      alert("Não consegui mudar o tom deste áudio neste aparelho.");
+    } finally {
+      if (controleTom) controleTom.el.classList.remove("oh-tom-processando");
+    }
+  }
+
+  if (slotTom && window.Transposicao) {
+    controleTom = Transposicao.montarControle({ chave: chaveTom, onMudar: aplicarTom });
+    slotTom.replaceWith(controleTom.el);
+    if (controleTom.semitons) aplicarTom(controleTom.semitons);
+  }
 
   let audioCtx = null;
   let analyser = null;
