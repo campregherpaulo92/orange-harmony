@@ -592,8 +592,8 @@
     previoustrack: () => anterior(),
     nexttrack: () => proxima(false),
     seekto: (d) => { if (d && isFinite(d.seekTime)) audio.currentTime = d.seekTime; },
-    seekbackward: (d) => { audio.currentTime = Math.max(0, audio.currentTime - ((d && d.seekOffset) || 10)); },
-    seekforward: (d) => { audio.currentTime = Math.min(isFinite(audio.duration) ? audio.duration : Infinity, audio.currentTime + ((d && d.seekOffset) || 10)); },
+    // seekbackward/seekforward (±10 s) ficam de fora de propósito: no iPhone, se elas existirem,
+    // a tela de bloqueio e a central de controle mostram ±10 s no lugar de anterior/próxima.
   };
   // Os botões do fone e da tela de bloqueio só são nossos enquanto o player está aberto (não atrapalham outros áudios do app).
   function controlarMidia(ligar) {
