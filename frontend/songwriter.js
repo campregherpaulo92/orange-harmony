@@ -252,9 +252,14 @@ function inicializarSongwriter() {
     }
   }
 
+  // Partitura da aba Partitura: quando ela manda uma versão corrigida para o Songwriter
+  document.addEventListener("oh-partitura-para-songwriter", (e) => {
+    if (e.detail) mostrarBlocoCover(e.detail, "Partitura corrigida na aba Partitura.", null);
+  });
   function mostrarBlocoCover(abc, dica, letraModelo) {
     if (!coverBloco) return;
     abcTexto.value = abc;
+    try { localStorage.setItem("oh-partitura-atual", abc); localStorage.setItem("oh-partitura-original", abc); } catch (e) { /* navegador sem armazenamento */ }
     coverDica.textContent = dica || "";
     letraDaMelodia = letraModelo || "";
     letraModeloEl.value = letraDaMelodia;

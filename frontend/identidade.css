@@ -322,3 +322,29 @@ h1, h2, h3 {
   #fichaPapel { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border-radius: 0; padding: 18mm; }
   #fichaImprimir, .oh-hint, #fichaNome { display: none !important; }
 }
+
+/* ═══════════════ ABA PARTITURA ═══════════════ */
+.oh-partitura-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.partitura-papel {
+  background: #ffffff; color: #111111; border-radius: 10px;
+  padding: 16px 12px; min-height: 120px; overflow-x: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+.partitura-papel svg { max-width: 100%; height: auto; }
+.oh-partitura-editor { margin-top: 14px; }
+.oh-partitura-editor summary { cursor: pointer; color: var(--oh-orange); font-weight: 700; margin-bottom: 8px; }
+.oh-partitura-editor textarea {
+  width: 100%; box-sizing: border-box; font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem;
+  background: #141414; color: #f4ece4; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 10px; padding: 10px;
+}
+#partituraStatus[data-tipo="ok"] { color: #86efac; }
+#partituraStatus[data-tipo="erro"] { color: #fca5a5; }
+
+/* ═══════════════ ABC STUDIO: transporte, timbre e nota em destaque ═══════════════ */
+.oh-partitura-timbre { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.oh-partitura-timbre label { font-weight: 700; color: var(--oh-orange); font-size: 0.9rem; }
+.oh-partitura-transporte { margin-bottom: 14px; }
+.oh-partitura-transporte .abcjs-inline-audio { background: #17110d; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 12px; }
+/* nota ou compasso que está tocando, destacado na partitura */
+.partitura-papel .abcjs-highlight { fill: #f97316 !important; }
+.partitura-papel .abcjs-cursor { stroke: #f97316; }

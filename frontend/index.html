@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="identidade.css">
+<link rel="stylesheet" href="abcjs-audio.css">
 </head>
 <body>
 
@@ -32,6 +33,7 @@
       <button class="oh-nav-item" data-page="producao"><i class="oh-ic" data-ic="mix"></i> <span>Produtor</span></button>
       <button class="oh-nav-item" data-page="edicao"><i class="oh-ic" data-ic="brilho"></i> <span>Edição Vocal Inteligente</span></button>
       <button class="oh-nav-item" data-page="songwriter"><i class="oh-ic" data-ic="robo"></i> <span>Songwriter</span></button>
+      <button class="oh-nav-item" data-page="partitura"><i class="oh-ic" data-ic="partitura"></i> <span>Partitura</span></button>
       <button class="oh-nav-item" data-page="news"><i class="oh-ic" data-ic="jornal"></i> <span>Newsletter</span></button>
       <button class="oh-nav-item" data-page="singergame"><i class="oh-ic" data-ic="gamepad"></i> <span>Singergame</span></button>
     </nav>
@@ -764,6 +766,29 @@
       </div>
     </section>
 
+    <section class="oh-page" id="page-partitura">
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="partitura"></i></span> Partitura<i class="oh-title-line"></i></div>
+        <p class="oh-hint">A partitura vem do Songwriter. Corrija o texto ABC aqui, ouça a melodia e só depois envie para a geração.</p>
+        <p id="partituraStatus" class="oh-hint" data-tipo="info" style="margin:6px 0 10px;">Aguardando partitura.</p>
+        <div class="oh-partitura-timbre">
+          <label for="partituraTimbre">Timbre</label>
+          <select id="partituraTimbre" class="oh-select"></select>
+        </div>
+        <div id="partituraTransporte" class="oh-partitura-transporte"></div>
+        <div class="oh-partitura-acoes">
+          <button id="partituraSalvar" class="oh-btn oh-btn-secundario" type="button">Salvar correção</button>
+          <button id="partituraRestaurar" class="oh-btn oh-btn-secundario" type="button">Restaurar original</button>
+          <button id="partituraSongwriter" class="oh-btn" type="button">Usar no Songwriter</button>
+        </div>
+        <div id="partituraPapel" class="partitura-papel"></div>
+        <details class="oh-partitura-editor">
+          <summary>Editar texto ABC</summary>
+          <textarea id="partituraAbc" rows="10" spellcheck="false" placeholder="X:1&#10;T:Minha música&#10;M:4/4&#10;L:1/8&#10;K:C&#10;C D E F | G2 E2 C4 |"></textarea>
+        </details>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -975,7 +1000,9 @@
 <script src="avaliacao.js"></script>
 <script src="laranjinha.js"></script>
 <script src="estudio.js"></script>
+<script src="abcjs-basic-min.js"></script>
 <script src="songwriter.js"></script>
+<script src="partitura.js"></script>
 <script src="acordes.js"></script>
 <script src="news.js"></script>
 <script src="singergame.js"></script>
