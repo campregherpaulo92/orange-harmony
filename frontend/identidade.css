@@ -354,3 +354,18 @@ h1, h2, h3 {
 .partitura-nota-barra[hidden] { display: none; }
 #partituraNotaInfo { font-weight: 700; color: var(--oh-orange); margin-right: 6px; }
 .partitura-papel .abcjs-note.abcjs-selected, .partitura-papel .abcjs-selected { fill: #f97316 !important; }
+
+/* ═══════════════ CAIXINHA DA NOTA (edição na própria partitura) ═══════════════ */
+.partitura-area { position: relative; }
+.partitura-caixa {
+  position: absolute; z-index: 5; min-width: 220px; max-width: 92%;
+  background: #17110d; border: 1px solid rgba(249,115,22,0.6); border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.45); padding: 10px;
+}
+.partitura-caixa[hidden] { display: none; }
+.partitura-caixa-topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+#partituraCaixaNota { font-weight: 800; color: var(--oh-orange); }
+.partitura-caixa-x { background: transparent; border: none; color: #f4ece4; font-size: 1.2rem; cursor: pointer; line-height: 1; }
+.partitura-caixa-botoes { display: flex; flex-wrap: wrap; gap: 6px; }
+/* nota selecionada em vermelho; a nota em execução segue amarela/laranja */
+.partitura-papel .oh-nota-selecionada, .partitura-papel .oh-nota-selecionada * { fill: #e11d48 !important; stroke: #e11d48 !important; }

@@ -781,12 +781,20 @@
           <button id="partituraRestaurar" class="oh-btn oh-btn-secundario" type="button">Restaurar original</button>
           <button id="partituraSongwriter" class="oh-btn" type="button">Usar no Songwriter</button>
         </div>
-        <div id="partituraPapel" class="partitura-papel"></div>
-        <div id="partituraNotaBarra" class="partitura-nota-barra" hidden>
-          <span id="partituraNotaInfo"></span>
-          <button id="partituraSubir" class="oh-btn oh-btn-secundario" type="button">Subir uma linha ou espaço</button>
-          <button id="partituraDescer" class="oh-btn oh-btn-secundario" type="button">Descer uma linha ou espaço</button>
-          <button id="partituraDesfazer" class="oh-btn oh-btn-secundario" type="button">Desfazer</button>
+        <div id="partituraArea" class="partitura-area">
+          <div id="partituraPapel" class="partitura-papel"></div>
+          <div id="partituraCaixa" class="partitura-caixa" hidden>
+            <div class="partitura-caixa-topo">
+              <span id="partituraCaixaNota"></span>
+              <button id="partituraCaixaFechar" class="partitura-caixa-x" type="button" aria-label="Fechar">×</button>
+            </div>
+            <div class="partitura-caixa-botoes">
+              <button id="partituraSubir" class="oh-btn oh-btn-secundario" type="button">↑ Subir</button>
+              <button id="partituraDescer" class="oh-btn oh-btn-secundario" type="button">↓ Descer</button>
+              <button id="partituraTocarDaqui" class="oh-btn" type="button">▶ Tocar daqui</button>
+              <button id="partituraDesfazer" class="oh-btn oh-btn-secundario" type="button">Desfazer</button>
+            </div>
+          </div>
         </div>
         <details class="oh-partitura-editor">
           <summary>Editar texto ABC</summary>

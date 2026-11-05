@@ -26,6 +26,7 @@
   let areaEditada = false;
   let timer = null;
   let selecao = null;          // nota clicada: { inicio, fim, token }
+  let marcadosSel = [];        // elementos SVG da nota selecionada
   const historico = [];        // versões anteriores do texto ABC (para "Desfazer")
   const LETRAS = "CDEFGAB";
 
@@ -93,6 +94,7 @@
       visualAtual = tunes[0];
       status("Partitura pronta. Ouça antes de enviar para a geração.", "ok");
       aplicarMelodia();
+      reaplicarSelecao();
       return true;
     } catch (erro) {
       papel.innerHTML = "";
@@ -135,7 +137,46 @@
       return;
     }
     selecao = { inicio: abcElem.startChar, fim: abcElem.endChar, token };
-    mostrarBarraNota();
+    if (tocando && controle) { try { controle.pause(); } catch (e) { /* já parado */ } }
+    marcarSelecao(abcElem.elemset || []);
+    posicionarCaixa(abcElem.elemset || []);
+    mostrarCaixa();
+  }
+
+  // Destaca a nota selecionada em vermelho (sem perder a marcação ao redesenhar)
+  function marcarSelecao(elementos) {
+    marcadosSel.forEach((el) => el.classList.remove("oh-nota-selecionada"));
+    marcadosSel = [];
+    (elementos || []).forEach((el) => { if (el && el.classList) { el.classList.add("oh-nota-selecionada"); marcadosSel.push(el); } });
+  }
+
+  // Ao redesenhar, procura de novo a nota selecionada pelo início dela no texto ABC
+  function reaplicarSelecao() {
+    if (!selecao || !visualAtual) return;
+    let achado = null;
+    (visualAtual.lines || []).forEach((linha) => (linha.staff || []).forEach((pauta) => (pauta.voices || []).forEach((voz) => (voz || []).forEach((el) => {
+      if (!achado && el && el.startChar === selecao.inicio && el.elemset) achado = el.elemset;
+    }))));
+    if (achado) { marcarSelecao(achado); posicionarCaixa(achado); mostrarCaixa(); }
+    else { selecao = null; mostrarCaixa(); }
+  }
+
+  // Caixinha flutuante colada na nota, para não precisar rolar até embaixo da partitura
+  function posicionarCaixa(elementos) {
+    const caixa = $("partituraCaixa");
+    const area = $("partituraArea");
+    if (!caixa || !area || !elementos.length) return;
+    const r = elementos[0].getBoundingClientRect();
+    const a = area.getBoundingClientRect();
+    caixa.style.left = Math.max(0, r.left - a.left) + "px";
+    caixa.style.top = Math.max(0, r.bottom - a.top + 8) + "px";
+  }
+
+  function mostrarCaixa() {
+    const caixa = $("partituraCaixa");
+    if (!caixa) return;
+    caixa.hidden = !selecao;
+    if (selecao) $("partituraCaixaNota").textContent = `Nota: ${selecao.token}`;
   }
 
   // Interpreta uma nota ABC: acidente, letra, oitavas (' ou ,) e duração
@@ -174,9 +215,9 @@
     gravarStorage(K_ATUAL, area.value.trim());
     areaEditada = false;
     status(`Nota trocada: ${selecao.token} → ${novoToken}. Ouça de novo.`, "ok");
-    selecao = null;
+    selecao = { inicio: selecao.inicio, fim: selecao.inicio + novoToken.length, token: novoToken };
     renderizar();
-    mostrarBarraNota();
+    reaplicarSelecao();
   }
 
   function desfazerEdicao() {
@@ -185,15 +226,27 @@
     gravarStorage(K_ATUAL, $("partituraAbc").value.trim());
     selecao = null;
     renderizar();
-    mostrarBarraNota();
+    marcarSelecao([]);
+    mostrarCaixa();
     status("Última mudança desfeita.", "ok");
   }
 
-  function mostrarBarraNota() {
-    const barra = $("partituraNotaBarra");
-    if (!barra) return;
-    barra.hidden = !selecao;
-    if (selecao) $("partituraNotaInfo").textContent = `Nota selecionada: ${selecao.token}`;
+  // Continua a música a partir da nota selecionada (tempo calculado pela própria notação)
+  function tocarDaqui() {
+    if (!selecao || !visualAtual || !controle || !window.ABCJS || !window.ABCJS.TimingCallbacks) return;
+    try {
+      const tempo = new window.ABCJS.TimingCallbacks(visualAtual, {});
+      const eventos = tempo.noteTimings || [];
+      const ev = eventos.find((e) => e.startChar === selecao.inicio);
+      const total = eventos.length ? eventos[eventos.length - 1].milliseconds : 0;
+      if (!ev || !total) { status("Não consegui localizar essa nota no tempo da música.", "erro"); return; }
+      controle.setProgress(ev.milliseconds / total, total);
+      controle.play();
+      tocando = true;
+      status(`Tocando a partir de ${selecao.token}.`, "ok");
+    } catch (erro) {
+      status("Não consegui começar a partir dessa nota. " + (erro.message || ""), "erro");
+    }
   }
 
   function salvar() {
@@ -243,13 +296,16 @@
     area.addEventListener("input", () => {
       areaEditada = true;
       selecao = null;
-      mostrarBarraNota();
+      marcarSelecao([]);
+      mostrarCaixa();
       clearTimeout(timer);
       timer = setTimeout(renderizar, 400);
     });
     $("partituraSubir").addEventListener("click", () => moverNota(1));
     $("partituraDescer").addEventListener("click", () => moverNota(-1));
     $("partituraDesfazer").addEventListener("click", desfazerEdicao);
+    $("partituraTocarDaqui").addEventListener("click", tocarDaqui);
+    $("partituraCaixaFechar").addEventListener("click", () => { selecao = null; marcarSelecao([]); mostrarCaixa(); });
     $("partituraSalvar").addEventListener("click", salvar);
     $("partituraRestaurar").addEventListener("click", restaurarOriginal);
     $("partituraSongwriter").addEventListener("click", usarNoSongwriter);
