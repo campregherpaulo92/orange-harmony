@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orange Harmony</title>
+<link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=6">
+<link rel="stylesheet" href="identidade.css?v=6">
+<link rel="stylesheet" href="abcjs-audio.css?v=6">
+</head>
+<body>
+
+<div class="oh-app">
+
+  <!-- ═══════════════ SIDEBAR ═══════════════ -->
+  <button class="oh-sidebar-toggle" id="btnToggleSidebar" title="Ocultar/mostrar menu">☰</button>
+  <aside class="oh-sidebar" id="sidebarPrincipal">
+    <img src="logo_orange_harmony.png" alt="Orange Harmony" class="oh-sidebar-logo">
+
+    <nav class="oh-nav">
+      <button class="oh-nav-item" data-page="avaliacao"><i class="oh-ic" data-ic="prancheta"></i> <span>Avaliação</span></button>
+      <button class="oh-nav-item oh-nav-active" data-page="estudo"><i class="oh-ic" data-ic="livros"></i> <span>Estudo</span></button>
+      <button class="oh-nav-item" data-page="afinador"><i class="oh-ic" data-ic="diapasao"></i> <span>Afinador</span></button>
+      <button class="oh-nav-item" data-page="acordes"><i class="oh-ic" data-ic="acorde"></i> <span>Acordes</span></button>
+      <button class="oh-nav-item" data-page="gravador"><i class="oh-ic" data-ic="mic"></i> <span>Biblioteca</span></button>
+      <button class="oh-nav-item" data-page="historico"><i class="oh-ic" data-ic="chart"></i> <span>Histórico</span></button>
+      <button class="oh-nav-item" data-page="composicoes"><i class="oh-ic" data-ic="partitura"></i> <span>Composições</span></button>
+      <button class="oh-nav-item" data-page="conversor"><i class="oh-ic" data-ic="roda"></i> <span>Conversor</span></button>
+      <button class="oh-nav-item" data-page="producao"><i class="oh-ic" data-ic="mix"></i> <span>Produtor</span></button>
+      <button class="oh-nav-item" data-page="edicao"><i class="oh-ic" data-ic="brilho"></i> <span>Edição Vocal Inteligente</span></button>
+      <button class="oh-nav-item" data-page="songwriter"><i class="oh-ic" data-ic="robo"></i> <span>Songwriter</span></button>
+      <button class="oh-nav-item" data-page="partitura"><i class="oh-ic" data-ic="partitura"></i> <span>Partitura</span></button>
+      <button class="oh-nav-item" data-page="news"><i class="oh-ic" data-ic="jornal"></i> <span>Newsletter</span></button>
+      <button class="oh-nav-item" data-page="singergame"><i class="oh-ic" data-ic="gamepad"></i> <span>Singergame</span></button>
+    </nav>
+    <div class="oh-sidebar-resize" id="sidebarResize"></div>
+  </aside>
+
+  <!-- ═══════════════ CONTEÚDO ═══════════════ -->
+  <main class="oh-content">
+
+    <div class="oh-glow"></div>
+
+    <header class="oh-header">
+      <img src="laranjinha.png" alt="Orange Harmony" class="oh-logo-imagem">
+      <p class="oh-subtitle">Coaching · Vocal · Ritmo · Produção · Criação</p>
+    </header>
+
+    <!-- ── PÁGINA: ESTUDO (Análise Vocal) ── -->
+    <section class="oh-page oh-page-ativa" id="page-estudo">
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="estrela"></i></span> Tom de Referência<i class="oh-title-line"></i></div>
+        <div class="oh-row">
+          <label>Nota de referência (tônica)
+            <select id="notaRef"></select>
+          </label>
+          <label>Escala
+            <select id="escalaTipo"></select>
+          </label>
+          <label>Calibração A4 (Hz)
+            <div class="oh-radio-group">
+              <label class="oh-radio"><input type="radio" name="calib" value="440" checked> 440</label>
+              <label class="oh-radio"><input type="radio" name="calib" value="442"> 442</label>
+            </div>
+          </label>
+        </div>
+        <div class="oh-row">
+          <button class="oh-btn oh-btn-secundario" id="btnTocarNota"><i class="oh-ic" data-ic="play"></i> Tocar nota</button>
+          <button class="oh-btn oh-btn-secundario" id="btnTocarEscala"><i class="oh-ic" data-ic="nota"></i> Tocar escala</button>
+          <label class="oh-radio"><input type="checkbox" id="escalaIdaVolta" checked> ↕ subir e descer</label>
+        </div>
+
+        <div id="escalaInfo" class="oh-escala-info" hidden>
+          <div id="escalaNome" class="oh-escala-nome"></div>
+          <div id="escalaEnarmonico" class="oh-hint"></div>
+          <div id="escalaCarater" class="oh-hint"></div>
+          <div id="escalaNotas" class="oh-chips"></div>
+          <div id="escalaAcordesBloco" hidden>
+            <div class="oh-encaixe-titulo"><i class="oh-ic" data-ic="nota"></i> Acordes que nascem dessa escala</div>
+            <div id="escalaAcordes" class="oh-chips"></div>
+          </div>
+          <div id="escalaDesafio" class="oh-hint"></div>
+        </div>
+        <div class="oh-row" style="margin-top:8px;">
+          <label class="oh-radio"><input type="checkbox" id="avaliarNaEscala"> <i class="oh-ic" data-ic="estrela"></i> Avaliar minha gravação nesta escala (na análise abaixo)</label>
+          <button class="oh-btn oh-btn-secundario oh-btn-mini" id="btnEscalaLaranjinha" type="button"><i class="oh-ic" data-ic="laranja"></i> Perguntar à Laranjinha</button>
+        </div>
+      </div>
+
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="mic"></i></span> Análise Vocal<i class="oh-title-line"></i></div>
+
+        <p class="oh-label-campo"><i class="oh-ic" data-ic="pasta"></i> Subir mídia</p>
+        <label class="oh-dropzone">
+          <input type="file" id="arquivoAudio" accept=".wav,.mp3,.m4a,.ogg,.flac,.aac,.webm">
+          <span class="oh-dropzone-btn"><i class="oh-ic" data-ic="subir"></i> Upload</span>
+          <span class="oh-dropzone-hint">WAV, MP3, M4A, OGG, FLAC, AAC, WEBM</span>
+        </label>
+        <p id="estudoNomeArquivo" class="oh-hint"></p>
+
+        <p class="oh-label-campo"><i class="oh-ic" data-ic="mic"></i> Ou grave agora</p>
+        <div id="gravadorEstudo" class="oh-gravador"></div>
+
+        <div class="oh-row" style="margin-top:16px;">
+          <label>Modo
+            <select id="modo">
+              <option value="completa">Análise completa</option>
+              <option value="cover">Análise de Cover</option>
+            </select>
+          </label>
+          <label><i class="oh-ic" data-ic="estrela"></i> Base da devolutiva
+            <div class="oh-radio-group">
+              <label class="oh-radio"><input type="radio" name="baseDevolutiva" value="detectada" checked> Nota detectada</label>
+              <label class="oh-radio"><input type="radio" name="baseDevolutiva" value="referencia"> Nota de referência</label>
+            </div>
+          </label>
+        </div>
+        <button id="btnAnalisar" class="oh-btn">Analisar</button>
+        <p id="statusMsg" class="oh-status"></p>
+      </div>
+
+      <section id="resultados" class="oh-resultados" hidden>
+        <div class="oh-card">
+          <div class="oh-section-title"><span><i class="oh-ic" data-ic="chart"></i></span> Diagnóstico da sua voz<i class="oh-title-line"></i></div>
+          <div id="metricas" class="oh-metric-grid"></div>
+          <p id="metricasBase" class="oh-hint"></p>
+        </div>
+
+        <div id="notasCard" class="oh-card" hidden>
+          <div class="oh-section-title"><span><i class="oh-ic" data-ic="nota"></i></span> Nota por nota<i class="oh-title-line"></i></div>
+          <p class="oh-hint">Cada nota é medida contra ela mesma, como um afinador: <b>+</b> = agudo, <b>−</b> = grave. Verde = dentro de ±25 cents.</p>
+          <div id="notasChips" class="oh-chips"></div>
+        </div>
+
+        <div id="escalaResultadoCard" class="oh-card" hidden>
+          <div class="oh-section-title"><span><i class="oh-ic" data-ic="nota"></i></span> Sua voz na escala<i class="oh-title-line"></i></div>
+          <div id="escalaResultadoCorpo"></div>
+        </div>
+
+        <div id="devolutivaCard" class="oh-devolutiva-card" hidden>
+          <div class="oh-devolutiva-titulo"><i class="oh-ic" data-ic="brilho"></i> Devolutiva do Professor IA</div>
+          <div id="devolutivaTexto" class="oh-devolutiva-texto"></div>
+        </div>
+
+        <div class="oh-card">
+          <div class="oh-section-title"><span><i class="oh-ic" data-ic="chart"></i></span> Curva de Pitch<i class="oh-title-line"></i></div>
+          <canvas id="curvaPitch" height="220"></canvas>
+        </div>
+
+        <div id="vibratoCard" class="oh-card" hidden>
+          <div class="oh-section-title"><span><i class="oh-ic" data-ic="mix"></i></span> Vibrato<i class="oh-title-line"></i></div>
+          <table id="tabelaVibrato" class="oh-table"></table>
+        </div>
+      </section>
+    </section>
+
+    <!-- ── PÁGINA: GRAVADOR ── -->
+    <section class="oh-page" id="page-gravador">
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="mic"></i></span> Biblioteca<i class="oh-title-line"></i></div>
+        <p class="oh-label-campo">Nome da gravação</p>
+        <input type="text" id="gravadorNomeInput" class="oh-input-texto" placeholder="Ex: Cover Snuff - 23/09">
+
+        <p class="oh-label-campo" style="margin-top:16px;"><i class="oh-ic" data-ic="pasta"></i> Subir um áudio existente</p>
+        <label class="oh-dropzone">
+          <input type="file" id="gravadorArquivo" accept=".wav,.mp3,.m4a,.ogg,.flac,.aac,.webm">
+          <span class="oh-dropzone-btn"><i class="oh-ic" data-ic="subir"></i> Upload</span>
+          <span class="oh-dropzone-hint">WAV, MP3, M4A, OGG, FLAC, AAC, WEBM</span>
+        </label>
+        <p id="gravadorNomeArquivo" class="oh-hint"></p>
+
+        <p class="oh-label-campo" style="margin-top:16px;"><i class="oh-ic" data-ic="mic"></i> Ou grave agora</p>
+        <div id="gravadorPagina" class="oh-gravador"></div>
+        <button id="btnSalvarGravacao" class="oh-btn" style="margin-top:14px;" disabled><i class="oh-ic" data-ic="salvar"></i> Salvar gravação</button>
+        <p id="gravadorStatus" class="oh-status"></p>
+      </div>
+
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="livros"></i></span> Minhas gravações<i class="oh-title-line"></i></div>
+        <div id="listaGravacoes" class="oh-lista-gravacoes">
+          <p class="oh-em-construcao">Carregando…</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PÁGINA: ESTÚDIO / PRODUÇÃO ── -->
+    <section class="oh-page" id="page-producao">
+      <div class="oh-card oh-card-estudio">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="mix"></i></span> Estúdio de Produção<i class="oh-title-line"></i></div>
+
+        <p class="oh-label-campo"><i class="oh-ic" data-ic="pasta"></i> Subir gravação (voz + violão)</p>
+        <label class="oh-dropzone">
+          <input type="file" id="producaoArquivo" accept=".wav,.mp3,.m4a,.ogg,.flac,.aac,.webm">
+          <span class="oh-dropzone-btn"><i class="oh-ic" data-ic="subir"></i> Upload</span>
+          <span class="oh-dropzone-hint">WAV, MP3, M4A, OGG, FLAC, AAC, WEBM</span>
+        </label>
+        <p id="producaoNomeArquivo" class="oh-hint"></p>
+
+        <p class="oh-label-campo"><i class="oh-ic" data-ic="mic"></i> Ou grave agora</p>
+        <div id="gravadorEstudio" class="oh-gravador oh-gravador-grande"></div>
+
+        <div class="oh-row" style="margin-top:16px;">
+          <label><i class="oh-ic" data-ic="nota"></i> Estilo musical
+            <select id="producaoEstiloSelect"></select>
+          </label>
+        </div>
+        <p id="producaoEstiloDescricao" class="oh-hint"></p>
+
+        <div class="oh-row" style="margin-top:6px;">
+          <label><i class="oh-ic" data-ic="relogio"></i> Andamento (BPM) — opcional
+            <input type="number" id="producaoBpm" class="oh-input-texto" min="40" max="220" step="1" placeholder="automático">
+          </label>
+          <label><i class="oh-ic" data-ic="nota"></i> Acordes
+            <select id="producaoAcordes">
+              <option value="melodia">Seguir a minha melodia (automático)</option>
+              <option value="estilo">Usar a sequência fixa do estilo</option>
+            </select>
+          </label>
+        </div>
+        <p class="oh-hint">No modo automático, o app ouve a sua gravação, descobre o tom (maior ou menor) e escolhe os acordes que combinam com as notas que você cantou ou tocou; o baixo, o teclado e os acordes seguem essa harmonia, e a banda toca mais forte ou mais fraca conforme a sua voz. É uma estimativa: se não combinar, tente a sequência fixa do estilo.</p>
+
+        <div class="oh-row" style="margin-top:10px;">
+          <label class="oh-radio"><input type="checkbox" id="producaoComBaixo" checked> Gerar baixo</label>
+          <label class="oh-radio"><input type="checkbox" id="producaoComBateria" checked> Gerar bateria</label>
+          <label class="oh-radio"><input type="checkbox" id="producaoComAcordes" checked> Gerar acordes</label>
+        </div>
+        <div class="oh-row">
+          <label class="oh-radio"><input type="checkbox" id="producaoComTeclado"> <i class="oh-ic" data-ic="piano"></i> Gerar teclado</label>
+          <label class="oh-radio"><input type="checkbox" id="producaoComSolo"> <i class="oh-ic" data-ic="nota"></i> Gerar solo</label>
+        </div>
+        <label class="oh-radio" style="margin-top:6px;">
+          <input type="checkbox" id="producaoQualidadePro" checked>
+          <i class="oh-ic" data-ic="brilho"></i> Qualidade profissional (ducking + reverb de master)
+        </label>
+
+        <p class="oh-label-campo" style="margin-top:16px;"><i class="oh-ic" data-ic="brilho"></i> Ou descreva o que você quer (a IA escolhe as opções acima)</p>
+        <div class="oh-row">
+          <input type="text" id="producaoDescricaoIA" class="oh-input-texto" placeholder="Ex: quero algo animado tipo samba, com solo">
+          <button id="btnInterpretarProducao" class="oh-btn oh-btn-secundario"><i class="oh-ic" data-ic="robo"></i> Aplicar sugestão</button>
+        </div>
+        <p id="producaoStatusIA" class="oh-hint"></p>
+
+        <button id="btnGerarProducao" class="oh-btn" style="margin-top:16px;"><i class="oh-ic" data-ic="mix"></i> Gerar produção</button>
+        <p id="producaoStatus" class="oh-status"></p>
+
+        <div id="producaoResultado" class="oh-resultados" hidden>
+          <p id="producaoInfo" class="oh-hint"></p>
+          <div id="producaoPlayerContainer"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PÁGINA: AVALIAÇÃO (perfil vocal inicial) ── -->
+    <section class="oh-page" id="page-avaliacao">
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="prancheta"></i></span> Avaliação Vocal Inicial<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Esta avaliação mapeia sua voz: extensão, tessitura e classificação vocal. O professor vai usar esse perfil em todas as análises da aba de Estudo.</p>
+
+        <div id="avaliacaoPerfilExistente" class="oh-devolutiva-card" hidden>
+          <div class="oh-devolutiva-titulo"><i class="oh-ic" data-ic="estrela"></i> Você já tem uma avaliação salva</div>
+          <div class="oh-devolutiva-texto">Refazer os exercícios abaixo atualiza o seu perfil.</div>
+        </div>
+
+        <p class="oh-label-campo" style="margin-top:14px;">Sua voz é</p>
+        <div class="oh-row">
+          <label class="oh-radio"><input type="radio" name="avaliacaoVozTipo" value="Masculina" checked> Masculina</label>
+          <label class="oh-radio"><input type="radio" name="avaliacaoVozTipo" value="Feminina"> Feminina</label>
+        </div>
+      </div>
+
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="mic"></i></span> Nota mais GRAVE<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Cante a nota mais grave que conseguir, sustentando por 3 segundos.</p>
+        <div class="oh-gravador" data-exercicio="grave"></div>
+        <p class="oh-status" data-status-exercicio="grave"></p>
+      </div>
+
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="mic"></i></span> Nota mais AGUDA<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Cante a nota mais aguda confortável, sustentando por 3 segundos.</p>
+        <div class="oh-gravador" data-exercicio="aguda"></div>
+        <p class="oh-status" data-status-exercicio="aguda"></p>
+      </div>
+
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="mic"></i></span> Nota confortável<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Cante uma nota no seu tom confortável e sustente por 5 segundos.</p>
+        <div class="oh-gravador" data-exercicio="confortavel"></div>
+        <p class="oh-status" data-status-exercicio="confortavel"></p>
+      </div>
+
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="mic"></i></span> Glissando<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Deslize a voz do grave ao agudo e volte, sem pausas.</p>
+        <div class="oh-gravador" data-exercicio="glissando"></div>
+        <p class="oh-status" data-status-exercicio="glissando"></p>
+      </div>
+
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="mic"></i></span> Frase natural<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Cante uma frase de uma música que você gosta, com voz natural.</p>
+        <div class="oh-gravador" data-exercicio="frase"></div>
+        <p class="oh-status" data-status-exercicio="frase"></p>
+      </div>
+
+      <div class="oh-card">
+        <button id="btnGerarAvaliacao" class="oh-btn" disabled><i class="oh-ic" data-ic="chart"></i> Gerar minha avaliação</button>
+        <p id="avaliacaoStatus" class="oh-status"></p>
+        <div id="avaliacaoResultado" class="oh-metric-grid"></div>
+      </div>
+
+      <div class="oh-card" id="fichaAvaliacaoBloco">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="documento"></i></span> Ficha da avaliação<i class="oh-title-line"></i></div>
+        <p class="oh-hint">A ficha usa a sua última avaliação salva. Escreva o nome do aluno para ele aparecer no papel.</p>
+        <label class="oh-label-campo" for="fichaNome">Nome do aluno</label>
+        <input id="fichaNome" class="oh-input" type="text" maxlength="80" placeholder="Nome para a ficha">
+        <div id="fichaSaida" style="margin-top:14px;"></div>
+        <button id="fichaImprimir" class="oh-btn" style="margin-top:14px;"><i class="oh-ic" data-ic="documento"></i> Imprimir ou salvar em PDF</button>
+      </div>
+    </section>
+    <section class="oh-page" id="page-afinador">
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="nota"></i></span> Afinador<i class="oh-title-line"></i></div>
+        <div class="oh-row">
+          <label>Afinação
+            <select id="afinacaoSelect"></select>
+          </label>
+          <label>Calibração A4
+            <div class="oh-radio-group">
+              <label class="oh-radio"><input type="radio" name="afinadorCalib" value="440" checked> 440</label>
+              <label class="oh-radio"><input type="radio" name="afinadorCalib" value="442"> 442</label>
+            </div>
+          </label>
+        </div>
+        <p id="afinacaoDescricao" class="oh-hint"></p>
+      </div>
+
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="raio"></i></span> Modo agulha<i class="oh-title-line"></i></div>
+        <button id="btnAfinadorToggle" class="oh-btn"><i class="oh-ic" data-ic="mic"></i> Iniciar</button>
+        <div id="afinadorVisual" class="oh-afinador-visual" hidden>
+          <div class="oh-afinador-nota-grande" id="afinadorNotaGrande">—</div>
+          <div class="oh-afinador-freq" id="afinadorFreq">0.0 Hz</div>
+
+          <svg viewBox="0 0 220 134" class="oh-afinador-svg">
+            <defs>
+              <linearGradient id="ohGaugeGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#ef4444"/>
+                <stop offset="30%" stop-color="#eab308"/>
+                <stop offset="50%" stop-color="#22c55e"/>
+                <stop offset="70%" stop-color="#eab308"/>
+                <stop offset="100%" stop-color="#ef4444"/>
+              </linearGradient>
+              <filter id="ohGaugeGlow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="3" result="b"/>
+                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+            </defs>
+            <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="url(#ohGaugeGrad)" stroke-width="8" stroke-linecap="round" opacity="0.9"/>
+            <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2" stroke-linecap="round"/>
+            <g id="afinadorMarcasSvg"></g>
+            <g id="afinadorAgulhaGrupo" transform="rotate(0 110 110)" filter="url(#ohGaugeGlow)">
+              <line x1="110" y1="110" x2="110" y2="40" id="afinadorAgulhaLinha" stroke="#22c55e" stroke-width="4" stroke-linecap="round"/>
+            </g>
+            <circle cx="110" cy="110" r="9" id="afinadorAgulhaBase" fill="#22c55e" filter="url(#ohGaugeGlow)"/>
+            <circle cx="110" cy="110" r="4" fill="#0d0d0d"/>
+          </svg>
+
+          <div class="oh-afinador-status" id="afinadorStatus">—</div>
+
+          <div class="oh-afinador-notas-cromaticas" id="afinadorNotasCromaticas"></div>
+        </div>
+        <p id="afinadorAviso" class="oh-em-construcao" hidden></p>
+        <p id="afinadorErro" class="oh-status"></p>
+      </div>
+    </section>
+    <!-- ── PÁGINA: ACORDES (braço do violão) ── -->
+    <section class="oh-page" id="page-acordes">
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="nota"></i></span> Acordes<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Toque nas casas para montar o acorde. Toque nas marcas <b>acima da pestana</b> para deixar a corda <b>solta ○</b> ou <b>muda ×</b>. O nome aparece ao lado.</p>
+        <div class="oh-acorde-layout">
+          <div class="oh-acorde-braco-col">
+            <div id="acordeBraco" class="oh-acorde-braco"></div>
+            <div class="oh-acorde-controles">
+              <button id="btnAcordeBaseMenos" class="oh-btn oh-btn-secundario oh-btn-mini" title="Descer o braço (casas mais graves)">◀</button>
+              <span id="acordeBaseTexto" class="oh-acorde-base-texto">Casa inicial: 1</span>
+              <button id="btnAcordeBaseMais" class="oh-btn oh-btn-secundario oh-btn-mini" title="Subir o braço (casas mais agudas)"><i class="oh-ic" data-ic="play"></i></button>
+              <button id="btnAcordeLimpar" class="oh-btn oh-btn-secundario oh-btn-mini">🧹 Limpar</button>
+            </div>
+          </div>
+          <div class="oh-acorde-resultado">
+            <div id="acordeNome" class="oh-acorde-nome">—</div>
+            <div id="acordeTipo" class="oh-acorde-tipo">Marque pelo menos 2 notas no braço.</div>
+            <div id="acordeAlternativas" class="oh-hint"></div>
+            <div id="acordeNotas" class="oh-chips"></div>
+            <div class="oh-acorde-acoes">
+              <button id="btnAcordeTocar" class="oh-btn" disabled><i class="oh-ic" data-ic="alto"></i> Tocar acorde</button>
+              <button id="btnAcordeComposicao" class="oh-btn oh-btn-secundario" disabled><i class="oh-ic" data-ic="mais"></i> Usar na composição</button>
+              <button id="btnAcordeLaranjinha" class="oh-btn oh-btn-secundario" disabled><i class="oh-ic" data-ic="laranja"></i> Perguntar à Laranjinha</button>
+            </div>
+            <p id="acordeStatus" class="oh-status"></p>
+            <div id="acordeEncaixe" class="oh-acorde-encaixe"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="oh-card">
+        <div class="oh-section-title"><span>🔎</span> Procurar acorde por nome<i class="oh-title-line"></i></div>
+        <div class="oh-row">
+          <input type="text" id="acordeBusca" class="oh-input-texto" placeholder="Ex: Am7, C7M, F#m, G/B, Dsus4">
+          <button id="btnAcordeBuscar" class="oh-btn">Procurar</button>
+        </div>
+        <p id="acordeBuscaInfo" class="oh-hint"></p>
+        <div id="acordePosicoes" class="oh-acorde-posicoes"></div>
+      </div>
+    </section>
+
+    <!-- ── PÁGINA: NEWSLETTER (Orange News) ── -->
+    <section class="oh-page" id="page-news">
+      <div class="oh-jornal">
+        <header class="oh-jornal-cabeca">
+          <div class="oh-jornal-linha-topo">
+            <span id="jornalEdicao">Edição nº —</span>
+            <span id="jornalData">—</span>
+            <span>Orange Harmony</span>
+          </div>
+          <h1 class="oh-jornal-titulo">Orange <span>News</span></h1>
+          <div class="oh-jornal-lema">O jornal de quem estuda, canta, toca e compõe</div>
+        </header>
+        <div id="jornalCorpo"><p class="oh-jornal-carregando">Preparando a edição de hoje…</p></div>
+      </div>
+    </section>
+
+    <!-- ── PÁGINA: SINGERGAME ── -->
+    <section class="oh-page" id="page-singergame">
+      <div class="oh-card" id="sgConfig">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="gamepad"></i></span> Singergame<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Sua voz guia uma bolinha de luz por um túnel. Cante a nota certa pra atravessar cada anel.</p>
+
+        <div class="oh-row" style="margin-top:10px;">
+          <label>Dificuldade (quão perto da nota você precisa estar)
+            <select id="sgDificuldade">
+              <option value="facil">Fácil — ±75 cents</option>
+              <option value="medio">Médio — ±50 cents</option>
+              <option value="dificil">Difícil — ±25 cents</option>
+            </select>
+          </label>
+        </div>
+        <p class="oh-hint">100 cents = 1 semitom. O <b>afinômetro</b> mostra, em tempo real, o quanto a sua voz está acima ou abaixo da nota. Você precisa ficar dentro da faixa verde durante a passagem do anel.</p>
+        <label class="oh-radio"><input type="checkbox" id="sgQualquerOitava" checked> Aceitar a nota em qualquer oitava (útil se ela estiver fora da sua extensão)</label>
+        <div class="oh-row" style="margin-top:6px;">
+          <button class="oh-btn sg-modo-btn" data-modo="livre"><i class="oh-ic" data-ic="diamante"></i> Modo Livre</button>
+          <button class="oh-btn oh-btn-secundario sg-modo-btn" data-modo="escala"><i class="oh-ic" data-ic="nota"></i> Modo Escala (usa a escala escolhida na aba Estudo)</button>
+        </div>
+        <p id="sgErro" class="oh-status"></p>
+
+        <div class="sg-vocalise">
+          <div class="oh-section-title" style="margin-top:18px;"><span><i class="oh-ic" data-ic="piano"></i></span> Vocalise: eu faço, você copia<i class="oh-title-line"></i></div>
+          <p class="oh-hint">O piano toca um padrão e, em seguida, é a sua vez: repita no mesmo andamento. A cada rodada o padrão sobe meio tom e depois desce. Usa a mesma <b>dificuldade</b> (margem em cents) e a opção de oitava acima. Na sua vez não sai som nenhum, então <b>não precisa de fone de ouvido</b>.</p>
+          <div class="oh-row">
+            <label>Padrão
+              <select id="vzPadrao"></select>
+            </label>
+            <label>Velocidade
+              <select id="vzVelocidade">
+                <option value="lento">Lento (60 BPM)</option>
+                <option value="medio" selected>Médio (90 BPM)</option>
+                <option value="rapido">Rápido (130 BPM)</option>
+              </select>
+            </label>
+          </div>
+          <button class="oh-btn" id="btnVzIniciar" type="button"><i class="oh-ic" data-ic="piano"></i> Começar o Vocalise</button>
+          <p id="vzErro" class="oh-status"></p>
+        </div>
+
+        <div id="sgRecordes" class="sg-recordes"></div>
+      </div>
+
+      <div id="sgJogo" class="oh-card sg-jogo" hidden>
+        <div class="sg-hud-topo">
+          <div class="sg-nota-alvo">Cante um <span id="sgNotaAlvo">—</span></div>
+          <div class="sg-placar">
+            <div id="sgPontos" class="sg-pontos">0</div>
+            <div id="sgCombo" class="sg-combo">combo x0</div>
+          </div>
+        </div>
+        <div class="sg-palco">
+          <canvas id="sgCanvas" width="900" height="620" class="sg-canvas"></canvas>
+          <div id="sgFeedback" class="sg-feedback"></div>
+        </div>
+        <div class="sg-hud-baixo">
+          <span>Anel <span id="sgTotal">0</span> de <span id="sgMeta">20</span></span>
+          <button class="oh-btn oh-btn-secundario oh-btn-mini" id="btnSgCancelar"><i class="oh-ic" data-ic="parar"></i> Encerrar</button>
+        </div>
+      </div>
+
+      <div id="vzJogo" class="oh-card sg-jogo" hidden>
+        <div class="sg-hud-topo">
+          <div class="sg-nota-alvo"><span id="vzRodada">Rodada 1</span></div>
+          <div class="sg-placar">
+            <div id="vzPontos" class="sg-pontos">0</div>
+            <div id="vzCombo" class="sg-combo">combo x0</div>
+          </div>
+        </div>
+        <div class="sg-palco">
+          <canvas id="vzCanvas" width="900" height="420" class="sg-canvas" style="aspect-ratio: 900 / 420;"></canvas>
+        </div>
+        <div class="sg-hud-baixo">
+          <span id="vzStatus">Prepare-se…</span>
+          <button class="oh-btn oh-btn-secundario oh-btn-mini" id="btnVzCancelar" type="button"><i class="oh-ic" data-ic="parar"></i> Encerrar</button>
+        </div>
+      </div>
+
+      <div id="sgFim" class="oh-card" hidden>
+        <div class="oh-section-title"><span>🏁</span> Fim de partida<i class="oh-title-line"></i></div>
+        <div id="sgFimPontos" class="sg-pontos sg-pontos-final">0</div>
+        <p id="sgFimDetalhe" class="oh-hint"></p>
+        <p id="sgFimRecorde" class="oh-hint"></p>
+        <button class="oh-btn" id="btnSgJogarDeNovo">🔁 Jogar de novo</button>
+      </div>
+    </section>
+
+    <!-- ── PÁGINA: HISTÓRICO ── -->
+    <section class="oh-page" id="page-historico">
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="chart"></i></span> Tabela de Evolução/Performance<i class="oh-title-line"></i></div>
+        <div class="oh-tabela-rolante">
+        <table class="oh-table">
+          <thead>
+            <tr><th>Análise</th><th>Data</th><th>Nota</th><th>Desvio (cents)</th><th>Tendência</th><th>% Afinado</th><th></th></tr>
+          </thead>
+          <tbody id="historicoTabelaCorpo"></tbody>
+        </table>
+        </div>
+      </div>
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="chart"></i></span> Evolução da performance<i class="oh-title-line"></i></div>
+        <canvas id="historicoGrafico" height="220"></canvas>
+      </div>
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="documento"></i></span> Relatório Detalhado<i class="oh-title-line"></i></div>
+        <div class="oh-row">
+          <label>Filtrar por análise
+            <select id="historicoFiltroSelect"></select>
+          </label>
+        </div>
+        <div id="historicoDetalhe" class="oh-metric-grid"></div>
+        <div id="historicoDevolutiva" class="oh-devolutiva-card" hidden>
+          <div class="oh-devolutiva-titulo"><i class="oh-ic" data-ic="brilho"></i> Devolutiva do Professor IA</div>
+          <div class="oh-devolutiva-texto"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PÁGINA: COMPOSIÇÕES ── -->
+    <section class="oh-page" id="page-composicoes">
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="nota"></i></span> Crie e salve suas composições<i class="oh-title-line"></i></div>
+        <div class="oh-row">
+          <label>Título da música
+            <input type="text" id="composicaoTitulo" class="oh-input-texto" placeholder="Ex: Minha canção">
+          </label>
+          <label>Tom (opcional)
+            <input type="text" id="composicaoTom" class="oh-input-texto" placeholder="Ex: Am, C, G">
+          </label>
+        </div>
+        <p class="oh-label-campo">Letra com cifras e seções</p>
+        <p class="oh-hint">Use <code>#</code> pra marcar seções (Verso, Refrão, Ponte...) e <code>[Am]</code> pra cifras.</p>
+        <textarea id="composicaoLetra" class="oh-textarea" rows="10" placeholder="# Verso 1&#10;[Am] [F] [C] [G]&#10;Sua letra aqui..."></textarea>
+        <div class="oh-row" style="margin-top:10px;">
+          <button id="btnPreviewComposicao" class="oh-btn oh-btn-secundario"><i class="oh-ic" data-ic="olho"></i> Ver prévia</button>
+          <button id="btnSalvarComposicao" class="oh-btn"><i class="oh-ic" data-ic="salvar"></i> Salvar composição</button>
+        </div>
+        <p id="composicaoStatus" class="oh-status"></p>
+        <div id="composicaoPreview"></div>
+      </div>
+
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="livros"></i></span> Composições salvas<i class="oh-title-line"></i></div>
+        <div class="oh-row">
+          <label>Selecione
+            <select id="composicoesSelect"></select>
+          </label>
+        </div>
+        <div class="oh-row">
+          <button id="btnCarregarComposicao" class="oh-btn oh-btn-secundario"><i class="oh-ic" data-ic="pasta"></i> Carregar</button>
+          <button id="btnExcluirComposicao" class="oh-btn oh-btn-secundario"><i class="oh-ic" data-ic="lixo"></i> Excluir</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PÁGINA: CONVERSOR ── -->
+    <section class="oh-page" id="page-conversor">
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="roda"></i></span> Conversor de formato<i class="oh-title-line"></i></div>
+        <p class="oh-label-campo"><i class="oh-ic" data-ic="pasta"></i> Subir mídia</p>
+        <label class="oh-dropzone">
+          <input type="file" id="conversorArquivo" accept=".wav,.mp3,.m4a,.ogg,.flac,.aac,.webm,.opus,.wma">
+          <span class="oh-dropzone-btn"><i class="oh-ic" data-ic="subir"></i> Upload</span>
+          <span class="oh-dropzone-hint">WAV, MP3, M4A, OGG, FLAC, AAC, WEBM, OPUS, WMA</span>
+        </label>
+        <p id="conversorNomeArquivo" class="oh-hint"></p>
+
+        <p class="oh-label-campo" style="margin-top:14px;">Converter para (pode marcar mais de um)</p>
+        <div class="oh-row">
+          <label class="oh-radio"><input type="checkbox" id="conversorFmtWAV" checked> WAV</label>
+          <label class="oh-radio"><input type="checkbox" id="conversorFmtMP3" checked> MP3</label>
+          <label class="oh-radio"><input type="checkbox" id="conversorFmtFLAC"> FLAC</label>
+          <label class="oh-radio"><input type="checkbox" id="conversorFmtOGG"> OGG</label>
+          <label class="oh-radio"><input type="checkbox" id="conversorFmtM4A"> M4A</label>
+        </div>
+
+        <button id="btnConverter" class="oh-btn" style="margin-top:14px;"><i class="oh-ic" data-ic="roda"></i> Converter</button>
+        <p id="conversorStatus" class="oh-status"></p>
+        <div id="conversorResultados" class="oh-lista-gravacoes" style="margin-top:14px;"></div>
+      </div>
+    </section>
+
+    <!-- ── PÁGINA: EDIÇÃO VOCAL INTELIGENTE ── -->
+    <section class="oh-page" id="page-edicao">
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="brilho"></i></span> Edição Vocal Inteligente<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Escolha os efeitos manualmente, ou peça pra Laranjinha no Estúdio interpretar um comando em texto livre.</p>
+
+        <p class="oh-label-campo">Voz para editar</p>
+        <label class="oh-dropzone">
+          <input type="file" id="edicaoArquivo" accept=".wav,.mp3,.m4a,.ogg,.flac,.aac,.webm">
+          <span class="oh-dropzone-btn"><i class="oh-ic" data-ic="subir"></i> Upload</span>
+          <span class="oh-dropzone-hint">use o áudio isolado, se tiver</span>
+        </label>
+        <p id="edicaoNomeArquivo" class="oh-hint"></p>
+
+        <p class="oh-label-campo"><i class="oh-ic" data-ic="mic"></i> Ou grave agora</p>
+        <div id="edicaoGravador" class="oh-gravador"></div>
+
+        <p class="oh-label-campo" style="margin-top:14px;">Efeitos</p>
+        <div class="oh-row">
+          <label class="oh-radio"><input type="checkbox" id="edicaoReduzirRuido"> Reduzir ruído</label>
+          <label class="oh-radio"><input type="checkbox" id="edicaoNormalizar"> Normalizar volume</label>
+          <label class="oh-radio"><input type="checkbox" id="edicaoEqPresenca"> EQ de presença</label>
+        </div>
+        <div class="oh-row">
+          <label class="oh-radio"><input type="checkbox" id="edicaoCompressao"> Compressão suave</label>
+          <label class="oh-radio"><input type="checkbox" id="edicaoRemoverSibilancia"> Reduzir sibilância</label>
+          <label class="oh-radio"><input type="checkbox" id="edicaoReverbLeve"> Reverb leve</label>
+        </div>
+        <div class="oh-row">
+          <label>Ajuste de tom (semitons)
+            <input type="number" id="edicaoAjustarTom" class="oh-input-texto" value="0" step="0.5" min="-12" max="12">
+          </label>
+        </div>
+
+        <button id="btnAplicarEdicao" class="oh-btn" style="margin-top:10px;"><i class="oh-ic" data-ic="brilho"></i> Aplicar edição</button>
+        <p id="edicaoStatus" class="oh-status"></p>
+
+        <p class="oh-label-campo" style="margin-top:18px;"><i class="oh-ic" data-ic="robo"></i> Ou descreva o que você quer, em português</p>
+        <div class="oh-row">
+          <input type="text" id="edicaoComandoIA" class="oh-input-texto" placeholder="Ex: limpa o ruído e deixa mais grave">
+          <button id="btnAplicarComandoIA" class="oh-btn oh-btn-secundario"><i class="oh-ic" data-ic="brilho"></i> Aplicar com IA</button>
+        </div>
+
+        <div id="edicaoResultado" class="oh-resultados" hidden>
+          <p id="edicaoAcoesTexto" class="oh-hint"></p>
+          <div id="edicaoPlayerContainer"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PÁGINA: SONGWRITER ── -->
+    <section class="oh-page" id="page-songwriter">
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="robo"></i></span> Songwriter<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Escreva o tema, escolha o estilo, e deixe a IA compor a letra e o prompt musical pra você.</p>
+        <div class="oh-row">
+          <label>Tema da música
+            <input type="text" id="songwriterTema" class="oh-input-texto" placeholder="Ex: uma despedida numa noite de chuva">
+          </label>
+          <label>Estilo
+            <select id="songwriterEstilo"></select>
+          </label>
+        </div>
+        <label class="oh-radio"><input type="checkbox" id="songwriterUsarContexto"> <i class="oh-ic" data-ic="estrela"></i> Usar tom da última análise no prompt musical</label>
+        <button id="btnGerarLetra" class="oh-btn" style="margin-top:10px;">✍️ Gerar letra</button>
+        <p id="songwriterStatusLetra" class="oh-status"></p>
+      </div>
+
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="mic"></i></span> Áudio de referência (opcional)<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Suba ou grave um trecho da sua voz (opcional, fica disponível pra você usar como referência).</p>
+        <label class="oh-dropzone">
+          <input type="file" id="songwriterArquivo" accept=".wav,.mp3,.m4a,.ogg,.flac,.aac,.webm">
+          <span class="oh-dropzone-btn"><i class="oh-ic" data-ic="subir"></i> Upload</span>
+          <span class="oh-dropzone-hint">WAV, MP3, M4A, OGG, FLAC, AAC, WEBM</span>
+        </label>
+        <p id="songwriterNomeArquivo" class="oh-hint"></p>
+        <p class="oh-label-campo" style="margin-top:14px;"><i class="oh-ic" data-ic="mic"></i> Ou grave agora</p>
+        <div id="songwriterGravador" class="oh-gravador"></div>
+      </div>
+
+      <div class="oh-card" id="songwriterCoverCard">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="nota"></i></span> Criar a partir da minha gravação (fiel à melodia)<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Usa o <b>áudio de referência</b> acima (upload ou gravação). O app extrai a <b>melodia</b> como partitura, você revisa, escreve a letra e gera uma versão com banda seguindo as <b>suas notas</b>. A voz e o arranjo saem novos: a sua entonação e a batida do violão não são copiadas.</p>
+        <div class="oh-row" style="margin-top:10px; align-items:flex-end;">
+          <label>Idioma cantado na gravação
+            <select id="songwriterCoverIdioma">
+              <option value="Auto-detect">Detectar sozinho</option>
+              <option value="Spanish">Espanhol (o mais próximo do português)</option>
+              <option value="English">Inglês</option>
+              <option value="Chinese">Chinês</option>
+              <option value="Cantonese">Cantonês</option>
+              <option value="Japanese">Japonês</option>
+              <option value="Korean">Coreano</option>
+            </select>
+          </label>
+          <button id="btnExtrairMelodia" class="oh-btn"><i class="oh-ic" data-ic="fone"></i> Extrair a melodia da gravação</button>
+        </div>
+        <p id="songwriterStatusCover" class="oh-status"></p>
+        <div id="songwriterCoverBloco" hidden>
+          <p class="oh-label-campo"><i class="oh-ic" data-ic="piano"></i> Melodia (ABC) — pode revisar e editar</p>
+          <textarea id="songwriterAbcTexto" class="oh-textarea" rows="9" spellcheck="false" style="font-family:monospace; font-size:0.82rem;"></textarea>
+          <p id="songwriterCoverDica" class="oh-hint"></p>
+          <div id="songwriterCoverModeloBox" hidden>
+            <p class="oh-label-campo" style="margin-top:14px;"><i class="oh-ic" data-ic="documento"></i> Letra reconhecida (use como modelo de quantos versos cabem na melodia)</p>
+            <textarea id="songwriterLetraModelo" class="oh-textarea" rows="5" readonly></textarea>
+          </div>
+          <p class="oh-label-campo" style="margin-top:14px;"><i class="oh-ic" data-ic="mix"></i> Estilo da nova versão (em inglês)</p>
+          <textarea id="songwriterCoverEstilo" class="oh-textarea" rows="3" placeholder="Ex: pop rock, male vocal, drums, bass, keyboards, backing vocals, warm"></textarea>
+          <div class="oh-row" style="margin-top:10px; align-items:flex-end;">
+            <label>Qualidade
+              <select id="songwriterCoverQualidade">
+                <option value="16">Rápida (16 passos)</option>
+                <option value="32">Melhor (32 passos, demora mais)</option>
+              </select>
+            </label>
+            <button id="btnGerarCover" class="oh-btn"><i class="oh-ic" data-ic="mix"></i> Gerar versão com banda (mesma melodia)</button>
+          </div>
+          <div id="songwriterCoverResultado" hidden></div>
+        </div>
+      </div>
+
+      <div class="oh-card" id="songwriterLetraCard" hidden>
+        <div class="oh-section-title"><span>📝</span> Letra gerada<i class="oh-title-line"></i></div>
+        <textarea id="songwriterLetraTexto" class="oh-textarea" rows="14"></textarea>
+        <div class="oh-row" style="margin-top:10px;">
+          <button id="btnSalvarComoComposicao" class="oh-btn oh-btn-secundario"><i class="oh-ic" data-ic="salvar"></i> Salvar como composição</button>
+          <button id="btnGerarPromptMusical" class="oh-btn"><i class="oh-ic" data-ic="nota"></i> Gerar prompt musical</button>
+        </div>
+        <p id="songwriterStatusPrompt" class="oh-status"></p>
+      </div>
+
+      <div class="oh-card" id="songwriterPromptCard" hidden>
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="piano"></i></span> Prompt musical (pra IA de música)<i class="oh-title-line"></i></div>
+        <p class="oh-hint">Prompt em inglês, pronto pra colar em geradores de música por IA (Suno, YuE, MusicGen...).</p>
+        <textarea id="songwriterPromptTexto" class="oh-textarea" rows="6"></textarea>
+        <div class="oh-row" style="margin-top:10px;">
+          <button id="btnCopiarPrompt" class="oh-btn oh-btn-secundario"><i class="oh-ic" data-ic="prancheta"></i> Copiar prompt</button>
+          <button id="btnGerarMusica" class="oh-btn"><i class="oh-ic" data-ic="nota"></i> Gerar música (Hugging Face)</button>
+        </div>
+        <p id="songwriterStatusMusica" class="oh-status"></p>
+        <div id="songwriterMusicaResultado" hidden></div>
+      </div>
+    </section>
+
+    <section class="oh-page" id="page-partitura">
+      <div class="oh-card">
+        <div class="oh-section-title"><span><i class="oh-ic" data-ic="partitura"></i></span> Partitura<i class="oh-title-line"></i></div>
+        <p class="oh-hint">A partitura vem do Songwriter. Corrija o texto ABC aqui, ouça a melodia e só depois envie para a geração.</p>
+        <p id="partituraStatus" class="oh-hint" data-tipo="info" style="margin:6px 0 10px;">Aguardando partitura.</p>
+        <div class="oh-partitura-timbre">
+          <label for="partituraTimbre">Timbre</label>
+          <select id="partituraTimbre" class="oh-select"></select>
+        </div>
+        <div id="partituraTransporte" class="oh-partitura-transporte"></div>
+        <div class="oh-partitura-acoes">
+          <button id="partituraSalvar" class="oh-btn oh-btn-secundario" type="button">Salvar correção</button>
+          <button id="partituraRestaurar" class="oh-btn oh-btn-secundario" type="button">Restaurar original</button>
+          <button id="partituraSongwriter" class="oh-btn" type="button">Usar no Songwriter</button>
+        </div>
+        <div id="partituraArea" class="partitura-area">
+          <div id="partituraPapel" class="partitura-papel">
+            <div id="partituraSvg"></div>
+          </div>
+          <div id="partituraCaixa" class="partitura-caixa" hidden>
+            <div class="partitura-caixa-topo">
+              <span id="partituraCaixaNota"></span>
+              <button id="partituraCaixaFechar" class="partitura-caixa-x" type="button" aria-label="Fechar">×</button>
+            </div>
+            <div class="partitura-caixa-botoes">
+              <button id="partituraVoltar" class="partitura-caixa-btn" type="button" title="Nota anterior" aria-label="Nota anterior">⏮</button>
+              <button id="partituraPausar" class="partitura-caixa-btn" type="button" title="Pausar" aria-label="Pausar">⏸</button>
+              <button id="partituraTocarDaqui" class="partitura-caixa-btn" type="button" title="Tocar a partir desta nota" aria-label="Tocar daqui">▶</button>
+              <button id="partituraAvancar" class="partitura-caixa-btn" type="button" title="Próxima nota" aria-label="Próxima nota">⏭</button>
+            </div>
+            <div class="partitura-caixa-botoes">
+              <button id="partituraSubir" class="oh-btn oh-btn-secundario" type="button">↑ Subir</button>
+              <button id="partituraDescer" class="oh-btn oh-btn-secundario" type="button">↓ Descer</button>
+              <button id="partituraDesfazer" class="oh-btn oh-btn-secundario" type="button">Desfazer</button>
+            </div>
+          </div>
+        </div>
+        <details class="oh-partitura-editor">
+          <summary>Editar texto ABC</summary>
+          <textarea id="partituraAbc" rows="10" spellcheck="false" placeholder="X:1&#10;T:Minha música&#10;M:4/4&#10;L:1/8&#10;K:C&#10;C D E F | G2 E2 C4 |"></textarea>
+        </details>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Botões flutuantes -->
+<button class="oh-fab oh-fab-laranjinha" id="fabLaranjinha" title="Abrir Laranjinha"></button>
+<button class="oh-fab oh-fab-estudio" id="fabEstudio" title="Abrir Estúdio"></button>
+
+<!-- Painel de chat da Laranjinha -->
+<div class="oh-laranjinha-painel" id="laranjinhaPainel" hidden>
+  <div class="oh-laranjinha-resize" id="laranjinhaResize"></div>
+  <div class="oh-chat-header">
+    <img src="laranjinha.png" alt="Laranjinha" class="oh-chat-avatar">
+    <span class="oh-chat-titulo">Laranjinha</span>
+    <button class="oh-chat-fechar" id="btnFecharLaranjinha">✕</button>
+  </div>
+  <div class="oh-chat-conversas-barra">
+    <select id="laranjinhaChatSelect" class="oh-chat-select"></select>
+    <button id="btnNovoChat" class="oh-btn-icone" title="Nova conversa"><i class="oh-ic" data-ic="mais"></i></button>
+    <button id="btnRenomearChat" class="oh-btn-icone" title="Renomear conversa"><i class="oh-ic" data-ic="lapis"></i></button>
+    <button id="btnExcluirChat" class="oh-btn-icone oh-btn-excluir" title="Excluir conversa"><i class="oh-ic" data-ic="lixo"></i></button>
+  </div>
+  <div class="oh-chat-mensagens" id="laranjinhaMensagens">
+    <div class="oh-chat-boasvindas">Oi! Eu sou a Laranjinha <i class="oh-ic" data-ic="laranja"></i> Posso ouvir suas gravações, avaliar seu canto, gerar produções, aplicar edição vocal, salvar composições, renomear ou excluir gravações — é só pedir! Eu também lembro de tudo que você já me contou em outras conversas.</div>
+  </div>
+  <p class="oh-chat-voz-aviso" id="laranjinhaVozAviso" role="status" hidden></p>
+  <div class="oh-chat-input-area">
+    <textarea id="laranjinhaInput" placeholder="Escreva sua mensagem..." rows="1"></textarea>
+    <button id="btnMicLaranjinha" class="oh-chat-mic" type="button" title="Falar para escrever (ditado por voz)" aria-label="Ditado por voz" aria-pressed="false"><i class="oh-ic" data-ic="mic"></i></button>
+    <button id="btnEnviarLaranjinha" class="oh-chat-enviar">➤</button>
+  </div>
+</div>
+
+<!-- Painel do Orange Studio -->
+<div class="oh-studio-painel" id="studioPainel" hidden>
+  <div class="oh-studio-conteudo">
+
+    <!-- Barra de transporte, no estilo DAW -->
+    <div class="oh-studio-topbar">
+      <div class="oh-studio-titulo-bloco">
+        <img src="studio.png" alt="Orange Studio" class="oh-studio-avatar">
+        <div>
+          <div class="oh-studio-titulo">Orange Studio</div>
+          <div class="oh-studio-subtitulo" id="studioInfoProjeto">Nenhum áudio carregado</div>
+        </div>
+      </div>
+      <div class="oh-studio-transporte" id="studioTransporte" hidden>
+        <button id="studioBtnPlay" class="oh-studio-transp-btn" title="Tocar/Pausar"><i class="oh-ic" data-ic="play"></i></button>
+        <button id="studioBtnStop" class="oh-studio-transp-btn" title="Parar"><i class="oh-ic" data-ic="parar"></i></button>
+        <span id="studioTempo" class="oh-studio-tempo">0:00 / 0:00</span>
+      </div>
+      <button class="oh-chat-fechar" id="btnFecharStudio">✕</button>
+    </div>
+
+    <!-- Configuração inicial: áudio de entrada -->
+    <div class="oh-studio-setup" id="studioSetup">
+      <!-- Card do separador: só aparece quando este servidor não tem o Demucs (Render grátis).
+           A separação roda no Colab; o app descobre sozinho se ele está ligado. -->
+      <div class="oh-colab-card" id="studioColabCard" hidden>
+        <div class="oh-colab-arte"><svg viewBox="0 0 240 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Uma música sendo separada em voz e instrumental"><rect x="8" y="44" width="5" height="21" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="16" y="34" width="5" height="43" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="24" y="35" width="5" height="40" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="32" y="48" width="5" height="14" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="40" y="40" width="5" height="29" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="48" y="33" width="5" height="44" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="56" y="37" width="5" height="36" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="64" y="32" width="5" height="46" rx="2.5" fill="#9ca3af" opacity="1.0"/><rect x="72" y="34" width="5" height="43" rx="2.5" fill="#9ca3af" opacity="1.0"/><path d="M92 55 C 110 55, 108 30, 128 30 M92 55 C 110 55, 108 80, 128 80" stroke="#f97316" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".85"/><path d="M92 55 C 110 55, 108 80, 128 80" stroke="#22d3ee" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".85"/><rect x="136" y="26" width="5" height="8" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="144" y="18" width="5" height="25" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="152" y="27" width="5" height="6" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="160" y="14" width="5" height="32" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="168" y="20" width="5" height="21" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="176" y="23" width="5" height="14" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="184" y="18" width="5" height="23" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="192" y="24" width="5" height="13" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="200" y="24" width="5" height="12" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="208" y="16" width="5" height="28" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="216" y="20" width="5" height="21" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="224" y="18" width="5" height="23" rx="2.5" fill="#f97316" opacity="1.0"/><rect x="136" y="64" width="5" height="32" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="144" y="68" width="5" height="23" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="152" y="70" width="5" height="21" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="160" y="71" width="5" height="18" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="168" y="67" width="5" height="26" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="176" y="64" width="5" height="33" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="184" y="75" width="5" height="10" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="192" y="74" width="5" height="13" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="200" y="67" width="5" height="26" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="208" y="75" width="5" height="10" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="216" y="64" width="5" height="33" rx="2.5" fill="#22d3ee" opacity="1.0"/><rect x="224" y="69" width="5" height="22" rx="2.5" fill="#22d3ee" opacity="1.0"/><text x="136" y="10" font-size="9" fill="#f97316" font-family="Baloo 2,sans-serif" font-weight="700">VOZ</text><text x="136" y="108" font-size="9" fill="#22d3ee" font-family="Baloo 2,sans-serif" font-weight="700">INSTRUMENTAL</text></svg></div>
+        <div class="oh-colab-corpo">
+          <div class="oh-colab-titulo">
+            <strong>Separador de stems</strong>
+            <span id="studioColabPill" class="oh-pill oh-pill-off">⚪ Desligado</span>
+          </div>
+          <p id="studioColabTexto" class="oh-hint"></p>
+          <ol id="studioColabPassos" class="oh-colab-passos">
+            <li><b>1</b> Abra o separador no Colab</li>
+            <li><b>2</b> Menu <em>Ambiente de execução → Executar tudo</em></li>
+            <li><b>3</b> Volte aqui — o card fica verde sozinho</li>
+          </ol>
+          <a id="studioColabLink" class="oh-btn oh-btn-link" href="#" target="_blank" rel="noopener">🚀 Abrir o separador no Colab</a>
+        </div>
+      </div>
+
+      <p class="oh-label-campo">Áudio pra separar</p>
+      <label class="oh-dropzone">
+        <input type="file" id="studioArquivo" accept=".wav,.mp3,.m4a,.ogg,.flac,.webm">
+        <span class="oh-dropzone-btn"><i class="oh-ic" data-ic="subir"></i> Upload</span>
+        <span class="oh-dropzone-hint">ou grave abaixo</span>
+      </label>
+      <p id="studioNomeArquivo" class="oh-hint"></p>
+      <div id="studioGravador" class="oh-gravador"></div>
+
+      <button id="btnSepararStems" class="oh-btn" style="margin-top:14px;"><i class="oh-ic" data-ic="nota"></i> Separar stems</button>
+      <p id="studioStatus" class="oh-status"></p>
+
+      <!-- Progresso da separação via Colab -->
+      <ol class="oh-progresso" id="studioProgresso" hidden>
+        <li data-etapa="enviando"><i></i>Enviando</li>
+        <li data-etapa="fila"><i></i>Na fila</li>
+        <li data-etapa="separando"><i></i>Separando</li>
+        <li data-etapa="baixando"><i></i>Baixando</li>
+      </ol>
+    </div>
+
+    <!-- Timeline com as faixas (aparece depois da separação) -->
+    <div class="oh-studio-timeline" id="studioTimeline" hidden>
+      <div class="oh-studio-faixa" data-faixa="vocal">
+        <div class="oh-studio-faixa-cabecalho">
+          <input type="text" class="oh-studio-faixa-nome-input" data-nome-faixa="vocal" value="🎙️ Vocals">
+          <div class="oh-studio-faixa-controles">
+            <button class="oh-studio-mini-btn" data-mute="vocal" title="Mudo">M</button>
+            <button class="oh-studio-mini-btn" data-solo="vocal" title="Solo">S</button>
+            <input type="range" class="oh-studio-volume" data-vol="vocal" min="0" max="1" step="0.01" value="1">
+          </div>
+        </div>
+        <div class="oh-studio-waveform-wrap">
+          <canvas class="oh-studio-waveform" id="waveformVocal"></canvas>
+          <div class="oh-studio-playhead" data-playhead="vocal"></div>
+        </div>
+        <div class="oh-studio-faixa-edicao">
+          <label>Início (s) <input type="number" class="oh-studio-tempo-input" data-corte-inicio="vocal" min="0" step="0.1" value="0"></label>
+          <label>Fim (s) <input type="number" class="oh-studio-tempo-input" data-corte-fim="vocal" min="0" step="0.1"></label>
+          <button class="oh-btn oh-btn-secundario oh-studio-btn-mini" data-acao-cortar="vocal"><i class="oh-ic" data-ic="tesoura"></i> Cortar</button>
+          <label>Deslocar (s) <input type="number" class="oh-studio-tempo-input" data-deslocar-valor="vocal" step="0.1" value="0"></label>
+          <button class="oh-btn oh-btn-secundario oh-studio-btn-mini" data-acao-deslocar="vocal">↔️ Aplicar</button>
+          <label class="oh-btn oh-btn-secundario oh-studio-btn-mini oh-studio-upload-mini"><i class="oh-ic" data-ic="pasta"></i> Substituir
+            <input type="file" data-upload-stem="vocal" accept=".wav,.mp3,.m4a,.ogg,.flac" style="display:none;">
+          </label>
+          <button class="oh-btn oh-btn-secundario oh-studio-btn-mini" data-acao-desfazer="vocal"><i class="oh-ic" data-ic="desfazer"></i> Desfazer</button>
+        </div>
+      </div>
+
+      <div class="oh-studio-faixa" data-faixa="instrumental">
+        <div class="oh-studio-faixa-cabecalho">
+          <input type="text" class="oh-studio-faixa-nome-input" data-nome-faixa="instrumental" value="🎼 Instrumental">
+          <div class="oh-studio-faixa-controles">
+            <button class="oh-studio-mini-btn" data-mute="instrumental" title="Mudo">M</button>
+            <button class="oh-studio-mini-btn" data-solo="instrumental" title="Solo">S</button>
+            <input type="range" class="oh-studio-volume" data-vol="instrumental" min="0" max="1" step="0.01" value="1">
+          </div>
+        </div>
+        <div class="oh-studio-waveform-wrap">
+          <canvas class="oh-studio-waveform" id="waveformInstrumental"></canvas>
+          <div class="oh-studio-playhead" data-playhead="instrumental"></div>
+        </div>
+        <div class="oh-studio-faixa-edicao">
+          <label>Início (s) <input type="number" class="oh-studio-tempo-input" data-corte-inicio="instrumental" min="0" step="0.1" value="0"></label>
+          <label>Fim (s) <input type="number" class="oh-studio-tempo-input" data-corte-fim="instrumental" min="0" step="0.1"></label>
+          <button class="oh-btn oh-btn-secundario oh-studio-btn-mini" data-acao-cortar="instrumental"><i class="oh-ic" data-ic="tesoura"></i> Cortar</button>
+          <label>Deslocar (s) <input type="number" class="oh-studio-tempo-input" data-deslocar-valor="instrumental" step="0.1" value="0"></label>
+          <button class="oh-btn oh-btn-secundario oh-studio-btn-mini" data-acao-deslocar="instrumental">↔️ Aplicar</button>
+          <label class="oh-btn oh-btn-secundario oh-studio-btn-mini oh-studio-upload-mini"><i class="oh-ic" data-ic="pasta"></i> Substituir
+            <input type="file" data-upload-stem="instrumental" accept=".wav,.mp3,.m4a,.ogg,.flac" style="display:none;">
+          </label>
+          <button class="oh-btn oh-btn-secundario oh-studio-btn-mini" data-acao-desfazer="instrumental"><i class="oh-ic" data-ic="desfazer"></i> Desfazer</button>
+        </div>
+      </div>
+
+      <div class="oh-studio-faixa" data-faixa="original">
+        <div class="oh-studio-faixa-cabecalho">
+          <span class="oh-studio-faixa-nome"><i class="oh-ic" data-ic="fone"></i> Original (referência)</span>
+          <div class="oh-studio-faixa-controles">
+            <button class="oh-studio-mini-btn oh-studio-mini-btn-ativo" data-mute="original" title="Mudo">M</button>
+            <button class="oh-studio-mini-btn" data-solo="original" title="Solo">S</button>
+            <input type="range" class="oh-studio-volume" data-vol="original" min="0" max="1" step="0.01" value="1">
+          </div>
+        </div>
+        <div class="oh-studio-waveform-wrap">
+          <canvas class="oh-studio-waveform oh-studio-waveform-muted" id="waveformOriginal"></canvas>
+          <div class="oh-studio-playhead" data-playhead="original"></div>
+        </div>
+      </div>
+
+      <div class="oh-studio-downloads" id="studioDownloads"></div>
+    </div>
+
+    <!-- Botão flutuante do agente, ancorado dentro do próprio Estúdio -->
+    <button class="oh-studio-fab-agente" id="btnAbrirChatEstudio" title="Agente do Estúdio"><i class="oh-ic" data-ic="brilho"></i></button>
+
+    <!-- Chat do agente, recolhido por padrão -->
+    <div class="oh-studio-chat-painel" id="studioChatPainel" hidden>
+      <div class="oh-chat-header">
+        <img src="laranjinha.png" alt="Agente" class="oh-chat-avatar">
+        <span class="oh-chat-titulo">Agente do Estúdio</span>
+        <button class="oh-chat-fechar" id="btnFecharChatEstudio">✕</button>
+      </div>
+      <div class="oh-row" style="padding: 10px 14px 0;">
+        <label>Faixa ativa
+          <select id="studioFaixaSelect">
+            <option value="vocal">Vocal</option>
+            <option value="instrumental">Instrumental</option>
+          </select>
+        </label>
+      </div>
+      <div class="oh-chat-mensagens oh-chat-mensagens-estudio" id="studioMensagens">
+        <div class="oh-chat-boasvindas">Separe os stems, escolha uma faixa e me diga o que quer ajustar — "limpa o ruído do vocal", por exemplo.</div>
+      </div>
+      <div class="oh-chat-input-area">
+        <textarea id="studioComandoInput" placeholder="Ex: limpa o ruído e deixa mais grave" rows="1"></textarea>
+        <button id="btnEnviarComandoStudio" class="oh-chat-enviar">➤</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="icones.js?v=6"></script>
+<script src="transposicao.js?v=6"></script>
+<script src="player.js?v=6"></script>
+<script src="recorder.js?v=6"></script>
+<script src="app.js?v=6"></script>
+<script src="afinador.js?v=6"></script>
+<script src="historico.js?v=6"></script>
+<script src="fichaAvaliacao.js?v=6"></script>
+<script src="composicoes.js"></script>
+<script src="conversor.js"></script>
+<script src="producao.js"></script>
+<script src="edicao.js"></script>
+<script src="avaliacao.js"></script>
+<script src="laranjinha.js"></script>
+<script src="estudio.js"></script>
+<script src="abcjs-basic-min.js?v=6"></script>
+<script src="songwriter.js?v=6"></script>
+<script src="partitura.js?v=6"></script>
+<script src="acordes.js"></script>
+<script src="news.js"></script>
+<script src="singergame.js"></script>
+<script src="vocalise.js"></script>
+<script src="biblioteca_picker.js"></script>
+<script src="miniplayer.js?v=6"></script>
+</body>
+</html>

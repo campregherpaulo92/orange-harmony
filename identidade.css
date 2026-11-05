@@ -1,0 +1,402 @@
+/* ═══════════════ IDENTIDADE VISUAL: ajustes de fonte e sem caixas cinza ═══════════════
+   Carregar DEPOIS do styles.css no index.html:
+   <link rel="stylesheet" href="identidade.css">
+   Para desfazer: remover essa linha. Nada do styles.css foi alterado. */
+
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap");
+
+/* Fonte de títulos e botões: Bricolage Grotesque */
+.oh-section-title,
+.oh-bib-titulo,
+.oh-bib-nome,
+.oh-btn,
+.oh-btn-secundario,
+.oh-dropzone-btn,
+.oh-bib-abrir,
+.oh-bib-botao,
+.oh-nav-item,
+.oh-metric-value,
+.oh-table th,
+.oh-rec-status,
+.oh-gravacao-nome,
+.oh-bib-botao-sec,
+h1, h2, h3 {
+  font-family: 'Bricolage Grotesque', sans-serif;
+}
+.oh-section-title,
+.oh-bib-titulo,
+h1, h2, h3 {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.oh-btn,
+.oh-btn-secundario,
+.oh-dropzone-btn,
+.oh-bib-abrir,
+.oh-bib-botao,
+.oh-bib-botao-sec {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Sem caixas cinza: botões secundários viram contorno laranja fino */
+.oh-btn-secundario {
+  background: transparent;
+  color: var(--oh-orange);
+  border: 1px solid rgba(249, 115, 22, 0.6);
+  box-shadow: none;
+  border-radius: 999px;
+}
+.oh-btn-secundario:hover {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: var(--oh-orange);
+  transform: none;
+  box-shadow: none;
+}
+
+/* Botão "Upload" e "Escolher da biblioteca": só contorno laranja, sem fundo */
+.oh-dropzone-btn,
+.oh-bib-abrir {
+  background: transparent;
+  color: var(--oh-orange);
+  border: 1px solid rgba(249, 115, 22, 0.6);
+  border-radius: 999px;
+}
+.oh-bib-abrir:hover,
+.oh-dropzone-btn:hover {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: var(--oh-orange);
+}
+
+/* Área de envio: fundo removido, tracejado laranja fino */
+.oh-dropzone {
+  background: transparent;
+  border: 1px dashed rgba(249, 115, 22, 0.35);
+  border-radius: 14px;
+}
+
+/* "Subir e descer": texto limpo, sem caixa */
+.oh-radio {
+  background: transparent !important;
+  border: none !important;
+  color: var(--oh-orange) !important;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 700 !important;
+}
+
+/* Janela da biblioteca: fundo sem o cinza chapado */
+.oh-bib-item {
+  background: transparent;
+  border-color: rgba(249, 115, 22, 0.25);
+}
+.oh-bib-botao-sec {
+  background: transparent;
+  color: var(--oh-orange);
+  border: 1px solid rgba(249, 115, 22, 0.6);
+}
+.oh-bib-fechar {
+  background: transparent;
+  border-color: rgba(249, 115, 22, 0.4);
+}
+
+/* ═══════════════ MINI PLAYER: ícones próprios (círculo laranja, silhueta preta) ═══════════════ */
+.oh-mp-btn {
+  width: 40px; height: 40px; min-width: 40px; padding: 0;
+  display: inline-grid; place-items: center;
+  border: 1px solid rgba(255, 138, 42, 0.25);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffa04d, #f26b10);
+  color: #0d0a08;
+  box-shadow: 0 4px 14px rgba(242, 107, 16, 0.25);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.oh-mp-btn:hover { background: radial-gradient(circle at 35% 30%, #ffb070, #f26b10); transform: translateY(-1px); }
+.oh-mp-btn svg { width: 20px; height: 20px; fill: #0d0a08; display: block; }
+.oh-mp-btn svg path[fill="none"], .oh-mp-btn svg circle + path { fill: none; }
+.oh-mp-btn .oh-mp-icone-svg, .oh-mp-btn[class*="oh-mp-velocidade"] { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: 0.8rem; }
+.oh-mp-play { width: 48px; height: 48px; min-width: 48px; }
+.oh-mp-play svg { width: 22px; height: 22px; }
+.oh-mp-btn.oh-mp-ligado { box-shadow: 0 0 0 2px #ffb070, 0 0 16px rgba(255, 138, 42, 0.55); }
+.oh-mp-btn:focus-visible { outline: 2px solid #ffb070; outline-offset: 2px; }
+
+/* Cabeçalho e botões de janela */
+.oh-mp-icone-svg { width: 28px; height: 28px; border-radius: 50%; display: inline-grid; place-items: center; background: radial-gradient(circle at 35% 30%, #ffa04d, #f26b10); color: #0d0a08; }
+.oh-mp-icone-svg svg { width: 16px; height: 16px; }
+.oh-mp-minimizar svg, .oh-mp-fechar svg { width: 14px; height: 14px; display: block; margin: auto; }
+.oh-mp-minimizar, .oh-mp-fechar { display: inline-grid; place-items: center; color: var(--oh-orange); border-color: rgba(249, 115, 22, 0.45); }
+
+/* ═══════════════ ÍCONES PRÓPRIOS (icones.js) — círculo laranja, silhueta preta ═══════════════ */
+.oh-ic {
+  display: inline-grid; place-items: center;
+  width: 1.45em; height: 1.45em; min-width: 1.45em;
+  margin: 0 0.28em 0 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffa04d, #f26b10);
+  color: #0a0a0a;
+  vertical-align: -0.28em;
+  font-style: normal; line-height: 1;
+  box-shadow: 0 2px 8px rgba(242, 107, 16, 0.25);
+}
+.oh-ic svg { width: 62%; height: 62%; fill: #0a0a0a; display: block; }
+.oh-ic svg path[fill="none"], .oh-ic svg circle[fill="none"] { fill: none; }
+/* ícones dentro de botões ou títulos acompanham o tamanho do texto */
+.oh-btn .oh-ic, .oh-btn-secundario .oh-ic { width: 1.35em; height: 1.35em; min-width: 1.35em; }
+.oh-section-title .oh-ic { width: 1.6em; height: 1.6em; min-width: 1.6em; }
+
+/* ═══════════════ BARRA DE SOM (player embutido, player.js) ═══════════════ */
+.oh-player-play,
+.oh-player-mute,
+.oh-player-download {
+  display: inline-grid; place-items: center;
+  width: 38px; height: 38px; min-width: 38px; padding: 0;
+  border: none; border-radius: 50%; cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, #ffa04d, #f26b10);
+  color: #0a0a0a;
+  box-shadow: 0 4px 14px rgba(242, 107, 16, 0.25);
+  text-decoration: none;
+}
+.oh-player-play:hover,
+.oh-player-mute:hover,
+.oh-player-download:hover { background: radial-gradient(circle at 35% 30%, #ffb070, #f26b10); }
+.oh-player-play .oh-ic, .oh-player-mute .oh-ic, .oh-player-download .oh-ic {
+  width: 100%; height: 100%; min-width: 0; margin: 0; background: none; box-shadow: none;
+}
+.oh-player-play .oh-ic svg, .oh-player-mute .oh-ic svg, .oh-player-download .oh-ic svg { width: 46%; height: 46%; }
+.oh-player-tempo {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 700; letter-spacing: -0.01em;
+  color: var(--oh-orange);
+}
+
+/* ═══════════════ BOTÕES DE AÇÃO (renomear, baixar, excluir, ver) ═══════════════ */
+.oh-btn-icone {
+  display: inline-grid; place-items: center;
+  width: 34px; height: 34px; padding: 0; cursor: pointer;
+  background: transparent; border: 1px solid rgba(249, 115, 22, 0.45); border-radius: 50%;
+  color: var(--oh-orange);
+  text-decoration: none;
+}
+.oh-btn-icone:hover { background: rgba(249, 115, 22, 0.14); border-color: var(--oh-orange); }
+.oh-btn-icone .oh-ic { width: 26px; height: 26px; min-width: 26px; margin: 0; box-shadow: none; }
+.oh-btn-icone .oh-ic svg { width: 56%; height: 56%; }
+.oh-btn-excluir { border-color: rgba(239, 68, 68, 0.45); }
+.oh-btn-excluir:hover { background: rgba(239, 68, 68, 0.14); border-color: #ef4444; }
+
+/* ═══════════════ TABELA COM ROLAGEM (histórico) ═══════════════ */
+.oh-tabela-rolante {
+  max-height: 460px;
+  overflow: auto;
+  border-radius: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(249, 115, 22, 0.5) transparent;
+}
+.oh-tabela-rolante .oh-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: #141414;
+}
+
+/* ═══════════════ LOGO DE ENTRADA: sem o círculo preto, proporção correta ═══════════════
+   O PNG tem fundo preto. "screen" faz o preto sumir sobre o fundo escuro do app
+   e deixa só a laranja e o brilho. */
+.oh-logo-imagem {
+  width: min(78vw, 360px);
+  height: auto;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  mix-blend-mode: screen;
+}
+.oh-subtitle {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-size: 1.05rem;
+}
+
+/* Linha técnica abaixo do logo: menor e mais discreta */
+.oh-subtitle {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #f4a261;
+  margin-top: 14px;
+}
+
+/* ═══════════════ MENU LATERAL: recolhido vira uma faixa de ícones ═══════════════
+   (só em telas de computador; no celular o menu continua em bloco, como antes) */
+@media (min-width: 801px) {
+  .oh-sidebar {
+    transition: width 0.2s ease;
+  }
+  .oh-sidebar.oh-sidebar-colapsada {
+    margin-left: 0 !important;
+    width: 72px !important;
+    min-width: 72px !important;
+    padding: 70px 10px 24px;          /* espaço para o botão ☰ */
+    overflow: hidden;
+  }
+  .oh-sidebar.oh-sidebar-colapsada .oh-sidebar-logo,
+  .oh-sidebar.oh-sidebar-colapsada .oh-sidebar-resize { display: none; }
+  .oh-sidebar.oh-sidebar-colapsada .oh-nav-item {
+    justify-content: center;
+    padding: 10px 0;
+    gap: 0;
+  }
+  .oh-sidebar.oh-sidebar-colapsada .oh-nav-item span { display: none; }
+  .oh-sidebar.oh-sidebar-colapsada .oh-nav-item .oh-ic { margin: 0; }
+}
+
+/* ═══════════════ CONTEÚDO: usa a largura inteira da tela ═══════════════ */
+.oh-content {
+  max-width: none;
+  padding: 24px clamp(20px, 3vw, 48px) 60px;
+}
+
+/* ═══════════════ MENU ACOMPANHA A ROLAGEM (computador) ═══════════════
+   O styles.css declarava "sticky" e depois "relative", e o relative ganhava.
+   Aqui o menu fica fixo na lateral enquanto a página rola. */
+@media (min-width: 801px) {
+  .oh-sidebar {
+    position: sticky !important;
+    top: 0;
+    height: 100vh;
+    align-self: flex-start;
+  }
+}
+
+/* ═══════════════ CELULAR (iPhone): menu recolhido some por completo ═══════════════
+   Antes, no celular, o recolhimento só empurrava o menu para fora da tela e a
+   área continuava ocupada. Agora, recolhido, ele não ocupa espaço; o botão ☰ abre. */
+@media (max-width: 800px) {
+  .oh-sidebar { margin-left: 0 !important; }
+  .oh-sidebar.oh-sidebar-colapsada { display: none !important; }
+  .oh-sidebar-toggle { top: 12px; left: 12px; }
+}
+
+/* ═══════════════ CONTROLE DE TOM (− / +) ═══════════════ */
+.oh-tom-controle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 4px; border: 1px solid rgba(249, 115, 22, 0.4); border-radius: 999px;
+  font-family: 'Bricolage Grotesque', sans-serif;
+}
+.oh-tom-btn {
+  width: 28px; height: 28px; border: none; border-radius: 50%; cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, #ffa04d, #f26b10); color: #0a0a0a;
+  font-weight: 800; font-size: 1rem; line-height: 1; padding: 0;
+}
+.oh-tom-btn:hover { background: radial-gradient(circle at 35% 30%, #ffb070, #f26b10); }
+.oh-tom-rotulo { font-size: 0.78rem; font-weight: 700; color: var(--oh-orange); min-width: 92px; text-align: center; }
+.oh-tom-processando { opacity: 0.55; pointer-events: none; }
+.oh-tom-processando .oh-tom-rotulo::after { content: " …"; }
+
+/* Controle de tom dentro do mini player: compacto, na mesma linha dos botões */
+.oh-mp-tom { display: inline-flex; }
+.oh-mp-tom .oh-tom-controle { gap: 4px; padding: 2px 3px; }
+.oh-mp-tom .oh-tom-btn { width: 24px; height: 24px; font-size: 0.9rem; }
+.oh-mp-tom .oh-tom-rotulo { min-width: 0; font-size: 0.7rem; }
+
+/* ═══════════════ FICHA DE AVALIAÇÃO (papel profissional + impressão) ═══════════════ */
+.ficha-papel {
+  background: #ffffff; color: #111111; border-radius: 6px;
+  padding: 28px 30px; font-family: 'Bricolage Grotesque', sans-serif;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+.ficha-cabecalho { display: flex; align-items: center; gap: 14px; padding-bottom: 14px; border-bottom: 2px solid #f97316; margin-bottom: 14px; }
+.ficha-logo { width: 54px; height: 54px; object-fit: contain; }
+.ficha-marca { font-weight: 800; color: #f97316; font-size: 1.05rem; }
+.ficha-titulo { font-weight: 700; font-size: 1.2rem; }
+.ficha-secao { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #f97316; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px; margin: 18px 0 10px; }
+.ficha-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 18px; }
+.ficha-campos span { display: block; font-size: 0.72rem; color: #6b6b6b; }
+.ficha-campos b { display: block; font-size: 1rem; font-weight: 700; }
+.ficha-teclado { width: 100%; max-width: 460px; height: 64px; margin-top: 12px; display: block; }
+.ficha-tabela { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.ficha-tabela th { text-align: left; color: #f97316; font-weight: 700; border-bottom: 1px solid #f97316; padding: 6px 4px; }
+.ficha-tabela td { border-bottom: 1px solid #ececec; padding: 6px 4px; }
+.ficha-vazio { color: #6b6b6b; font-style: italic; }
+.ficha-rodape { margin-top: 18px; font-size: 0.72rem; color: #6b6b6b; border-top: 1px solid #e5e5e5; padding-top: 10px; line-height: 1.4; }
+
+@media print {
+  body * { visibility: hidden !important; }
+  #fichaPapel, #fichaPapel * { visibility: visible !important; }
+  #fichaPapel { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border-radius: 0; padding: 18mm; }
+  #fichaImprimir, .oh-hint, #fichaNome { display: none !important; }
+}
+
+/* ═══════════════ ABA PARTITURA ═══════════════ */
+.oh-partitura-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.partitura-papel {
+  background: #ffffff; color: #111111; border-radius: 10px;
+  padding: 16px 12px; min-height: 120px; overflow-x: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+.partitura-papel svg { max-width: 100%; height: auto; }
+.oh-partitura-editor { margin-top: 14px; }
+.oh-partitura-editor summary { cursor: pointer; color: var(--oh-orange); font-weight: 700; margin-bottom: 8px; }
+.oh-partitura-editor textarea {
+  width: 100%; box-sizing: border-box; font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem;
+  background: #141414; color: #f4ece4; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 10px; padding: 10px;
+}
+#partituraStatus[data-tipo="ok"] { color: #86efac; }
+#partituraStatus[data-tipo="erro"] { color: #fca5a5; }
+
+/* ═══════════════ ABC STUDIO: transporte, timbre e nota em destaque ═══════════════ */
+.oh-partitura-timbre { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.oh-partitura-timbre label { font-weight: 700; color: var(--oh-orange); font-size: 0.9rem; }
+.oh-partitura-transporte { margin-bottom: 14px; }
+.oh-partitura-transporte .abcjs-inline-audio { background: #17110d; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 12px; }
+/* nota ou compasso que está tocando, destacado na partitura */
+.partitura-papel .abcjs-highlight { fill: #f97316 !important; }
+.partitura-papel .abcjs-cursor { stroke: #f97316; }
+
+/* Barra da nota selecionada (ABC Studio, edição por nota) */
+.partitura-nota-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; padding: 10px; border: 1px solid rgba(249,115,22,0.45); border-radius: 12px; background: #17110d; }
+.partitura-nota-barra[hidden] { display: none; }
+#partituraNotaInfo { font-weight: 700; color: var(--oh-orange); margin-right: 6px; }
+.partitura-papel .abcjs-note.abcjs-selected, .partitura-papel .abcjs-selected { fill: #f97316 !important; }
+
+/* ═══════════════ CAIXINHA DA NOTA (edição na própria partitura) ═══════════════ */
+.partitura-area { position: relative; }
+.partitura-caixa {
+  position: absolute; z-index: 5; min-width: 220px; max-width: 92%;
+  background: #17110d; border: 1px solid rgba(249,115,22,0.6); border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.45); padding: 10px;
+}
+.partitura-caixa[hidden] { display: none; }
+.partitura-caixa-topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+#partituraCaixaNota { font-weight: 800; color: var(--oh-orange); }
+.partitura-caixa-x { background: transparent; border: none; color: #f4ece4; font-size: 1.2rem; cursor: pointer; line-height: 1; }
+.partitura-caixa-botoes { display: flex; flex-wrap: wrap; gap: 6px; }
+/* nota selecionada em vermelho; a nota em execução segue amarela/laranja */
+.partitura-papel .oh-nota-selecionada, .partitura-papel .oh-nota-selecionada * { fill: #e11d48 !important; stroke: #e11d48 !important; }
+
+/* A caixinha de edição fica fixa na parte de baixo da tela: sempre visível, sem rolar */
+.partitura-caixa {
+  position: fixed !important;
+  left: 50% !important; top: auto !important; bottom: 16px !important;
+  transform: translateX(-50%);
+  width: min(94vw, 520px); max-width: 94vw; min-width: 0;
+  z-index: 1000;
+}
+
+/* ═══════════════ CAIXINHA DA NOTA: pequena, dentro da partitura, ao lado da nota ═══════════════ */
+.partitura-papel { position: relative; }
+.partitura-papel .partitura-caixa {
+  position: absolute !important;
+  bottom: auto !important; right: auto !important;
+  transform: none !important;
+  left: 0; top: 0;
+  width: auto !important; min-width: 0 !important; max-width: 230px !important;
+  z-index: 50;
+  padding: 8px;
+  border-radius: 10px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.35);
+}
+.partitura-caixa-btn {
+  width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, #ffa04d, #f26b10); color: #0a0a0a;
+  font-weight: 800; font-size: 0.95rem; line-height: 1; padding: 0;
+}
+.partitura-caixa-botoes { gap: 4px !important; }
+.partitura-caixa-botoes .oh-btn { font-size: 0.75rem; padding: 6px 8px; }
+.partitura-caixa-topo { margin-bottom: 6px !important; }
