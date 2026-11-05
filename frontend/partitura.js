@@ -79,6 +79,7 @@
 
   // Desenha a partitura e prepara o controle de reprodução
   function renderizar() {
+    soltarCaixa();
     const abc = $("partituraAbc").value.trim();
     const papel = $("partituraSvg");
     visualAtual = null;
@@ -174,43 +175,67 @@
   }
 
   // Caixinha flutuante colada na nota, para não precisar rolar até embaixo da partitura
-  function posicionarCaixa(elementos) {
+  const NS_SVG = "http://www.w3.org/2000/svg";
+  const NS_HTML = "http://www.w3.org/1999/xhtml";
+
+  // Devolve a caixinha para o papel (casa dela) e retira o suporte que a segurava dentro do desenho
+  function soltarCaixa() {
     const caixa = $("partituraCaixa");
     const papel = $("partituraPapel");
-    if (!caixa || !papel || !elementos || !elementos.length) return;
+    if (!caixa || !papel) return;
+    const suporte = caixa._suporte;
+    if (suporte && suporte.parentNode) suporte.parentNode.removeChild(suporte);
+    caixa._suporte = null;
+    if (caixa.parentElement !== papel) papel.appendChild(caixa);
+    caixa.style.position = "";
+    caixa.style.left = "";
+    caixa.style.top = "";
+  }
 
-    // Retângulo que envolve a nota inteira (cabeça, haste e bandeirola), somando
-    // todos os elementos. Assim não depende de um só elemento ter área.
-    let esq = Infinity, topo = Infinity, dir = -Infinity, base = -Infinity;
+  // Coloca a caixinha DENTRO do desenho da partitura, logo abaixo da nota.
+  // Ela passa a ser parte do próprio desenho: rola, redimensiona e acompanha a nota
+  // sem depender de cálculo de tela.
+  function posicionarCaixa(elementos) {
+    const caixa = $("partituraCaixa");
+    if (!caixa || !elementos || !elementos.length) return;
+    soltarCaixa();
+
+    // Escolhe o elemento da nota que tem área (a cabeça), e não a haste
+    let base = null, area = -1, caixaBB = null;
     elementos.forEach((el) => {
-      if (!el || !el.getBoundingClientRect) return;
-      const r = el.getBoundingClientRect();
-      if (!r || (r.width === 0 && r.height === 0 && r.left === 0 && r.top === 0)) return;
-      esq = Math.min(esq, r.left); topo = Math.min(topo, r.top);
-      dir = Math.max(dir, r.right); base = Math.max(base, r.bottom);
+      if (!el || typeof el.getBBox !== "function") return;
+      let bb;
+      try { bb = el.getBBox(); } catch (e) { return; }
+      const a = (bb.width || 0) * (bb.height || 0);
+      if (a > area) { area = a; base = el; caixaBB = bb; }
     });
-    if (!isFinite(esq)) return;   // a nota ainda não está desenhada na tela
+    if (!base || !caixaBB) return;
 
-    // Coordenadas dentro do papel (que é o contêiner da caixinha)
-    const p = papel.getBoundingClientRect();
-    const x0 = esq - p.left + papel.scrollLeft;
-    const x1 = dir - p.left + papel.scrollLeft;
-    const y0 = topo - p.top + papel.scrollTop;
-    const y1 = base - p.top + papel.scrollTop;
+    const pai = base.parentNode;
+    if (!pai || !pai.appendChild) return;
 
-    const larg = caixa.offsetWidth || 220;
-    const alt = caixa.offsetHeight || 120;
-    const folga = 12;                          // distância da nota, em pixels (~1 cm na tela)
+    // Suporte: um foreignObject no mesmo sistema de coordenadas da nota
+    const suporte = document.createElementNS(NS_SVG, "foreignObject");
+    const x = caixaBB.x + caixaBB.width + 6;     // à direita da nota
+    const y = caixaBB.y + caixaBB.height + 6;    // um pouco abaixo dela
+    suporte.setAttribute("x", String(x));
+    suporte.setAttribute("y", String(y));
+    suporte.setAttribute("width", "240");
+    suporte.setAttribute("height", "140");
+    suporte.setAttribute("class", "oh-caixa-suporte");
 
-    // Prefere ficar logo abaixo da nota; se não couber, fica logo acima
-    let x = x0;
-    let y = y1 + folga;
-    if (y + alt > papel.scrollHeight) y = Math.max(0, y0 - alt - folga);
-    // Não sai da área do papel
-    x = Math.min(Math.max(0, x), Math.max(0, papel.scrollWidth - larg - 4));
+    const corpo = document.createElementNS(NS_HTML, "div");
+    corpo.setAttribute("xmlns", NS_HTML);
+    corpo.style.width = "100%";
+    corpo.style.height = "100%";
+    suporte.appendChild(corpo);
+    pai.appendChild(suporte);
 
-    caixa.style.setProperty("left", x + "px", "important");
-    caixa.style.setProperty("top", y + "px", "important");
+    caixa.style.position = "relative";
+    caixa.style.left = "0";
+    caixa.style.top = "0";
+    corpo.appendChild(caixa);
+    caixa._suporte = suporte;
     caixa.dataset.posicionada = "1";
   }
 
@@ -220,7 +245,7 @@
     caixa.hidden = !selecao;
     if (selecao) {
       $("partituraCaixaNota").textContent = `Nota: ${selecao.token}`;
-      status(`Nota selecionada: ${selecao.token}. Use os botões da caixa embaixo da tela.`, "info");
+      status(`Nota selecionada: ${selecao.token}.`, "info");
     }
   }
 
@@ -387,6 +412,9 @@
   function iniciar() {
     const area = $("partituraAbc");
     if (!area) return;
+    // Ao abrir ou atualizar a página, a partitura começa vazia, como o Songwriter.
+    // Ela só volta a aparecer quando o Songwriter gerar uma nova nesta mesma sessão.
+    try { localStorage.removeItem(K_ATUAL); localStorage.removeItem(K_ORIGINAL); } catch (e) { /* sem armazenamento */ }
     window.addEventListener("resize", () => { if (selecao) reaplicarSelecao(); });
     // A caixinha vai para o fim do corpo da página: assim nenhum contêiner com
     // transformação ou sobreposição a esconde, e ela fica fixa na tela.
@@ -399,6 +427,7 @@
       areaEditada = true;
       selecao = null;
       marcarSelecao([]);
+      soltarCaixa();
       mostrarCaixa();
       clearTimeout(timer);
       timer = setTimeout(renderizar, 400);
@@ -407,10 +436,12 @@
     $("partituraDescer").addEventListener("click", () => moverNota(-1));
     $("partituraDesfazer").addEventListener("click", desfazerEdicao);
     $("partituraTocarDaqui").addEventListener("click", tocarDaqui);
+    const caixaEl = $("partituraCaixa");
+    if (caixaEl) ["click", "pointerdown", "mousedown", "touchstart"].forEach((ev) => caixaEl.addEventListener(ev, (e) => e.stopPropagation()));
     $("partituraPausar").addEventListener("click", pausar);
     $("partituraVoltar").addEventListener("click", () => irParaVizinha(-1));
     $("partituraAvancar").addEventListener("click", () => irParaVizinha(1));
-    $("partituraCaixaFechar").addEventListener("click", () => { selecao = null; marcarSelecao([]); mostrarCaixa(); });
+    $("partituraCaixaFechar").addEventListener("click", () => { selecao = null; marcarSelecao([]); soltarCaixa(); mostrarCaixa(); });
     $("partituraSalvar").addEventListener("click", salvar);
     $("partituraRestaurar").addEventListener("click", restaurarOriginal);
     $("partituraSongwriter").addEventListener("click", usarNoSongwriter);

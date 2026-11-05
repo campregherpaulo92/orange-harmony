@@ -392,3 +392,20 @@ h1, h2, h3 {
 .partitura-caixa-botoes { gap: 4px !important; }
 .partitura-caixa-botoes .oh-btn { font-size: 0.75rem; padding: 6px 8px; }
 .partitura-caixa-topo { margin-bottom: 6px !important; }
+
+/* ═══════════════ CAIXINHA DENTRO DO DESENHO (ao lado da nota) ═══════════════
+   Quando a caixinha está dentro do desenho da partitura, ela deixa de ser posicionada
+   pelo papel: ela segue o desenho e fica encostada na nota. */
+.oh-caixa-suporte { overflow: visible; }
+.oh-caixa-suporte > div { overflow: visible; }
+.oh-caixa-suporte .partitura-caixa {
+  position: relative !important;
+  left: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+  width: 220px !important;
+  max-width: 220px !important;
+  margin: 0;
+}
