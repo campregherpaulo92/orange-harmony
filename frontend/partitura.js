@@ -25,6 +25,9 @@
   let controle = null;      // SynthController (play, pausa, reinício, velocidade e progresso)
   let areaEditada = false;
   let timer = null;
+  let selecao = null;          // nota clicada: { inicio, fim, token }
+  const historico = [];        // versões anteriores do texto ABC (para "Desfazer")
+  const LETRAS = "CDEFGAB";
 
   function lerStorage(chave) { try { return localStorage.getItem(chave) || ""; } catch (e) { return ""; } }
   function gravarStorage(chave, valor) { try { localStorage.setItem(chave, valor); } catch (e) { /* sem armazenamento */ } }
@@ -85,7 +88,7 @@
     }
     try {
       papel.innerHTML = "";
-      const tunes = window.ABCJS.renderAbc(papel, abc, { responsive: "resize", add_classes: true });
+      const tunes = window.ABCJS.renderAbc(papel, abc, { responsive: "resize", add_classes: true, clickListener: aoClicarNota });
       if (!tunes || !tunes.length) throw new Error("Nenhuma música encontrada no texto.");
       visualAtual = tunes[0];
       status("Partitura pronta. Ouça antes de enviar para a geração.", "ok");
@@ -120,6 +123,77 @@
       displayLoop: false,
       displayClock: false,
     });
+  }
+
+  // ── Edição por nota: clicar, depois subir ou descer uma linha/espaço da pauta ──
+  function aoClicarNota(abcElem) {
+    if (!abcElem || abcElem.el_type !== "note" || abcElem.startChar === undefined) return;
+    const texto = $("partituraAbc").value;
+    const token = texto.slice(abcElem.startChar, abcElem.endChar);
+    if (!token || /[\[\]]/.test(token)) {
+      status("Essa parte é um acorde ou um grupo de notas. Escolha uma nota simples.", "erro");
+      return;
+    }
+    selecao = { inicio: abcElem.startChar, fim: abcElem.endChar, token };
+    mostrarBarraNota();
+  }
+
+  // Interpreta uma nota ABC: acidente, letra, oitavas (' ou ,) e duração
+  function lerNota(token) {
+    const m = /^(\^{1,2}|_{1,2}|=)?([A-Ga-g])([,']*)(.*)$/.exec(token);
+    if (!m) return null;
+    const letra = m[2];
+    const maiuscula = letra === letra.toUpperCase();
+    let oitava = maiuscula ? 4 : 5;
+    for (const marca of m[3]) oitava += marca === "'" ? 1 : -1;
+    return { letra: letra.toUpperCase(), oitava, resto: m[4] };
+  }
+
+  // Monta de volta a nota com a nova posição (letra e oitava) e a duração original
+  function montarNota(passo, resto, letraNova, oitavaNova) {
+    let marcas = "";
+    let letra = letraNova;
+    if (oitavaNova >= 5) { letra = letraNova.toLowerCase(); marcas = "'".repeat(oitavaNova - 5); }
+    else { marcas = ",".repeat(4 - oitavaNova); }
+    return letra + marcas + resto;
+  }
+
+  function moverNota(direcao) {
+    if (!selecao) return;
+    const nota = lerNota(selecao.token);
+    if (!nota) { status("Não consegui entender essa nota para mover.", "erro"); return; }
+    // Um passo da pauta = a próxima letra da escala (linha ou espaço vizinho)
+    const absoluto = nota.oitava * 7 + LETRAS.indexOf(nota.letra) + direcao;
+    const oitavaNova = Math.floor(absoluto / 7);
+    const letraNova = LETRAS[((absoluto % 7) + 7) % 7];
+    const novoToken = montarNota(0, nota.resto, letraNova, oitavaNova);
+    const area = $("partituraAbc");
+    historico.push(area.value);
+    if (historico.length > 30) historico.shift();
+    area.value = area.value.slice(0, selecao.inicio) + novoToken + area.value.slice(selecao.fim);
+    gravarStorage(K_ATUAL, area.value.trim());
+    areaEditada = false;
+    status(`Nota trocada: ${selecao.token} → ${novoToken}. Ouça de novo.`, "ok");
+    selecao = null;
+    renderizar();
+    mostrarBarraNota();
+  }
+
+  function desfazerEdicao() {
+    if (!historico.length) { status("Nada para desfazer.", "info"); return; }
+    $("partituraAbc").value = historico.pop();
+    gravarStorage(K_ATUAL, $("partituraAbc").value.trim());
+    selecao = null;
+    renderizar();
+    mostrarBarraNota();
+    status("Última mudança desfeita.", "ok");
+  }
+
+  function mostrarBarraNota() {
+    const barra = $("partituraNotaBarra");
+    if (!barra) return;
+    barra.hidden = !selecao;
+    if (selecao) $("partituraNotaInfo").textContent = `Nota selecionada: ${selecao.token}`;
   }
 
   function salvar() {
@@ -168,9 +242,14 @@
     prepararControle();
     area.addEventListener("input", () => {
       areaEditada = true;
+      selecao = null;
+      mostrarBarraNota();
       clearTimeout(timer);
       timer = setTimeout(renderizar, 400);
     });
+    $("partituraSubir").addEventListener("click", () => moverNota(1));
+    $("partituraDescer").addEventListener("click", () => moverNota(-1));
+    $("partituraDesfazer").addEventListener("click", desfazerEdicao);
     $("partituraSalvar").addEventListener("click", salvar);
     $("partituraRestaurar").addEventListener("click", restaurarOriginal);
     $("partituraSongwriter").addEventListener("click", usarNoSongwriter);

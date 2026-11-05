@@ -348,3 +348,9 @@ h1, h2, h3 {
 /* nota ou compasso que está tocando, destacado na partitura */
 .partitura-papel .abcjs-highlight { fill: #f97316 !important; }
 .partitura-papel .abcjs-cursor { stroke: #f97316; }
+
+/* Barra da nota selecionada (ABC Studio, edição por nota) */
+.partitura-nota-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; padding: 10px; border: 1px solid rgba(249,115,22,0.45); border-radius: 12px; background: #17110d; }
+.partitura-nota-barra[hidden] { display: none; }
+#partituraNotaInfo { font-weight: 700; color: var(--oh-orange); margin-right: 6px; }
+.partitura-papel .abcjs-note.abcjs-selected, .partitura-papel .abcjs-selected { fill: #f97316 !important; }
