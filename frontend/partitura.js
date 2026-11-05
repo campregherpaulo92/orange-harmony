@@ -27,6 +27,8 @@
   let timer = null;
   let selecao = null;          // nota clicada: { inicio, fim, token }
   let marcadosSel = [];        // elementos SVG da nota selecionada
+  let tempo = null;            // tempo de cada nota (TimingCallbacks), para voltar/avançar
+  let reproduzindo = false;
   const historico = [];        // versões anteriores do texto ABC (para "Desfazer")
   const LETRAS = "CDEFGAB";
 
@@ -78,8 +80,9 @@
   // Desenha a partitura e prepara o controle de reprodução
   function renderizar() {
     const abc = $("partituraAbc").value.trim();
-    const papel = $("partituraPapel");
+    const papel = $("partituraSvg");
     visualAtual = null;
+    tempo = null;
     limparDestaque();
     if (controle) { try { controle.pause(); } catch (e) { /* já parado */ } }
     if (!abc) {
@@ -92,6 +95,7 @@
       const tunes = window.ABCJS.renderAbc(papel, abc, { responsive: "resize", add_classes: true, clickListener: aoClicarNota });
       if (!tunes || !tunes.length) throw new Error("Nenhuma música encontrada no texto.");
       visualAtual = tunes[0];
+      try { tempo = new window.ABCJS.TimingCallbacks(visualAtual, {}); } catch (e) { tempo = null; }
       status("Partitura pronta. Ouça antes de enviar para a geração.", "ok");
       aplicarMelodia();
       reaplicarSelecao();
@@ -142,7 +146,7 @@
       return;
     }
     selecao = { inicio: abcElem.startChar, fim: abcElem.endChar, token };
-    if (tocando && controle) { try { controle.pause(); } catch (e) { /* já parado */ } }
+    if (controle) { try { controle.pause(); } catch (e) { /* já parado */ } }
     marcarSelecao(abcElem.elemset || []);
     posicionarCaixa(abcElem.elemset || []);
     mostrarCaixa();
@@ -169,12 +173,15 @@
   // Caixinha flutuante colada na nota, para não precisar rolar até embaixo da partitura
   function posicionarCaixa(elementos) {
     const caixa = $("partituraCaixa");
-    const area = $("partituraArea");
-    if (!caixa || !area || !elementos.length) return;
+    const papel = $("partituraPapel");
+    if (!caixa || !papel || !elementos.length) return;
     const r = elementos[0].getBoundingClientRect();
-    const a = area.getBoundingClientRect();
-    caixa.style.left = Math.max(0, r.left - a.left) + "px";
-    caixa.style.top = Math.max(0, r.bottom - a.top + 8) + "px";
+    const p = papel.getBoundingClientRect();
+    const larguraCaixa = caixa.offsetWidth || 220;
+    let esquerda = r.left - p.left;
+    if (esquerda + larguraCaixa > papel.clientWidth) esquerda = Math.max(0, papel.clientWidth - larguraCaixa - 4);
+    caixa.style.left = Math.max(0, esquerda) + "px";
+    caixa.style.top = Math.max(0, r.bottom - p.top + 10 + papel.scrollTop) + "px";
   }
 
   function mostrarCaixa() {
@@ -239,22 +246,59 @@
     status("Última mudança desfeita.", "ok");
   }
 
-  // Continua a música a partir da nota selecionada (tempo calculado pela própria notação)
+  // Posição de uma nota na música, em milissegundos, e o total da música
+  function posicaoDaNota(indice) {
+    const eventos = (tempo && tempo.noteTimings) || [];
+    const total = eventos.length ? eventos[eventos.length - 1].milliseconds : 0;
+    return { eventos, total, indice };
+  }
+
+  function irParaMs(ms, total) {
+    if (!controle || !total) return;
+    controle.setProgress(Math.max(0, ms) / total, total);
+  }
+
+  function indiceDaSelecao(eventos) {
+    return eventos.findIndex((e) => e.startChar === selecao.inicio);
+  }
+
+  // Começa a música a partir da nota selecionada
   function tocarDaqui() {
-    if (!selecao || !visualAtual || !controle || !window.ABCJS || !window.ABCJS.TimingCallbacks) return;
+    if (!selecao || !controle || !tempo) { status("Selecione uma nota primeiro.", "erro"); return; }
     try {
-      const tempo = new window.ABCJS.TimingCallbacks(visualAtual, {});
-      const eventos = tempo.noteTimings || [];
-      const ev = eventos.find((e) => e.startChar === selecao.inicio);
-      const total = eventos.length ? eventos[eventos.length - 1].milliseconds : 0;
-      if (!ev || !total) { status("Não consegui localizar essa nota no tempo da música.", "erro"); return; }
-      controle.setProgress(ev.milliseconds / total, total);
+      const { eventos, total } = posicaoDaNota();
+      const i = indiceDaSelecao(eventos);
+      if (i < 0 || !total) { status("Não consegui localizar essa nota no tempo da música.", "erro"); return; }
+      irParaMs(eventos[i].milliseconds, total);
       controle.play();
-      tocando = true;
+      reproduzindo = true;
       status(`Tocando a partir de ${selecao.token}.`, "ok");
     } catch (erro) {
       status("Não consegui começar a partir dessa nota. " + (erro.message || ""), "erro");
     }
+  }
+
+  // Pausa a música sem perder a posição
+  function pausar() {
+    if (controle) { try { controle.pause(); } catch (e) { /* já parado */ } }
+    reproduzindo = false;
+  }
+
+  // Vai para a nota anterior ou a próxima, a partir da nota selecionada
+  function irParaVizinha(direcao) {
+    if (!selecao || !controle || !tempo) { status("Selecione uma nota primeiro.", "erro"); return; }
+    const { eventos, total } = posicaoDaNota();
+    const i = indiceDaSelecao(eventos);
+    const j = i + direcao;
+    if (i < 0 || j < 0 || j >= eventos.length) { status("Não há mais notas nessa direção.", "info"); return; }
+    const alvo = eventos[j];
+    // ao trocar de nota, também seleciona a nova para a caixinha acompanhar
+    if (alvo.elements && alvo.elements.length) {
+      // mantém a seleção só pelo tempo: a caixinha continua na nota atual
+    }
+    irParaMs(alvo.milliseconds, total);
+    if (reproduzindo) controle.play();
+    status(`Posição: ${direcao > 0 ? "próxima" : "anterior"} nota.`, "ok");
   }
 
   function salvar() {
@@ -299,6 +343,11 @@
   function iniciar() {
     const area = $("partituraAbc");
     if (!area) return;
+    // A caixinha vai para o fim do corpo da página: assim nenhum contêiner com
+    // transformação ou sobreposição a esconde, e ela fica fixa na tela.
+    const caixa = $("partituraCaixa");
+    const papel = $("partituraPapel");
+    if (caixa && papel && caixa.parentElement !== papel) papel.appendChild(caixa);
     montarTimbres();
     prepararControle();
     area.addEventListener("input", () => {
@@ -313,6 +362,9 @@
     $("partituraDescer").addEventListener("click", () => moverNota(-1));
     $("partituraDesfazer").addEventListener("click", desfazerEdicao);
     $("partituraTocarDaqui").addEventListener("click", tocarDaqui);
+    $("partituraPausar").addEventListener("click", pausar);
+    $("partituraVoltar").addEventListener("click", () => irParaVizinha(-1));
+    $("partituraAvancar").addEventListener("click", () => irParaVizinha(1));
     $("partituraCaixaFechar").addEventListener("click", () => { selecao = null; marcarSelecao([]); mostrarCaixa(); });
     $("partituraSalvar").addEventListener("click", salvar);
     $("partituraRestaurar").addEventListener("click", restaurarOriginal);

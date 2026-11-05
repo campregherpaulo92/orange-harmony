@@ -378,3 +378,25 @@ h1, h2, h3 {
   width: min(94vw, 520px); max-width: 94vw; min-width: 0;
   z-index: 1000;
 }
+
+/* ═══════════════ CAIXINHA DA NOTA: pequena, dentro da partitura, ao lado da nota ═══════════════ */
+.partitura-papel { position: relative; }
+.partitura-papel .partitura-caixa {
+  position: absolute !important;
+  bottom: auto !important; right: auto !important;
+  transform: none !important;
+  left: 0; top: 0;
+  width: auto !important; min-width: 0 !important; max-width: 230px !important;
+  z-index: 50;
+  padding: 8px;
+  border-radius: 10px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.35);
+}
+.partitura-caixa-btn {
+  width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, #ffa04d, #f26b10); color: #0a0a0a;
+  font-weight: 800; font-size: 0.95rem; line-height: 1; padding: 0;
+}
+.partitura-caixa-botoes { gap: 4px !important; }
+.partitura-caixa-botoes .oh-btn { font-size: 0.75rem; padding: 6px 8px; }
+.partitura-caixa-topo { margin-bottom: 6px !important; }

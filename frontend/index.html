@@ -782,16 +782,23 @@
           <button id="partituraSongwriter" class="oh-btn" type="button">Usar no Songwriter</button>
         </div>
         <div id="partituraArea" class="partitura-area">
-          <div id="partituraPapel" class="partitura-papel"></div>
+          <div id="partituraPapel" class="partitura-papel">
+            <div id="partituraSvg"></div>
+          </div>
           <div id="partituraCaixa" class="partitura-caixa" hidden>
             <div class="partitura-caixa-topo">
               <span id="partituraCaixaNota"></span>
               <button id="partituraCaixaFechar" class="partitura-caixa-x" type="button" aria-label="Fechar">×</button>
             </div>
             <div class="partitura-caixa-botoes">
+              <button id="partituraVoltar" class="partitura-caixa-btn" type="button" title="Nota anterior" aria-label="Nota anterior">⏮</button>
+              <button id="partituraPausar" class="partitura-caixa-btn" type="button" title="Pausar" aria-label="Pausar">⏸</button>
+              <button id="partituraTocarDaqui" class="partitura-caixa-btn" type="button" title="Tocar a partir desta nota" aria-label="Tocar daqui">▶</button>
+              <button id="partituraAvancar" class="partitura-caixa-btn" type="button" title="Próxima nota" aria-label="Próxima nota">⏭</button>
+            </div>
+            <div class="partitura-caixa-botoes">
               <button id="partituraSubir" class="oh-btn oh-btn-secundario" type="button">↑ Subir</button>
               <button id="partituraDescer" class="oh-btn oh-btn-secundario" type="button">↓ Descer</button>
-              <button id="partituraTocarDaqui" class="oh-btn" type="button">▶ Tocar daqui</button>
               <button id="partituraDesfazer" class="oh-btn oh-btn-secundario" type="button">Desfazer</button>
             </div>
           </div>
