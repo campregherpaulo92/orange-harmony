@@ -2,7 +2,8 @@
 
 Aplicação completa de coaching vocal e composição: analisa sua voz, detecta afinação, vibrato e sustentação, gera devolutiva pedagógica com IA, identifica acordes no braço do violão, monta produções musicais, separa stems num mini-estúdio (DAW) e compõe músicas do zero com o Songwriter — tudo isso com a **Laranjinha**, uma assistente de IA que enxerga e age sobre qualquer parte do app.
 
-🌐 **App no ar:** [orange-harmony.onrender.com](https://orange-harmony.onrender.com) *(plano gratuito — se ficar parado, a primeira abertura pode levar cerca de 1 minuto)*
+🌐 **App no ar (Cloud Run):** [orange-harmony-36127841485.us-central1.run.app](https://orange-harmony-36127841485.us-central1.run.app/) — versão em uso, na branch `cloudrun`
+🔁 **Versão de reserva (Render):** [orange-harmony.onrender.com](https://orange-harmony.onrender.com) *(plano gratuito — se ficar parado, a primeira abertura pode levar cerca de 1 minuto)*
 🕰️ **Versão antiga (Streamlit, mantida como referência):** [orange-harmony.streamlit.app](https://orange-harmony.streamlit.app)
 
 ---
@@ -20,19 +21,20 @@ Aplicação completa de coaching vocal e composição: analisa sua voz, detecta 
 
 | Módulo | Descrição |
 |---|---|
-| 📋 **Avaliação** | 5 exercícios vocais (nota grave, aguda, confortável, glissando, frase) que geram o perfil: classificação, extensão e tessitura. O professor usa esse perfil nas análises |
+| 📋 **Avaliação** | 5 exercícios vocais (nota grave, aguda, confortável, glissando, frase) que geram o perfil: classificação, extensão e tessitura. O professor usa esse perfil nas análises. A **Ficha de avaliação vocal** lê a avaliação salva e monta um papel profissional (nome do aluno, extensão com teclado, tendências do histórico), para imprimir ou salvar em PDF |
 | 🎵 **Estudo** | Análise de voz: pitch (F0), nota predominante, desvio em cents, % de afinação, vibrato (taxa, extensão, periodicidade), curva de pitch, BPM e tom. Devolutiva do **Professor de IA** (Gemini). **Treino de escalas:** 12 escalas (maior, menores natural/harmônica/melódica, os modos gregos, pentatônicas e blues) em qualquer tônica — toca no **piano sintetizado** (subindo e descendo), mostra as notas com os graus, os acordes que nascem da escala e o desafio de canto, e **avalia sua gravação nessa escala** (quantas notas caíram dentro, quais ficaram fora e o que provavelmente aconteceu). O Professor recebe a escala e comenta em cima disso |
 | 🎸 **Afinador** | 11 afinações (violão, 7 cordas, ukulele, drop tunings, open tunings), calibração 440/442 Hz, agulha em tempo real |
 | 🎶 **Acordes** | Braço de violão clicável: você marca as notas e o app diz o **nome do acorde** (com alternativas), as **notas**, as **tonalidades** onde ele é diatônico (com o grau, ex: vi7) e as **escalas** que dá pra tocar por cima. Também **procura por nome** (Am7, C7M, F#m, G/B…) e mostra posições no braço. Toca o acorde (violão sintetizado), insere na composição e leva a pergunta pra Laranjinha |
-| 🎙️ **Biblioteca** | Grava ou sobe áudios, salva no Firebase Storage e lista as gravações |
+| 🎙️ **Biblioteca** | Grava ou sobe áudios, salva no Firebase Storage e lista as gravações. O **mini player** toca em segundo plano (com anterior, próxima, aleatório, repetir e velocidade), e o controle **− / +** muda o tom de −6 a +6 semitons sem mudar a velocidade, feito no próprio aparelho com SoundTouchJS. Cada gravação guarda o próprio tom neste aparelho, e o download sai no tom escolhido |
 | 📊 **Histórico** | Evolução das análises salvas no Firestore, com filtro por análise e devolutiva |
 | 🎼 **Composições** | Letra com cifras `[Am]` e seções `#`, prévia colorida, versionamento |
 | 🔄 **Conversor** | WAV, MP3, FLAC, OGG e M4A, vários formatos de uma vez |
-| 🎛️ **Produtor** | Backing track com baixo, bateria, acordes, teclado e solo em **73 estilos**, agrupados (Samba, Pagode e Bossa · Nordeste e Norte · Sertanejo, Funk e Fé · Pop e Rock · Urbano e Eletrônico · Jazz e Blues · Latino e Mundo). Cada estilo tem bateria, baixo e acordes próprios. **A produção se adapta à sua gravação:** acompanha o andamento (com campo opcional para informar o BPM), descobre o tom (maior ou menor), **escolhe os acordes que combinam com a melodia cantada ou tocada** (o baixo, o teclado e os acordes seguem essa harmonia; também dá para usar a sequência fixa do estilo) e toca mais forte ou mais fraco conforme a sua voz. Um assistente de IA sugere a configuração a partir de uma frase |
+| 🎛️ **Produtor** | Backing track com baixo, bateria, acordes, teclado e solo em **270 estilos**, organizados em 21 grupos. Cada estilo tem bateria, baixo e acordes próprios. **A produção se adapta à sua gravação:** acompanha o andamento (com campo opcional para informar o BPM), descobre o tom (maior ou menor), **escolhe os acordes que combinam com a melodia cantada ou tocada** (o baixo, o teclado e os acordes seguem essa harmonia; também dá para usar a sequência fixa do estilo) e toca mais forte ou mais fraco conforme a sua voz. Um assistente de IA sugere a configuração a partir de uma frase |
 | ✨ **Edição Vocal Inteligente** | EQ de presença, compressão, redução de ruído, sibilância, ajuste de tom e reverb — por checkbox ou por **comando em português** interpretado por IA |
 | 🎮 **Singergame** | Jogo de afinação: sua voz guia uma bolinha de luz por um túnel com anéis — cada anel é uma nota, e cantar a altura certa faz você atravessar. Modo **Livre** (notas aleatórias dentro da sua extensão vocal) e modo **Escala** (usa a escala escolhida na aba Estudo). Um **afinômetro** mostra em tempo real, em cents, o quanto sua voz está acima ou abaixo da nota; tolerância de ±75, ±50 ou ±25 cents conforme a dificuldade, com opção de aceitar qualquer oitava. Pontos, combo e recorde salvo por modo/dificuldade. Terceiro modo, o **Vocalise** ("eu faço, você copia"): o piano toca um padrão (escadinha, arpejo ou alternando duas notas) e você repete no mesmo andamento, em três velocidades; a cada rodada o padrão sobe meio tom e depois desce |
 | 📰 **Newsletter (Orange News)** | Jornal do app em formato de jornal: **manchete do dia**, dicas de afinação, composição, violão (com a **levada do dia** em grade), teoria, produção, IA e curiosidades — que trocam todo dia e têm botão "Experimente no app". Embaixo, notícias de fora sobre música e produção, filtradas por relevância, com **resumo curto em português** e link da matéria |
-| 🤖 **Songwriter** | Letra original em português (Gemini) no estilo escolhido entre os mesmos 73 estilos, referência sonora analisada por IA, prompt musical e geração da música completa via Hugging Face (YuE2) |
+| 🤖 **Songwriter** | Letra original em português (Gemini) no estilo escolhido entre os mesmos 270 estilos, referência sonora analisada por IA, prompt musical e geração da música completa via Hugging Face (YuE2). Com cover fiel à melodia, o modelo extrai a melodia da sua gravação em notação ABC, que vai para a aba Partitura antes da geração |
+| 🎼 **Partitura (ABC Studio)** | Mostra a partitura ABC que o Songwriter extraiu, toca a melodia no navegador (com timbres e destaque da nota que está tocando), e permite corrigir a melodia nota por nota: clique na nota e suba ou desça uma linha ou espaço da pauta. Tudo fica na sessão até você salvar; depois, **Usar no Songwriter** envia a versão corrigida para o cover. Não usa IA nem gasta cota |
 | 🍊 **Laranjinha** | Assistente de IA multi-chat, com memória entre conversas, que **age**: avalia gravações, gera produções, aplica edições, salva composições, renomeia e exclui, e consulta os motores de **acordes** e de **escalas** (explica uma escala e avalia uma gravação nela) |
 | 🎚️ **Orange Studio** | Mini-DAW: separação de stems (voz e instrumental), forma de onda e espectro ao vivo, mute/solo/volume, corte e deslocamento por faixa (com desfazer), renomear faixas, substituir e baixar por faixa, e um agente de IA que aplica ajustes por texto |
 
@@ -48,7 +50,7 @@ Aplicação completa de coaching vocal e composição: analisa sua voz, detecta 
                                                 Google Colab (Demucs) ─┘
 ```
 
-- **Render** hospeda o app (front-end e API no mesmo endereço). Um monitor gratuito (UptimeRobot) checa o endereço a cada 5 minutos para o serviço não dormir.
+- **Cloud Run** hospeda a versão em uso (front-end e API no mesmo endereço), na branch `cloudrun`. **Render** continua como versão de reserva, na branch `main`. Um monitor gratuito (UptimeRobot) checa o endereço do Render a cada 5 minutos para o serviço não dormir.
 - **Firebase** guarda histórico, composições, chats e gravações.
 - **Separação de stems:** o Demucs não cabe nos 512 MB do plano gratuito, então roda no **Google Colab**. O app e o Colab conversam pelo Firebase: o app deixa o áudio no Storage e cria um trabalho no Firestore; o Colab (ligado) pega, separa e devolve os stems em MP3. O card do Estúdio descobre sozinho se o Colab está ligado (ele avisa a cada ~20 s). **Não há link para copiar e colar.**
 
@@ -58,7 +60,7 @@ Aplicação completa de coaching vocal e composição: analisa sua voz, detecta 
 
 | Assunto | O que acontece |
 |---|---|
-| **Memória e CPU** (512 MB, 0,1 vCPU) | Análise, Produção e Edição processam no máximo os **primeiros 120 segundos** do áudio, e a tela avisa quando corta. Em testes locais, os picos ficaram em torno de 374 MB (análise), 435 MB (produção) e 460 MB (edição) com áudios de 3 min |
+| **Memória e CPU** (512 MB no Render, 2 GiB no Cloud Run) | Análise, Produção e Edição processam no máximo os **primeiros 120 segundos** do áudio, e a tela avisa quando corta. Em testes locais, os picos ficaram em torno de 374 MB (análise), 435 MB (produção) e 460 MB (edição) com áudios de 3 min |
 | **Servidor dorme** | Depois de 15 min sem acesso. O monitor de 5 min evita isso |
 | **Separar stems** | Precisa do Colab ligado (veja abaixo). Sem ele, o Estúdio mostra o card explicando o que fazer |
 | **Songwriter (música)** | A geração roda numa GPU compartilhada da Hugging Face, cuja cota diária é pequena no nível gratuito — conta grátis rende poucas músicas por dia. O modelo lista apenas inglês e chinês, então letras em português podem sair menos naturais |
@@ -74,8 +76,19 @@ Aplicação completa de coaching vocal e composição: analisa sua voz, detecta 
 - **Separação de stems:** Demucs (`htdemucs`), no Colab (ou local, se o servidor tiver torch e demucs instalados)
 - **IA de texto e áudio:** Google Gemini (`google-genai`) — devolutiva, Laranjinha, Songwriter e interpretação de comandos. O app descobre os modelos disponíveis na chave e tenta do mais rápido ao mais capaz
 - **IA de geração musical:** Hugging Face (`gradio_client`, espaço `mrfakename/yue2-3b`)
+- **Notação e partitura:** abcjs (renderiza a partitura ABC, toca a melodia e destaca a nota em execução)
+- **Transposição de tom:** SoundTouchJS, roda no navegador do usuário
 - **Persistência:** Firebase Firestore e Storage (plano Blaze)
-- **Hospedagem:** Render (serviço web) + Google Colab (separador de stems)
+- **Hospedagem:** Cloud Run (versão em uso), Render (reserva) e Google Colab (separador de stems)
+
+---
+
+## ☁️ Publicar no Cloud Run
+
+1. Branch `cloudrun`, com implantação contínua a partir do repositório.
+2. Recurso sugerido: 2 GiB de memória, 1 CPU, de 0 a 2 instâncias.
+3. Variáveis de ambiente: `FIREBASE_STORAGE_BUCKET`, `GEMINI_API_KEY`, `HF_TOKEN` e `LIMITE_MEMORIA_MB=2048`. A credencial do Firebase é a própria conta do serviço no Cloud Run, sem JSON nas variáveis.
+4. Para o front-end, subir apenas os arquivos alterados em `frontend/`. Não é preciso reiniciar nada no back-end quando só o front muda.
 
 ---
 
@@ -146,7 +159,7 @@ orange-harmony/
 │   ├── singergame.py           # placar do Singergame (recorde por modo/dificuldade)
 │   ├── edicao_dsp.py           # EQ, compressor, redução de ruído, ajuste de tom
 │   ├── harmonia.py             # harmonia automática: tom (maior/menor) e acordes de cada compasso a partir da melodia
-│   ├── ritmos.py               # catálogo dos 73 estilos: padrões de bateria, baixo, acordes, harmonia (única fonte da lista)
+│   ├── ritmos.py               # catálogo dos 270 estilos em 21 grupos: padrões de bateria, baixo, acordes, harmonia (única fonte da lista)
 │   ├── producao_ritmos.py      # toca os padrões: percussão sintetizada, bateria, baixo, acordes, teclado e solo por estilo
 │   ├── producao_dsp.py         # sons básicos, mixagem, ducking e reverb
 │   ├── songwriter.py           # letra, referência sonora, geração via YuE2
@@ -159,6 +172,13 @@ orange-harmony/
 │   └── ...
 ├── frontend/
 │   ├── index.html
+│   ├── identidade.css          # visual próprio: fonte, ícones, botões, mini player, ficha e menu
+│   ├── icones.js               # biblioteca de ícones próprios (silhueta sobre círculo laranja)
+│   ├── fichaAvaliacao.js       # ficha profissional da avaliação vocal (impressão / PDF)
+│   ├── transposicao.js         # mudança de tom no aparelho (SoundTouchJS), com tom guardado por gravação
+│   ├── soundtouch.js           # biblioteca de transposição, hospedada junto do app
+│   ├── partitura.js            # aba Partitura: ABC renderizado, reprodução, destaque e edição por nota
+│   ├── abcjs-basic-min.js      # biblioteca de partitura ABC (abcjs)
 │   ├── app.js, estudio.js, acordes.js, songwriter.js, producao.js, edicao.js, ...
 │   └── styles.css
 ├── notebooks/
@@ -192,7 +212,7 @@ orange-harmony/
 - A tela mostra o tom e os acordes escolhidos
 
 **v15 — ritmos de verdade**
-- A Produção ganha **73 estilos** (antes 20, e só o tamanho do acorde mudava de um para outro): samba, pagode, bossa nova, forró, baião, axé, sertanejo, funk carioca, pop rock, rock, metal, jazz, blues, reggae, salsa, eletrônica e muitos mais
+- A Produção ganha **270 estilos** em 21 grupos (antes 20, e só o tamanho do acorde mudava de um para outro): samba, pagode, bossa nova, forró, baião, axé, sertanejo, funk carioca, pop rock, rock, metal, jazz, blues, reggae, salsa, eletrônica e muitos mais
 - Cada estilo tem bateria, baixo e acordes próprios, sobre a grade da batida detectada na gravação (e acompanha oscilação de andamento)
 - A lista de estilos agora vem do servidor, em grupos, e é a mesma na Produção e no Songwriter (antes a tela tinha uma lista antiga de 12)
 - O Songwriter envia ao Gemini a descrição de cada estilo
