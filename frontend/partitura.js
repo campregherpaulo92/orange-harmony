@@ -129,6 +129,11 @@
 
   // ── Edição por nota: clicar, depois subir ou descer uma linha/espaço da pauta ──
   function aoClicarNota(abcElem) {
+    try { selecionarNota(abcElem); }
+    catch (erro) { status("Não consegui selecionar essa nota: " + (erro.message || erro), "erro"); }
+  }
+
+  function selecionarNota(abcElem) {
     if (!abcElem || abcElem.el_type !== "note" || abcElem.startChar === undefined) return;
     const texto = $("partituraAbc").value;
     const token = texto.slice(abcElem.startChar, abcElem.endChar);
@@ -176,7 +181,10 @@
     const caixa = $("partituraCaixa");
     if (!caixa) return;
     caixa.hidden = !selecao;
-    if (selecao) $("partituraCaixaNota").textContent = `Nota: ${selecao.token}`;
+    if (selecao) {
+      $("partituraCaixaNota").textContent = `Nota: ${selecao.token}`;
+      status(`Nota selecionada: ${selecao.token}. Use os botões da caixa embaixo da tela.`, "info");
+    }
   }
 
   // Interpreta uma nota ABC: acidente, letra, oitavas (' ou ,) e duração
