@@ -147,6 +147,9 @@
     }
     selecao = { inicio: abcElem.startChar, fim: abcElem.endChar, token };
     if (controle) { try { controle.pause(); } catch (e) { /* já parado */ } }
+    const { eventos, total } = posicaoDaNota();
+    const i = indiceDaSelecao(eventos);
+    if (i >= 0 && total) irParaMs(eventos[i].milliseconds, total);
     marcarSelecao(abcElem.elemset || []);
     posicionarCaixa(abcElem.elemset || []);
     mostrarCaixa();
@@ -198,8 +201,8 @@
     if (esquerda + larguraCaixa > papel.scrollWidth) esquerda = Math.max(0, xNota - larguraCaixa - 6);
     let topo = yBaseNota + 6;
     if (topo + alturaCaixa > papel.scrollHeight && yTopoNota - alturaCaixa - 6 > 0) topo = yTopoNota - alturaCaixa - 6;
-    caixa.style.left = Math.max(0, esquerda) + "px";
-    caixa.style.top = Math.max(0, topo) + "px";
+    caixa.style.setProperty("left", Math.max(0, esquerda) + "px", "important");
+    caixa.style.setProperty("top", Math.max(0, topo) + "px", "important");
   }
 
   function mostrarCaixa() {
@@ -285,15 +288,23 @@
 
   // Começa a música a partir da nota selecionada
   function tocarDaqui() {
-    if (!selecao || !controle || !tempo) { status("Selecione uma nota primeiro.", "erro"); return; }
+    if (!controle) { status("O player ainda não está pronto.", "erro"); return; }
     try {
+      // sem nota selecionada: toca a música inteira
+      if (!selecao || !tempo) {
+        Promise.resolve(controle.play && controle.play()).catch(() => {});
+        reproduzindo = true;
+        status("Tocando a música completa.", "ok");
+        return;
+      }
       const { eventos, total } = posicaoDaNota();
       const i = indiceDaSelecao(eventos);
       if (i < 0 || !total) { status("Não consegui localizar essa nota no tempo da música.", "erro"); return; }
       const ms = eventos[i].milliseconds;
-      // o áudio precisa estar iniciado para aceitar o salto: toca e depois pula
+      // o áudio precisa estar iniciado para aceitar o salto: toca e, em seguida, pula para a nota
       Promise.resolve(controle.play && controle.play()).then(() => {
         irParaMs(ms, total);
+        setTimeout(() => irParaMs(ms, total), 300);
       });
       reproduzindo = true;
       status(`Tocando a partir de ${selecao.token}.`, "ok");

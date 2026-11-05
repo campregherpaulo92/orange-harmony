@@ -370,14 +370,6 @@ h1, h2, h3 {
 /* nota selecionada em vermelho; a nota em execução segue amarela/laranja */
 .partitura-papel .oh-nota-selecionada, .partitura-papel .oh-nota-selecionada * { fill: #e11d48 !important; stroke: #e11d48 !important; }
 
-/* A caixinha de edição fica fixa na parte de baixo da tela: sempre visível, sem rolar */
-.partitura-caixa {
-  position: fixed !important;
-  left: 50% !important; top: auto !important; bottom: 16px !important;
-  transform: translateX(-50%);
-  width: min(94vw, 520px); max-width: 94vw; min-width: 0;
-  z-index: 1000;
-}
 
 /* ═══════════════ CAIXINHA DA NOTA: pequena, dentro da partitura, ao lado da nota ═══════════════ */
 .partitura-papel { position: relative; }
