@@ -178,31 +178,40 @@
     const caixa = $("partituraCaixa");
     const papel = $("partituraPapel");
     if (!caixa || !papel || !elementos || !elementos.length) return;
-    // usa o retângulo mais justo da nota (a cabeça), e não a pauta inteira
-    let melhor = null, area = Infinity;
+
+    // Retângulo que envolve a nota inteira (cabeça, haste e bandeirola), somando
+    // todos os elementos. Assim não depende de um só elemento ter área.
+    let esq = Infinity, topo = Infinity, dir = -Infinity, base = -Infinity;
     elementos.forEach((el) => {
       if (!el || !el.getBoundingClientRect) return;
       const r = el.getBoundingClientRect();
-      const a = r.width * r.height;
-      if (a > 0 && a < area) { area = a; melhor = r; }
+      if (!r || (r.width === 0 && r.height === 0 && r.left === 0 && r.top === 0)) return;
+      esq = Math.min(esq, r.left); topo = Math.min(topo, r.top);
+      dir = Math.max(dir, r.right); base = Math.max(base, r.bottom);
     });
-    if (!melhor) return;
-    // coordenadas dentro do conteúdo rolável do papel (somando a rolagem),
-    // para a caixinha acompanhar a nota quando a partitura rola
+    if (!isFinite(esq)) return;   // a nota ainda não está desenhada na tela
+
+    // Coordenadas dentro do papel (que é o contêiner da caixinha)
     const p = papel.getBoundingClientRect();
-    const rolX = papel.scrollLeft || 0;
-    const rolY = papel.scrollTop || 0;
-    const larguraCaixa = caixa.offsetWidth || 220;
-    const alturaCaixa = caixa.offsetHeight || 120;
-    const xNota = melhor.left - p.left + rolX;
-    const yTopoNota = melhor.top - p.top + rolY;
-    const yBaseNota = melhor.bottom - p.top + rolY;
-    let esquerda = xNota + melhor.width + 6;
-    if (esquerda + larguraCaixa > papel.scrollWidth) esquerda = Math.max(0, xNota - larguraCaixa - 6);
-    let topo = yBaseNota + 6;
-    if (topo + alturaCaixa > papel.scrollHeight && yTopoNota - alturaCaixa - 6 > 0) topo = yTopoNota - alturaCaixa - 6;
-    caixa.style.setProperty("left", Math.max(0, esquerda) + "px", "important");
-    caixa.style.setProperty("top", Math.max(0, topo) + "px", "important");
+    const x0 = esq - p.left + papel.scrollLeft;
+    const x1 = dir - p.left + papel.scrollLeft;
+    const y0 = topo - p.top + papel.scrollTop;
+    const y1 = base - p.top + papel.scrollTop;
+
+    const larg = caixa.offsetWidth || 220;
+    const alt = caixa.offsetHeight || 120;
+    const folga = 12;                          // distância da nota, em pixels (~1 cm na tela)
+
+    // Prefere ficar logo abaixo da nota; se não couber, fica logo acima
+    let x = x0;
+    let y = y1 + folga;
+    if (y + alt > papel.scrollHeight) y = Math.max(0, y0 - alt - folga);
+    // Não sai da área do papel
+    x = Math.min(Math.max(0, x), Math.max(0, papel.scrollWidth - larg - 4));
+
+    caixa.style.setProperty("left", x + "px", "important");
+    caixa.style.setProperty("top", y + "px", "important");
+    caixa.dataset.posicionada = "1";
   }
 
   function mostrarCaixa() {
