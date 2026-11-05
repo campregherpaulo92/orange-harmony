@@ -174,14 +174,32 @@
   function posicionarCaixa(elementos) {
     const caixa = $("partituraCaixa");
     const papel = $("partituraPapel");
-    if (!caixa || !papel || !elementos.length) return;
-    const r = elementos[0].getBoundingClientRect();
+    if (!caixa || !papel || !elementos || !elementos.length) return;
+    // usa o retângulo mais justo da nota (a cabeça), e não a pauta inteira
+    let melhor = null, area = Infinity;
+    elementos.forEach((el) => {
+      if (!el || !el.getBoundingClientRect) return;
+      const r = el.getBoundingClientRect();
+      const a = r.width * r.height;
+      if (a > 0 && a < area) { area = a; melhor = r; }
+    });
+    if (!melhor) return;
+    // coordenadas dentro do conteúdo rolável do papel (somando a rolagem),
+    // para a caixinha acompanhar a nota quando a partitura rola
     const p = papel.getBoundingClientRect();
+    const rolX = papel.scrollLeft || 0;
+    const rolY = papel.scrollTop || 0;
     const larguraCaixa = caixa.offsetWidth || 220;
-    let esquerda = r.left - p.left;
-    if (esquerda + larguraCaixa > papel.clientWidth) esquerda = Math.max(0, papel.clientWidth - larguraCaixa - 4);
+    const alturaCaixa = caixa.offsetHeight || 120;
+    const xNota = melhor.left - p.left + rolX;
+    const yTopoNota = melhor.top - p.top + rolY;
+    const yBaseNota = melhor.bottom - p.top + rolY;
+    let esquerda = xNota + melhor.width + 6;
+    if (esquerda + larguraCaixa > papel.scrollWidth) esquerda = Math.max(0, xNota - larguraCaixa - 6);
+    let topo = yBaseNota + 6;
+    if (topo + alturaCaixa > papel.scrollHeight && yTopoNota - alturaCaixa - 6 > 0) topo = yTopoNota - alturaCaixa - 6;
     caixa.style.left = Math.max(0, esquerda) + "px";
-    caixa.style.top = Math.max(0, r.bottom - p.top + 10 + papel.scrollTop) + "px";
+    caixa.style.top = Math.max(0, topo) + "px";
   }
 
   function mostrarCaixa() {
@@ -253,9 +271,12 @@
     return { eventos, total, indice };
   }
 
+  // Muda a posição real do áudio (seek). setProgress só mexe na barra visual.
   function irParaMs(ms, total) {
     if (!controle || !total) return;
-    controle.setProgress(Math.max(0, ms) / total, total);
+    const fracao = Math.min(1, Math.max(0, ms / total));
+    if (typeof controle.seek === "function") controle.seek(fracao);
+    else controle.setProgress(fracao, total);
   }
 
   function indiceDaSelecao(eventos) {
@@ -269,8 +290,11 @@
       const { eventos, total } = posicaoDaNota();
       const i = indiceDaSelecao(eventos);
       if (i < 0 || !total) { status("Não consegui localizar essa nota no tempo da música.", "erro"); return; }
-      irParaMs(eventos[i].milliseconds, total);
-      controle.play();
+      const ms = eventos[i].milliseconds;
+      // o áudio precisa estar iniciado para aceitar o salto: toca e depois pula
+      Promise.resolve(controle.play && controle.play()).then(() => {
+        irParaMs(ms, total);
+      });
       reproduzindo = true;
       status(`Tocando a partir de ${selecao.token}.`, "ok");
     } catch (erro) {
@@ -343,6 +367,7 @@
   function iniciar() {
     const area = $("partituraAbc");
     if (!area) return;
+    window.addEventListener("resize", () => { if (selecao) reaplicarSelecao(); });
     // A caixinha vai para o fim do corpo da página: assim nenhum contêiner com
     // transformação ou sobreposição a esconde, e ela fica fixa na tela.
     const caixa = $("partituraCaixa");
