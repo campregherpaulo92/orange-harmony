@@ -8,9 +8,9 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=9">
-<link rel="stylesheet" href="identidade.css?v=9">
-<link rel="stylesheet" href="abcjs-audio.css?v=9">
+<link rel="stylesheet" href="styles.css?v=10">
+<link rel="stylesheet" href="identidade.css?v=10">
+<link rel="stylesheet" href="abcjs-audio.css?v=10">
 </head>
 <body>
 
@@ -780,6 +780,7 @@
           <button id="partituraTrecho" class="oh-btn oh-btn-secundario" type="button">Selecionar trecho</button>
           <button id="partituraLimpar" class="oh-btn oh-btn-secundario" type="button">Limpar seleção</button>
           <button id="partituraDesfazer" class="oh-btn oh-btn-secundario" type="button">Desfazer</button>
+          <button id="partituraRefazer" class="oh-btn oh-btn-secundario" type="button">Refazer</button>
         </div>
         <div class="oh-partitura-acoes">
           <button id="partituraCopiar" class="oh-btn oh-btn-secundario" type="button" disabled>Copiar</button>
@@ -787,15 +788,22 @@
           <button id="partituraColar" class="oh-btn oh-btn-secundario" type="button" disabled>Colar no lugar</button>
           <button id="partituraExcluir" class="oh-btn oh-btn-secundario" type="button" disabled>Excluir</button>
           <label class="oh-partitura-auto"><input type="checkbox" id="partituraAuto" checked> Tocar ao clicar</label>
+          <button id="partituraAssistenteBtn" class="oh-btn" type="button" aria-expanded="false"><i class="oh-ic" data-ic="brilho"></i> Assistente musical</button>
         </div>
-        <p class="oh-hint partitura-atalhos">Atalhos: Delete exclui (a nota vira pausa; Delete de novo remove a pausa) · Shift+Delete remove de vez · Ctrl+C copia · Ctrl+X recorta · Ctrl+V cola no lugar da seleção · Ctrl+Z desfaz · Shift+clique marca um trecho.</p>
+        <p class="oh-hint partitura-atalhos">Atalhos: Delete exclui (a nota vira pausa; Delete de novo remove a pausa) · Shift+Delete remove de vez · Ctrl+C copia · Ctrl+X recorta · Ctrl+V cola no lugar da seleção · Ctrl+Z desfaz · Ctrl+Y refaz · ↑↓ meio tom · Shift+↑↓ uma linha · Shift+clique marca um trecho.</p>
         <div class="partitura-legenda">
           <span><i class="pt-cor pt-sel"></i> nota selecionada</span>
           <span><i class="pt-cor pt-trecho"></i> trecho</span>
           <span><i class="pt-cor pt-editada"></i> nota ajustada</span>
+          <span class="pt-leg-ex" hidden><i class="pt-cor pt-alvo"></i> alvo do assistente</span>
+          <span class="pt-leg-ex" hidden><i class="pt-cor pt-errada"></i> fora do alvo</span>
+          <span class="pt-leg-ex" hidden><i class="pt-cor pt-certa"></i> no alvo</span>
         </div>
+        <div id="partituraCorpo" class="partitura-corpo">
         <div id="partituraPapel" class="partitura-papel">
           <div id="partituraSvg"></div>
+        </div>
+        
         </div>
         <div class="oh-partitura-acoes">
           <button id="partituraSalvar" class="oh-btn oh-btn-secundario" type="button">Salvar correção</button>
@@ -808,6 +816,33 @@
           <textarea id="partituraAbc" rows="10" spellcheck="false" placeholder="X:1&#10;T:Minha música&#10;M:4/4&#10;L:1/8&#10;K:C&#10;C D E F | G2 E2 C4 |"></textarea>
         </details>
       </div>
+      <aside id="partituraAssistente" class="pta" hidden aria-label="Assistente musical">
+          <div class="pta-topo">
+            <strong>Assistente musical</strong>
+            <button id="ptaFechar" type="button" class="pta-x" aria-label="Fechar o assistente">×</button>
+          </div>
+          <div id="ptaContexto" class="pta-contexto">Nenhuma partitura carregada.</div>
+          <div class="pta-ferramentas">
+            <button id="ptaDesfazer" type="button" class="pta-chip" title="Desfazer a última mudança (Ctrl+Z)">↶ Desfazer</button>
+            <button id="ptaRefazer" type="button" class="pta-chip" title="Refazer (Ctrl+Y)">↷ Refazer</button>
+            <button id="ptaMeioBaixo" type="button" class="pta-chip" title="Desce a nota selecionada meio tom (seta ↓)">▼ ½ tom</button>
+            <button id="ptaMeioCima" type="button" class="pta-chip" title="Sobe a nota selecionada meio tom (seta ↑)">▲ ½ tom</button>
+          </div>
+          <div class="pta-atalhos">
+            <button type="button" class="pta-chip" data-pta-atalho="__selecao__">Explicar a seleção</button>
+            <button type="button" class="pta-chip" data-pta-atalho="o que eu mudei em relação à original?">O que mudei?</button>
+            <button type="button" class="pta-chip" data-pta-atalho="tem algum erro?">Verificar erros</button>
+            <button type="button" class="pta-chip" data-pta-atalho="explica a música">Explicar a música</button>
+          </div>
+          <div id="ptaMensagens" class="pta-mensagens" aria-live="polite"></div>
+          <div id="ptaAvisoVoz" class="pta-aviso" hidden></div>
+          <div class="pta-entrada">
+            <textarea id="ptaTexto" rows="2" placeholder="Pergunte ou peça algo…"></textarea>
+            <button id="ptaMic" type="button" class="pta-mic" aria-pressed="false" title="Falar (microfone)"><i class="oh-ic" data-ic="mic"></i></button>
+            <button id="ptaEnviar" type="button" class="oh-btn">Enviar</button>
+          </div>
+          <button id="ptaDefinirOriginal" type="button" class="pta-link">Definir a versão atual como original</button>
+        </aside>
       <button id="partituraFlutuante" class="partitura-flutuante" type="button" hidden aria-label="Tocar"></button>
     </section>
 
@@ -1007,14 +1042,14 @@
   </div>
 </div>
 
-<script src="icones.js?v=9"></script>
-<script src="transposicao.js?v=9"></script>
-<script src="player.js?v=9"></script>
-<script src="recorder.js?v=9"></script>
-<script src="app.js?v=9"></script>
-<script src="afinador.js?v=9"></script>
-<script src="historico.js?v=9"></script>
-<script src="fichaAvaliacao.js?v=9"></script>
+<script src="icones.js?v=10"></script>
+<script src="transposicao.js?v=10"></script>
+<script src="player.js?v=10"></script>
+<script src="recorder.js?v=10"></script>
+<script src="app.js?v=10"></script>
+<script src="afinador.js?v=10"></script>
+<script src="historico.js?v=10"></script>
+<script src="fichaAvaliacao.js?v=10"></script>
 <script src="composicoes.js"></script>
 <script src="conversor.js"></script>
 <script src="producao.js"></script>
@@ -1022,14 +1057,16 @@
 <script src="avaliacao.js"></script>
 <script src="laranjinha.js"></script>
 <script src="estudio.js"></script>
-<script src="abcjs-basic-min.js?v=9"></script>
-<script src="songwriter.js?v=9"></script>
-<script src="partitura.js?v=9"></script>
+<script src="abcjs-basic-min.js?v=10"></script>
+<script src="songwriter.js?v=10"></script>
+<script src="partitura.js?v=10"></script>
+<script src="partituraModelo.js?v=10"></script>
+<script src="partituraAssistente.js?v=10"></script>
 <script src="acordes.js"></script>
 <script src="news.js"></script>
 <script src="singergame.js"></script>
 <script src="vocalise.js"></script>
 <script src="biblioteca_picker.js"></script>
-<script src="miniplayer.js?v=9"></script>
+<script src="miniplayer.js?v=10"></script>
 </body>
 </html>
