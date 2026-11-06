@@ -203,3 +203,7 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-rec-grupo { margin-left: auto; align-items: center; padding: 3px 10px; gap: 8px; }
 
 .dw-ferr .dw-btn.peq { padding: 4px 9px; }
+
+.dw-proj-item { display: flex; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--dw-borda); border-radius: 12px; background: var(--dw-painel2); margin-bottom: 8px; }
+.dw-proj-item .info { flex: 1; min-width: 0; } .dw-proj-item small { color: var(--dw-suave); }
+#dwSalvo { color: var(--dw-turq); }

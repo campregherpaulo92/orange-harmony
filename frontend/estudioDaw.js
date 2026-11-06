@@ -36,7 +36,7 @@
   const COMPASSOS = { "4/4": { n: 4, u: 1 }, "3/4": { n: 3, u: 1 }, "2/4": { n: 2, u: 1 }, "6/8": { n: 6, u: 0.5 } };
   const CORES = ["#a855f7", "#ec4899", "#eab308", "#38bdf8", "#84cc16", "#fb7185"];
   const S = {
-    nome: "Meu projeto", bpm: 100, compasso: "4/4", tom: "", pps: 40, snap: "off", ferr: "sel", tAtual: 0, tocando: false, seguir: true,
+    id: "p" + Date.now().toString(36), nome: "Meu projeto", bpm: 100, compasso: "4/4", tom: "", pps: 40, snap: "off", ferr: "sel", tAtual: 0, tocando: false, seguir: true,
     metro: "off", contagem: 1, latencia: 0, mestreVol: 0.9, faixas: [], regioes: [], faixaSel: null, regiaoSel: null, sujo: false, gravando: false, contando: false,
   };
   let proxId = 1;
@@ -68,9 +68,9 @@
     if (!regiaoPorId(S.regiaoSel)) S.regiaoSel = null;
     if (!faixaPorId(S.faixaSel)) S.faixaSel = S.faixas[0] ? S.faixas[0].id : null;
     $("#dwBpm").value = S.bpm; $("#dwComp").value = S.compasso; $("#dwNome").value = S.nome; $("#dwTom").textContent = S.tom || "—";
-    renderTudo(); atualizarNos(); if (S.tocando) reagendar();
+    renderTudo(); atualizarNos(); if (S.tocando) reagendar(); agendarSalvar();
   }
-  function empilhar(antes) { pilha.push(antes); if (pilha.length > 80) pilha.shift(); refaz.length = 0; S.sujo = true; atualizarUndo(); }
+  function empilhar(antes) { pilha.push(antes); if (pilha.length > 80) pilha.shift(); refaz.length = 0; agendarSalvar(); atualizarUndo(); }
   function desfazer() { if (S.gravando || S.contando) return dica("Pare a gravação antes de desfazer."); if (!pilha.length) return dica("Nada para desfazer."); refaz.push(foto()); restaurar(pilha.pop()); atualizarUndo(); dica("Desfeito."); }
   function refazer() { if (!refaz.length) return dica("Nada para refazer."); pilha.push(foto()); restaurar(refaz.pop()); atualizarUndo(); dica("Refeito."); }
   function atualizarUndo() { const u = $("#dwUndo"), r = $("#dwRedo"); if (u) u.disabled = !pilha.length; if (r) r.disabled = !refaz.length; }
@@ -168,7 +168,7 @@
 
   // ══ PROJETO: faixas e regiões ═════════════════════════════════════════
   function novaFaixa(nome, cor, extra) { const f = { id: "f" + proxId++, nome, cor: cor || CORES[S.faixas.length % CORES.length], vol: 0.85, pan: 0, mudo: false, solo: false, arm: false, ...extra }; S.faixas.push(f); if (!S.faixaSel) S.faixaSel = f.id; return f; }
-  function guardarAudio(buf) { const id = "b" + proxId++; bufs.set(id, buf); picos.set(id, calcularPicos(buf)); return id; }
+  function guardarAudio(buf, arquivo) { const id = "b" + proxId++; bufs.set(id, buf); picos.set(id, calcularPicos(buf)); if (arquivo) blobs.set(id, arquivo); return id; }
   function novaRegiao(f, bufId, nome, ini, off, dur) {
     const buf = bufs.get(bufId), r = { id: proxId++, f: f.id, ini, dur: dur != null ? dur : buf.duration - (off || 0), off: off || 0, buf: bufId, nome, ganho: 0, fi: 0.005, fo: 0.005 };
     S.regioes.push(r); return r;
@@ -241,7 +241,7 @@
         <div class="dw-painel-aba" id="dwP-afin"><div class="dw-breve"><b>Afinação por blocos de nota (estilo Melodyne)</b><br>Na próxima etapa, cada nota que você cantou vira um bloco numa grade. Você arrasta o bloco para afinar e ouve na hora. A tela já está na maquete que aprovamos.</div></div>
         <div class="dw-painel-aba" id="dwP-fx"><div class="dw-breve"><b>Efeitos por faixa</b><br>Na etapa seguinte entram equalizador, compressor, reverb e delay em cada faixa, com predefinições como "Voz limpa" e "Voz de rádio".</div></div>
       </section>
-      <div class="dw-status"><span class="e" id="dwStatus">Pronto.</span><span id="dwStatusSel"></span><span>Espaço toca/pausa · R grava · V seleciona · C divide · S divide no cursor · Ctrl+Z desfaz</span></div>
+      <div class="dw-status"><span class="e" id="dwStatus">Pronto.</span><span id="dwStatusSel"></span><span id="dwSalvo"></span><span>Espaço toca/pausa · R grava · V seleciona · C divide · S divide no cursor · Ctrl+Z desfaz</span></div>
       <div class="dw-contagem" id="dwContagemOv" hidden></div>
       <div class="dw-modal" id="dwModalSep" hidden>
         <div class="dw-modal-cartao">
@@ -257,12 +257,21 @@
           <div class="dw-acoes"><button class="dw-btn" id="dwSepCancelar">Cancelar</button><button class="dw-btn cheio" id="dwSepIniciar" disabled>Separar e abrir no Estúdio</button></div>
         </div>
       </div>
+      <div class="dw-modal" id="dwModalProj" hidden>
+        <div class="dw-modal-cartao">
+          <div class="dw-modal-topo"><b>Projetos salvos neste aparelho</b><button id="dwProjFechar" aria-label="Fechar">×</button></div>
+          <div id="dwProjLista"></div>
+          <div class="dw-dica">Os projetos ficam guardados no navegador deste aparelho (não vão para a nuvem). Exporte a mixagem para ter um arquivo seguro.</div>
+        </div>
+      </div>
       <input type="file" id="dwArqAudio" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.webm" hidden>
     </div>
     <div class="dw-menu" id="dwMenuArquivo" hidden>
       <button data-a="importar"><b>Importar áudio</b><small>traz um arquivo do aparelho para uma faixa nova</small></button>
       <button data-a="exportar"><b>Exportar mixagem (WAV)</b><small>junta todas as faixas, com volume e pan, num arquivo</small></button>
-      <button data-a="novo"><b>Novo projeto</b><small>limpa tudo e começa de novo</small></button>
+      <button data-a="salvar"><b>Salvar agora (Ctrl+S)</b><small>ele também salva sozinho enquanto você mexe</small></button>
+      <button data-a="abrir"><b>Abrir projeto…</b><small>seus projetos salvos neste aparelho</small></button>
+      <button data-a="novo"><b>Novo projeto</b><small>o atual fica salvo; começa um em branco</small></button>
       <button data-a="classico"><b>Abrir o Estúdio clássico</b><small>a versão antiga, enquanto você valida esta</small></button>
     </div>
     <div class="dw-menu" id="dwMenuFaixa" hidden>
@@ -414,16 +423,16 @@
     const g = gravacao; if (!g || !g.regiao) return;
     S.gravando = false; $("#dwRec").classList.remove("on");
     const r = g.regiao;
-    const pronto = (buf) => {
+    const pronto = (buf, blob) => {
       if (buf) {
-        const off = Math.min(S.latencia / 1000, Math.max(0, buf.duration - 0.2)), id = guardarAudio(buf);
+        const off = Math.min(S.latencia / 1000, Math.max(0, buf.duration - 0.2)), id = guardarAudio(buf, blob);
         picos.delete(r.buf); r.buf = id; r.off = off; r.dur = buf.duration - off;
       } else { const p = picos.get(r.buf); r.dur = Math.max(0.1, (p.length || 1) * BIN); }
       r.gravando = false; empilhar(g.antes); gravacao = null; renderTudo();
       dica(buf ? `Gravação pronta: ${fmt(r.dur)}. Já faz parte do projeto: mexa nela como em qualquer região.` : "Gravação simulada pronta (sem microfone: não há áudio de verdade).");
     };
     if (g.rec && g.rec.state !== "inactive") {
-      g.rec.onstop = async () => { g.stream.getTracks().forEach((t) => t.stop()); try { pronto(await decodificar(await new Blob(g.chunks).arrayBuffer())); } catch (e) { pronto(null); } };
+      g.rec.onstop = async () => { g.stream.getTracks().forEach((t) => t.stop()); try { const blob = new Blob(g.chunks); pronto(await decodificar(await blob.arrayBuffer()), blob); } catch (e) { pronto(null); } };
       g.rec.stop();
     } else { if (g.stream) g.stream.getTracks().forEach((t) => t.stop()); pronto(null); }
   }
@@ -443,7 +452,7 @@
     try {
       const buf = await decodificar(await arq.arrayBuffer()), antes = foto();
       const f = novaFaixa(arq.name.replace(/\.[^.]+$/, "").slice(0, 26)); const ini = snap(S.tAtual);
-      const r = novaRegiao(f, guardarAudio(buf), f.nome, ini, 0); S.faixaSel = f.id; S.regiaoSel = r.id;
+      const r = novaRegiao(f, guardarAudio(buf, arq), f.nome, ini, 0); S.faixaSel = f.id; S.regiaoSel = r.id;
       if (S.faixas.length === 1) S.nome = f.nome, $("#dwNome").value = f.nome;
       empilhar(antes); renderTudo(); mostrarFaixa(f.id); dica(`Áudio "${f.nome}" trazido para uma faixa nova (${fmt(buf.duration)}).`);
     } catch (e) { dica("Não consegui ler esse arquivo de áudio."); }
@@ -485,11 +494,11 @@
     finally { sepRodando = false; atualizarBotaoSep(); }
   }
   function aplicarSeparacao(bv, bi, bo, res, arq) {
-    if (S.regioes.length && !confirm("Isto vai substituir o projeto atual pelas faixas da música separada. Continuar?")) return;
+    if (S.regioes.length) novoProjeto();   // o projeto atual fica salvo: Arquivo → Abrir projeto
     const antes = foto();
     S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
     const voz = novaFaixa("Voz (stem vocal)", "#f97316", { vol: 0.9 }), inst = novaFaixa("Instrumental", "#14b8a6", { vol: 0.8 }), orig = novaFaixa("Original (referência)", "#94a3b8", { vol: 0.7, mudo: true });
-    novaRegiao(voz, guardarAudio(bv), "Voz", 0, 0); novaRegiao(inst, guardarAudio(bi), "Instrumental", 0, 0); novaRegiao(orig, guardarAudio(bo), "Original (referência)", 0, 0);
+    novaRegiao(voz, guardarAudio(bv, res.vozBlob), "Voz", 0, 0); novaRegiao(inst, guardarAudio(bi, res.instBlob), "Instrumental", 0, 0); novaRegiao(orig, guardarAudio(bo, arq), "Original (referência)", 0, 0);
     S.faixaSel = voz.id; S.nome = arq.name.replace(/\.[^.]+$/, "").slice(0, 40); $("#dwNome").value = S.nome;
     if (res && Number.isFinite(+res.bpm) && +res.bpm >= 40 && +res.bpm <= 220) { S.bpm = Math.round(+res.bpm); $("#dwBpm").value = S.bpm; }
     S.tom = res && res.tom ? String(res.tom) : ""; $("#dwTom").textContent = S.tom || "—";
@@ -517,7 +526,7 @@
       const buf = await renderizarMixagem(), blob = audioBufferParaWavBlob(buf), a = document.createElement("a");
       a.href = URL.createObjectURL(blob); a.download = (S.nome || "mixagem").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") + "_mixagem.wav";
       document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
-      S.sujo = false; dica(`Mixagem exportada (${fmt(buf.duration)}, WAV).`);
+      dica(`Mixagem exportada (${fmt(buf.duration)}, WAV).`);
     } catch (e) { dica(e.message || "Não consegui exportar."); }
   }
 
@@ -569,7 +578,7 @@
     $("#dwRec").addEventListener("click", iniciarGravacao);
     $("#dwBpm").addEventListener("change", (e) => { const novo = Math.max(40, Math.min(220, +e.target.value || 100)); e.target.value = novo; mudar(() => { S.bpm = novo; }); dica(`Andamento: ${novo} BPM. A grade e o metrônomo acompanham (o áudio não muda).`); });
     $("#dwComp").addEventListener("change", (e) => { mudar(() => { S.compasso = e.target.value; }); dica("Compasso: " + e.target.value); });
-    $("#dwNome").addEventListener("change", (e) => { S.nome = e.target.value.trim() || "Meu projeto"; S.sujo = true; });
+    $("#dwNome").addEventListener("change", (e) => { S.nome = e.target.value.trim() || "Meu projeto"; agendarSalvar(); });
     $("#dwFerr").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (b) usarFerramenta(b.dataset.f); });
     $("#dwUndo").addEventListener("click", desfazer); $("#dwRedo").addEventListener("click", refazer);
     $("#dwSnap").addEventListener("change", (e) => { S.snap = e.target.value; dica("Grade: " + e.target.options[e.target.selectedIndex].text); });
@@ -599,12 +608,12 @@
     $("#dwCabLista").addEventListener("click", aoClicarFaixaUI); $("#dwMix").addEventListener("click", aoClicarFaixaUI);
     $("#dwRaiz").addEventListener("input", (e) => {
       const t = e.target;
-      if (t.dataset.vol) { const f = faixaPorId(t.dataset.vol); f.vol = +t.value; $$(`[data-vol="${f.id}"]`).forEach((i) => { if (i !== t) i.value = t.value; }); const db = $(`[data-db="${f.id}"]`); if (db) db.textContent = dbTxt(f.vol); atualizarNos(); S.sujo = true; }
-      if (t.dataset.pan) { faixaPorId(t.dataset.pan).pan = +t.value; atualizarNos(); S.sujo = true; }
-      if (t.dataset.nome) { faixaPorId(t.dataset.nome).nome = t.value; S.sujo = true; }
+      if (t.dataset.vol) { const f = faixaPorId(t.dataset.vol); f.vol = +t.value; $$(`[data-vol="${f.id}"]`).forEach((i) => { if (i !== t) i.value = t.value; }); const db = $(`[data-db="${f.id}"]`); if (db) db.textContent = dbTxt(f.vol); atualizarNos(); agendarSalvar(); }
+      if (t.dataset.pan) { faixaPorId(t.dataset.pan).pan = +t.value; atualizarNos(); agendarSalvar(); }
+      if (t.dataset.nome) { faixaPorId(t.dataset.nome).nome = t.value; agendarSalvar(); }
       if (t.id === "dwMestreVol") { S.mestreVol = +t.value; if (mestre) mestre.gain.value = S.mestreVol; }
-      if (t.dataset.rg) { const r = regiaoPorId(S.regiaoSel); r[t.dataset.rg] = +t.value; const b = t.parentElement.querySelector("b"); b.textContent = t.dataset.rg === "ganho" ? t.value + " dB" : (+t.value).toFixed(2) + "s"; if (t.dataset.rg !== "ganho") renderLinhas(); S.sujo = true; if (S.tocando) reagendar(); }
-      if (t.hasAttribute("data-rnome")) { const r = regiaoPorId(S.regiaoSel); r.nome = t.value; const rot = $(`.dw-regiao[data-r="${r.id}"] .rot`); if (rot) rot.textContent = t.value; S.sujo = true; }
+      if (t.dataset.rg) { const r = regiaoPorId(S.regiaoSel); r[t.dataset.rg] = +t.value; const b = t.parentElement.querySelector("b"); b.textContent = t.dataset.rg === "ganho" ? t.value + " dB" : (+t.value).toFixed(2) + "s"; if (t.dataset.rg !== "ganho") renderLinhas(); agendarSalvar(); if (S.tocando) reagendar(); }
+      if (t.hasAttribute("data-rnome")) { const r = regiaoPorId(S.regiaoSel); r.nome = t.value; const rot = $(`.dw-regiao[data-r="${r.id}"] .rot`); if (rot) rot.textContent = t.value; agendarSalvar(); }
     });
     $("#dwRegp").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); const r = regiaoPorId(S.regiaoSel); if (!b || !r) return; if (b.dataset.ra === "excluir") excluirRegiao(r.id); else if (b.dataset.ra === "duplicar") duplicarRegiao(r); else dividirRegiao(r, S.tAtual); });
     // abas do editor
@@ -622,7 +631,9 @@
       if (b.dataset.a === "importar") $("#dwArqAudio").click();
       else if (b.dataset.a === "exportar") exportar();
       else if (b.dataset.a === "classico") { const f = document.getElementById("fabEstudio"); if (f) f.click(); }
-      else if (b.dataset.a === "novo") { if (S.sujo && !confirm("Começar um projeto novo? O que não foi exportado se perde.")) return; novoProjeto(); }
+      else if (b.dataset.a === "novo") novoProjeto();
+      else if (b.dataset.a === "salvar") salvarProjeto().then((okk) => { if (okk) dica("Projeto salvo neste aparelho."); });
+      else if (b.dataset.a === "abrir") abrirListaProjetos();
     });
     $("#dwMenuFaixa").addEventListener("click", (e) => {
       const b = e.target.closest("[data-n]"); if (!b) return; $("#dwMenuFaixa").hidden = true; const antes = foto();
@@ -637,11 +648,17 @@
     $("#dwSepBib").addEventListener("click", (e) => { if (window.escolherDaBiblioteca) window.escolherDaBiblioteca($("#dwSepArq"), e.currentTarget); else $("#dwSepStatus").textContent = "A biblioteca não está disponível agora."; });
     $("#dwSepArq").addEventListener("change", (e) => { sepArquivo = e.target.files[0] || null; $("#dwSepNome").textContent = sepArquivo ? `Escolhido: ${sepArquivo.name}` : "Nenhum áudio escolhido."; atualizarBotaoSep(); });
     $("#dwSepIniciar").addEventListener("click", iniciarSeparacao);
+    $("#dwProjFechar").addEventListener("click", () => { $("#dwModalProj").hidden = true; });
+    $("#dwProjLista").addEventListener("click", async (e) => {
+      const a = e.target.closest("[data-abrir]"), x = e.target.closest("[data-excluir]");
+      if (a) { $("#dwModalProj").hidden = true; dica("Abrindo o projeto…"); await salvarProjeto(); const okk = await abrirProjeto(a.dataset.abrir); if (okk) dica(`Projeto "${S.nome}" aberto.`); else dica("Não encontrei esse projeto."); }
+      if (x) { if (!confirm("Excluir este projeto salvo? Não dá para desfazer.")) return; await excluirProjeto(x.dataset.excluir); if (x.dataset.excluir === S.id) { S.sujo = true; } abrirListaProjetos(); }
+    });
     // teclado
     document.addEventListener("keydown", (e) => {
       const pag = $("#page-estudio"); if (!pag || !pag.classList.contains("oh-page-ativa")) return;
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
-      if (!$("#dwModalSep").hidden) return;
+      if (!$("#dwModalSep").hidden || !$("#dwModalProj").hidden) return;
       const meta = e.ctrlKey || e.metaKey, k = e.key.toLowerCase(), r = regiaoPorId(S.regiaoSel);
       if (e.key === " " || e.code === "Space") { if (/^(BUTTON|A|SUMMARY)$/.test(e.target.tagName)) return; e.preventDefault(); if (S.gravando || S.contando) pararGravacao(); else S.tocando ? pausar() : tocar(); }
       else if (meta && k === "z" && !e.shiftKey) { e.preventDefault(); desfazer(); }
@@ -649,6 +666,7 @@
       else if (meta && k === "c") { if (r) { areaCopia = { ...r }; dica("Região copiada. Ctrl+V cola no cursor."); } }
       else if (meta && k === "v" && areaCopia) { e.preventDefault(); const alvo = faixaPorId(S.faixaSel) || faixaPorId(areaCopia.f); mudar(() => { const n = { ...areaCopia, id: proxId++, f: alvo.id, ini: snap(S.tAtual), nome: areaCopia.nome + " (cópia)" }; S.regioes.push(n); S.regiaoSel = n.id; }); dica("Região colada no cursor."); }
       else if (meta && k === "d") { e.preventDefault(); if (r) duplicarRegiao(r); }
+      else if (meta && k === "s") { e.preventDefault(); salvarProjeto().then((okk) => { if (okk) dica("Projeto salvo neste aparelho."); }); }
       else if ((e.key === "Delete" || e.key === "Backspace") && r) { e.preventDefault(); excluirRegiao(r.id); }
       else if (!meta && k === "s" && r) dividirRegiao(r, S.tAtual);
       else if (!meta && k === "r") { e.preventDefault(); iniciarGravacao(); }
@@ -662,14 +680,108 @@
   }
   function abrirAba(n) { $$(".dw-aba").forEach((a) => a.classList.toggle("on", a.dataset.aba === n)); $$(".dw-painel-aba").forEach((p) => p.classList.toggle("on", p.id === "dwP-" + n)); $("#dwEditor").classList.remove("fechado"); $("#dwRecolher").innerHTML = ic("seta") + " Recolher"; }
   function novoProjeto() {
+    salvarProjeto();                                   // o projeto atual fica guardado (Arquivo → Abrir projeto)
     if (S.tocando) pausar(); pararFontes(); nos.forEach((n) => { try { n.gain.disconnect(); n.pan.disconnect(); } catch (e) { /* solto */ } }); nos.clear();
-    S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0; S.nome = "Meu projeto"; S.tom = ""; S.bpm = 100; S.sujo = false;
-    bufs.clear(); picos.clear(); pilha.length = 0; refaz.length = 0;
-    $("#dwNome").value = S.nome; $("#dwBpm").value = S.bpm; $("#dwTom").textContent = "—"; renderTudo(); dica("Projeto novo.");
+    S.id = "p" + Date.now().toString(36); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0; S.nome = "Meu projeto"; S.tom = ""; S.bpm = 100; S.sujo = false;
+    bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); pilha.length = 0; refaz.length = 0;
+    try { localStorage.removeItem("oh-dw-ultimo"); } catch (e) { /* sem armazenamento */ }
+    $("#dwNome").value = S.nome; $("#dwBpm").value = S.bpm; $("#dwTom").textContent = "—"; mostrarSalvo(""); renderTudo(); dica("Projeto novo. O anterior ficou salvo em Arquivo → Abrir projeto.");
+  }
+
+  // ══ SALVAR PROJETO (no próprio aparelho, em IndexedDB) ════════════════
+  // Guarda a lista de faixas/regiões (pequena) e os áudios (como arquivos originais, sem recodificar).
+  const blobs = new Map();      // id do áudio -> arquivo original
+  const noBanco = new Set();    // áudios deste projeto que já estão guardados
+  let timerSalvar = null, salvandoAgora = Promise.resolve();
+  function abrirDB() {
+    return new Promise((ok, no) => {
+      const rq = indexedDB.open("oh-estudio", 1);
+      rq.onupgradeneeded = () => { rq.result.createObjectStore("projetos", { keyPath: "id" }); rq.result.createObjectStore("audios"); };
+      rq.onsuccess = () => ok(rq.result); rq.onerror = () => no(rq.error);
+    });
+  }
+  const idb = (rq) => new Promise((ok, no) => { rq.onsuccess = () => ok(rq.result); rq.onerror = () => no(rq.error); });
+  function mostrarSalvo(txt, erro) { const e = $("#dwSalvo"); if (e) { e.textContent = txt; e.style.color = erro ? "#ef4444" : ""; } }
+  function agendarSalvar() { S.sujo = true; mostrarSalvo("Alterações ainda não salvas…"); clearTimeout(timerSalvar); timerSalvar = setTimeout(() => salvarProjeto(), 1500); }
+  function salvarProjeto() {
+    clearTimeout(timerSalvar);
+    if (!S.faixas.length && !S.regioes.length) return Promise.resolve(false);
+    if (S.gravando || S.contando) { agendarSalvar(); return Promise.resolve(false); }
+    // tira uma "foto" agora, de forma síncrona: mesmo que o projeto mude logo em seguida, salva o que estava na tela
+    const regs = S.regioes.filter((r) => !r.gravando), pid = S.id;
+    const proj = { id: pid, nome: S.nome, atualizado: Date.now(), faixas: JSON.parse(JSON.stringify(S.faixas)), regioes: JSON.parse(JSON.stringify(regs)), bpm: S.bpm, compasso: S.compasso, tom: S.tom, mestreVol: S.mestreVol, proxId, nFaixas: S.faixas.length };
+    const fontes = [...new Set(regs.map((r) => r.buf))].filter((b) => bufs.has(b)).map((b) => [b, blobs.get(b), bufs.get(b), noBanco.has(b)]);
+    const trabalho = salvandoAgora.then(async () => {
+      mostrarSalvo("Salvando…");
+      try {
+        const novos = [];
+        for (const [b, blob, buf, jaTem] of fontes) { if (jaTem) continue; novos.push([pid + ":" + b, await (blob || audioBufferParaWavBlob(buf)).arrayBuffer(), b]); }
+        const db = await abrirDB();
+        await new Promise((ok, no) => {
+          const t = db.transaction(["projetos", "audios"], "readwrite"); novos.forEach(([k, ab]) => t.objectStore("audios").put(ab, k)); t.objectStore("projetos").put(proj);
+          t.oncomplete = ok; t.onerror = () => no(t.error); t.onabort = () => no(t.error);
+        });
+        db.close(); if (pid === S.id) { novos.forEach(([, , b]) => noBanco.add(b)); S.sujo = false; mostrarSalvo("Projeto salvo neste aparelho ✓"); }
+        if (pid === S.id) { try { localStorage.setItem("oh-dw-ultimo", pid); } catch (e) { /* sem armazenamento */ } }   // só o projeto aberto agora conta como "o último"
+        if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+        return true;
+      } catch (e) {
+        if (pid === S.id) mostrarSalvo("Não consegui salvar", true);
+        dica(e && e.name === "QuotaExceededError" ? "Não consegui salvar: acabou o espaço do aparelho. Exporte a mixagem e libere espaço." : "Não consegui salvar o projeto: o navegador bloqueou o armazenamento. Exporte a mixagem para não perder o trabalho.");
+        return false;
+      }
+    });
+    salvandoAgora = trabalho.catch(() => false);
+    return trabalho;
+  }
+  async function listarProjetos() {
+    const db = await abrirDB(), todos = await idb(db.transaction("projetos").objectStore("projetos").getAll()); db.close();
+    return todos.map((p) => ({ id: p.id, nome: p.nome, atualizado: p.atualizado, nFaixas: p.nFaixas, nRegioes: p.regioes.length })).sort((a, b) => b.atualizado - a.atualizado);
+  }
+  async function abrirProjeto(id) {
+    const db = await abrirDB(), proj = await idb(db.transaction("projetos").objectStore("projetos").get(id));
+    if (!proj) { db.close(); return false; }
+    const ids = [...new Set(proj.regioes.map((r) => r.buf))], novosBufs = new Map(), novosPicos = new Map(), novosBlobs = new Map();
+    for (const b of ids) {
+      const ab = await idb(db.transaction("audios").objectStore("audios").get(id + ":" + b)); if (!ab) continue;
+      novosBlobs.set(b, new Blob([ab])); const buf = await decodificar(ab.slice(0)); novosBufs.set(b, buf); novosPicos.set(b, calcularPicos(buf));
+    }
+    // limpeza: tira do banco os áudios que este projeto não usa mais (regiões excluídas há tempo)
+    const chaves = await idb(db.transaction("audios").objectStore("audios").getAllKeys(IDBKeyRange.bound(id + ":", id + ":\uffff"))), usados = new Set(ids.map((b) => id + ":" + b)), sobra = chaves.filter((k) => !usados.has(k));
+    if (sobra.length) await new Promise((ok) => { const t = db.transaction("audios", "readwrite"); sobra.forEach((k) => t.objectStore("audios").delete(k)); t.oncomplete = ok; t.onerror = ok; });
+    db.close();
+    if (S.tocando) pausar(); pararFontes(); nos.forEach((n) => { try { n.gain.disconnect(); n.pan.disconnect(); } catch (e) { /* solto */ } }); nos.clear();
+    bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); novosBufs.forEach((v, k) => { bufs.set(k, v); picos.set(k, novosPicos.get(k)); blobs.set(k, novosBlobs.get(k)); noBanco.add(k); });
+    const faltaram = proj.regioes.filter((r) => !bufs.has(r.buf)).length;
+    S.id = proj.id; S.nome = proj.nome; S.faixas = proj.faixas; S.regioes = proj.regioes.filter((r) => bufs.has(r.buf)); S.bpm = proj.bpm; S.compasso = proj.compasso; S.tom = proj.tom || ""; S.mestreVol = proj.mestreVol == null ? 0.9 : proj.mestreVol;
+    proxId = Math.max(proxId, proj.proxId || 0) + 1; S.faixaSel = S.faixas[0] ? S.faixas[0].id : null; S.regiaoSel = null; S.tAtual = 0; S.sujo = false; pilha.length = 0; refaz.length = 0;
+    $("#dwNome").value = S.nome; $("#dwBpm").value = S.bpm; $("#dwComp").value = S.compasso; $("#dwTom").textContent = S.tom || "—";
+    try { localStorage.setItem("oh-dw-ultimo", S.id); } catch (e) { /* sem armazenamento */ }
+    renderTudo(); atualizarNos(); mostrarSalvo("Projeto salvo neste aparelho ✓");
+    if (faltaram) dica(`Atenção: ${faltaram} região(ões) perderam o áudio (o navegador apagou parte dos dados salvos) e foram removidas.`);
+    return true;
+  }
+  async function excluirProjeto(id) {
+    const db = await abrirDB();
+    await new Promise((ok) => { const t = db.transaction(["projetos", "audios"], "readwrite"); t.objectStore("projetos").delete(id); t.objectStore("audios").delete(IDBKeyRange.bound(id + ":", id + ":\uffff")); t.oncomplete = ok; t.onerror = ok; });
+    db.close();
+  }
+  async function abrirListaProjetos() {
+    $("#dwModalProj").hidden = false; const el = $("#dwProjLista"); el.innerHTML = '<div class="dw-dica">Carregando…</div>';
+    try {
+      await salvarProjeto(); const lista = await listarProjetos();
+      el.innerHTML = lista.length ? lista.map((p) => `<div class="dw-proj-item" data-p="${p.id}"><div class="info"><b>${esc(p.nome)}</b>${p.id === S.id ? " <small>(aberto agora)</small>" : ""}<br><small>${new Date(p.atualizado).toLocaleString("pt-BR")} · ${p.nFaixas} faixa(s) · ${p.nRegioes} região(ões)</small></div><button class="dw-btn peq" data-abrir="${p.id}" ${p.id === S.id ? "disabled" : ""}>Abrir</button><button class="dw-btn peq" data-excluir="${p.id}">Excluir</button></div>`).join("") : '<div class="dw-dica">Nenhum projeto salvo ainda. Ele é salvo sozinho assim que você começa a mexer.</div>';
+    } catch (e) { el.innerHTML = '<div class="dw-dica">Não consegui ler os projetos salvos neste navegador.</div>'; }
   }
 
   // ══ INÍCIO ════════════════════════════════════════════════════════════
-  function aoAbrir() { montar(); renderTudo(); atualizarNos(); }
+  let restauradoUmaVez = false;
+  function aoAbrir() {
+    montar(); renderTudo(); atualizarNos();
+    if (restauradoUmaVez) return; restauradoUmaVez = true;
+    let ultimo = null; try { ultimo = localStorage.getItem("oh-dw-ultimo"); } catch (e) { /* sem armazenamento */ }
+    if (ultimo && !S.faixas.length) abrirProjeto(ultimo).then((okk) => { if (okk) dica(`Projeto "${S.nome}" retomado de onde você parou.`); }).catch(() => {});
+  }
   function iniciar() {
     montar();
     try { S.metro = localStorage.getItem("oh-dw-metro") || "off"; S.contagem = +(localStorage.getItem("oh-dw-contagem") ?? 1); S.latencia = +(localStorage.getItem("oh-dw-lat") || 0); } catch (e) { /* sem armazenamento */ }
@@ -679,7 +791,7 @@
   window.EstudioDaw = {
     aoAbrir,
     _teste: {
-      S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
+      salvarProjeto, listarProjetos, abrirProjeto, S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
       fontes: () => fontes.length, cliques: () => cliquesTotal, cliqueLog: () => cliqueLog.slice(),
       ganhoDe: (id) => { const n = nos.get(id); return n ? n.gain.gain.value : null; },
       nivelDe: (id) => { const n = nos.get(id); return n ? nivel(n.an) : null; },
