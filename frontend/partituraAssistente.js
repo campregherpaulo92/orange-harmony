@@ -75,6 +75,23 @@
     if (/\b(essa|esta|esse|este)\s+(nota|aqui|ponto|medida|compasso)\b|\bessa aqui\b|\bnota aqui\b|\bessa\b(?=\s+(primeira|segunda|terceira|quarta|quinta|ultima|\d))/.test(t)) r.essa = true;
     if (/\b(essa|esta|esse|este|nesse|nessa|neste|nesta|dessa|desse|desta|deste)\s+(trecho|frase|sequencia|parte|pedaco|passagem)\b|\bo trecho\b|\ba frase\b|\ba sequencia\b|\bselecao\b|\bselecionad/.test(t)) r.trecho = true;
     if (/\b(essa|esta|esse|este)\s+(medida|compasso)\b/.test(t)) r.essaMedida = true;
+    // seções da música (marcadas pela pessoa na partitura): introdução, verso, pré-refrão, refrão, pós-refrão, ponte, solo, interlúdio, final
+    const marcadas = (API() && API().secoes()) || [];
+    const tem = (tipo) => marcadas.some((x) => x.tipo === tipo);
+    const exp = /\(secao=([a-z]+)-(\d+)\)/.exec(t);
+    const TIPO_COMPACTO = { introducao: "introducao", verso: "verso", prerefrao: "pre_refrao", refrao: "refrao", posrefrao: "pos_refrao", ponte: "ponte", solo: "solo", interludio: "interludio", final: "final" };
+    if (exp && TIPO_COMPACTO[exp[1]]) { r.secao = { tipo: TIPO_COMPACTO[exp[1]], num: parseInt(exp[2], 10) }; t = t.replace(exp[0], " "); }
+    else {
+      const ALIAS = [["pre_refrao", /\bpre[- ]?refrao\b/, true], ["pos_refrao", /\bpos[- ]?refrao\b/, true], ["refrao", /\brefrao\b/, true], ["verso", /\b(?:verso|estrofe)\b/, true], ["introducao", /\b(?:introducao|intro)\b/, false], ["interludio", /\binterludio\b/, false], ["ponte", /\bponte\b/, false], ["solo", /\bsolo\b/, false], ["final", /\b(?:final|coda)\b/, false]];
+      for (const [tipo, re, sempre] of ALIAS) {
+        const mt = re.exec(t);
+        if (!mt || !(sempre || tem(tipo))) continue;                                // "final", "solo", "ponte" só valem se a seção existe
+        const depois = new RegExp(re.source.replace(/^\\b/, "").replace(/\\b$/, "") + "\\s*(\\d+)").exec(t);
+        const antes = new RegExp("\\b(primeiro|primeira|segundo|segunda|terceiro|terceira|quarto|quarta)\\s+" + re.source.replace(/^\\b/, "")).exec(t);
+        r.secao = { tipo, num: depois ? parseInt(depois[1], 10) : antes ? ORDINAIS[antes[1]] : 0 };
+        break;
+      }
+    }
     if ((m = /\bvoz\s*(\d+)\b/.exec(t)) && !r.voz) { const v = vozes[parseInt(m[1], 10) - 1]; if (v) r.voz = v.id; }
     if (!r.voz) {
       const achadas = vozes.filter((v) => { const n = norm(v.nome).replace(/\b(melody|melodia)\b/g, "").trim(); return n && n.length >= 2 && new RegExp("\\b" + n.replace(/[^a-z0-9 ]/g, "") + "\\b").test(t); });
@@ -85,7 +102,7 @@
     }
     return r;
   }
-  const temReferencia = (r) => r.medida != null || r.nota != null || r.ordinal || r.essa || r.trecho || r.ultimaDaLinha || r.aposPausa || r.tempoSeg != null || r.essaMedida;
+  const temReferencia = (r) => !!r.secao || r.medida != null || r.nota != null || r.ordinal || r.essa || r.trecho || r.ultimaDaLinha || r.aposPausa || r.tempoSeg != null || r.essaMedida;
 
   // Resolve a referência para eventos reais da partitura. Devolve { eventos, rotulo } ou { erro } ou { ambiguo }.
   function resolver(r, modelo) {
@@ -102,6 +119,18 @@
       const notas = modelo.eventos.filter((e) => e.tipo === "nota" && e.ms != null);
       const e = notas.reduce((b, x) => (!b || Math.abs(x.ms - alvoMs) < Math.abs(b.ms - alvoMs) ? x : b), null);
       return e ? { eventos: [e], rotulo: rotuloEv(e) + ", perto de " + Math.round(e.ms / 1000) + " s" } : { erro: "Não consegui achar uma nota nesse momento da música." };
+    }
+    if (r.secao) {
+      const nomeTipo = { introducao: "Introdução", verso: "Verso", pre_refrao: "Pré-refrão", refrao: "Refrão", pos_refrao: "Pós-refrão", ponte: "Ponte", solo: "Solo", interludio: "Interlúdio", final: "Final" }[r.secao.tipo];
+      const lista = api.secoes().filter((x) => x.tipo === r.secao.tipo && (!r.secao.num || x.num === r.secao.num));
+      if (!lista.length) return { erro: "Não encontrei \"" + nomeTipo + (r.secao.num ? " " + r.secao.num : "") + "\" marcado nesta partitura. Para marcar: selecione o trecho (Selecionar trecho), escolha o tipo ao lado de \"Marcar seção\" e clique nele." };
+      if (lista.length > 1) return { ambiguo: lista.map((x) => ({ id: "sec:" + x.tipo.replace("_", "") + "-" + x.num, nome: x.nome })), motivo: "Há mais de um " + nomeTipo + " marcado." , porSecao: true };
+      const sec = lista[0];
+      const comNotas = vozes.filter((v) => v.eventos.some((e) => e.tipo === "nota" && e.medida >= sec.de && e.medida <= sec.ate));
+      const voz = r.voz ? vozes.find((v) => v.id === r.voz) : (ctx.vozPreferida && comNotas.find((v) => v.id === ctx.vozPreferida)) || (comNotas.length === 1 ? comNotas[0] : null);
+      if (!voz) return comNotas.length ? { ambiguo: comNotas.map((v) => ({ id: v.id, nome: v.nome })), motivo: "O " + sec.nome + " tem notas em mais de uma voz." } : { erro: "Não há notas no " + sec.nome + "." };
+      const evs = voz.eventos.filter((e) => e.medida >= sec.de && e.medida <= sec.ate);
+      return { eventos: evs, trecho: true, voz, secaoNome: sec.nome, rotulo: sec.nome + " (medidas " + sec.de + " a " + sec.ate + ", " + voz.nome + ")" };
     }
     if (r.ultimaDaLinha) {
       if (!evSel) return { erro: "Para eu achar a última nota da linha, clique antes em alguma nota dessa linha." };
@@ -230,6 +259,7 @@
     "• comparar com a partitura original (\"o que eu mudei?\") e verificar erros (\"tem algum erro?\");",
     "• mudar a ALTURA de uma nota, medida ou trecho (\"na medida 25, segunda nota, sobe meio tom\", \"desce essa frase um tom\", \"sobe uma oitava\"). Eu mostro a proposta, deixo a nota em roxo e você ajusta sozinho ou manda eu aplicar;",
     "• voltar a altura para a da original (\"volta essa nota para a original\");",
+    "• entender as seções que você marcou (\"explica o refrão\", \"sobe o verso 2 um tom\", \"compara o pré-refrão com a original\");",
     "• ensinar música com exemplos da sua partitura (\"o que é semitom?\").",
     "Clique numa nota e diga \"essa nota\", ou cite a medida. Você também pode falar, pelo microfone.",
   ].join("\n");
@@ -478,7 +508,7 @@
     if (alvo.ambiguo) {
       return {
         texto: (alvo.motivo || "Preciso de mais um detalhe.") + " Em qual voz você quer?",
-        chips: alvo.ambiguo.map((v) => ({ rotulo: v.nome, enviar: textoBruto + " (voz=" + v.id + ")" })),
+        chips: alvo.ambiguo.map((v) => ({ rotulo: v.nome, enviar: textoBruto + (String(v.id).indexOf("sec:") === 0 ? " (secao=" + v.id.slice(4) + ")" : " (voz=" + v.id + ")") })),
       };
     }
     if (alvo.erro) return { texto: alvo.erro };
@@ -486,13 +516,13 @@
     // ── explicar ──
     if (tipo === "explicar") {
       if (alvo.vazio) return { texto: M.explicarGeral(A), destacar: [] };
+      if (alvo.trecho) {
+        const n = alvo.eventos.filter((e) => e.tipo === "nota");
+        return { texto: (alvo.secaoNome || "Trecho") + ", medidas " + alvo.eventos[0].medida + " a " + alvo.eventos[alvo.eventos.length - 1].medida + " (" + alvo.voz.nome + "):\nEm ordem: " + M.descreverNotas(A, alvo.eventos) + ".\n" + M.contorno(n), destacar: alvo.eventos.map((e) => e.inicio) };
+      }
       if (alvo.eventos.length === 1 && !alvo.medida) {
         const ev = alvo.eventos[0];
         return { texto: (alvo.aviso ? alvo.aviso + "\n" : "") + M.explicarEvento(A, ev), destacar: [ev.inicio], foco: ev };
-      }
-      if (alvo.trecho) {
-        const n = alvo.eventos.filter((e) => e.tipo === "nota");
-        return { texto: "Trecho das medidas " + alvo.eventos[0].medida + " a " + alvo.eventos[alvo.eventos.length - 1].medida + " (" + alvo.voz.nome + "):\nEm ordem: " + M.descreverNotas(A, alvo.eventos) + ".\n" + M.contorno(n), destacar: alvo.eventos.map((e) => e.inicio) };
       }
       return { texto: (alvo.aviso ? alvo.aviso + "\n" : "") + M.explicarMedida(A, alvo.voz, alvo.medida.numero), destacar: alvo.eventos.map((e) => e.inicio) };
     }
@@ -667,7 +697,10 @@
       if (a && b) partes.push("Trecho: medidas " + Math.min(a.medida, b.medida) + " a " + Math.max(a.medida, b.medida) + " (" + a.vozNome + ")");
     } else if (sel.inicio != null) {
       const e = eventoNaPosicao(A, sel.inicio);
-      if (e) partes.push(e.vozNome + " · medida " + e.medida + " · " + (e.tipo === "nota" ? "nota " + e.indice + " (" + e.nome + ")" : "pausa " + e.indice));
+      if (e) {
+        const sec = api.secoes().find((x) => e.medida >= x.de && e.medida <= x.ate);
+        partes.push(e.vozNome + " · medida " + e.medida + " · " + (e.tipo === "nota" ? "nota " + e.indice + " (" + e.nome + ")" : "pausa " + e.indice) + (sec ? " · " + sec.nome : ""));
+      }
     }
     if (!partes.length) partes.push("Nada selecionado");
     partes.push(!O ? "sem original guardada" : mesmaPartitura() ? "versão atual = original" : "editada em relação à original");

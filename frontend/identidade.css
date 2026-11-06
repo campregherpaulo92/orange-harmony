@@ -454,3 +454,66 @@ h1, h2, h3 {
 .pta-ferramentas { display: flex; flex-wrap: wrap; gap: 6px; }
 .pta-chip[disabled] { opacity: 0.4; cursor: not-allowed; }
 .pta-proposta .pta-txt { border: 1px dashed rgba(168, 85, 247, 0.7) !important; }
+
+/* ── números dos compassos e seções (desenhados por cima da partitura) ── */
+.partitura-papel .oh-ref-num { font: 700 8px 'Bricolage Grotesque', sans-serif; fill: #6b7280; stroke: none; }
+.partitura-papel .oh-ref-secao { font: 800 9px 'Bricolage Grotesque', sans-serif; fill: #fff; stroke: none; }
+.partitura-secoes { align-items: center; }
+.oh-select-mini { background: #0d0a08; color: #f4ece4; border: 1px solid rgba(249, 115, 22, 0.5); border-radius: 10px; padding: 8px 10px; font-family: inherit; font-size: 0.9rem; }
+#partituraTutorialBtn.pulsando { animation: ptPulso 1.3s ease-in-out infinite; }
+@keyframes ptPulso { 50% { box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.35), 0 0 18px rgba(249, 115, 22, 0.6); } }
+
+/* ── a nota que está tocando aparece SEMPRE, inclusive nas notas já modificadas (azul/verde/roxa...).
+   Fica por último de propósito: vence qualquer outra cor de nota. ── */
+.partitura-papel .abcjs-highlight, .partitura-papel .abcjs-highlight * { fill: #f97316 !important; stroke: #f97316 !important; }
+.partitura-papel .abcjs-highlight .oh-area-clique { fill: transparent !important; stroke: none !important; }
+
+/* ── caixas em relevo (3D): aresta clara em cima/esquerda, sombra embaixo/direita, brilho em volta ── */
+.pta, .oh-laranjinha-painel, .oh-studio-conteudo {
+  border: 1px solid rgba(255, 168, 96, 0.6);
+  background-image: linear-gradient(145deg, rgba(255, 170, 90, 0.10) 0%, rgba(255, 170, 90, 0) 38%, rgba(0, 0, 0, 0.30) 100%);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 205, 150, 0.30),
+    inset 2px 0 2px rgba(255, 175, 100, 0.14),
+    inset 0 -4px 10px rgba(0, 0, 0, 0.60),
+    inset -3px 0 8px rgba(0, 0, 0, 0.50),
+    0 0 0 1px rgba(0, 0, 0, 0.75),
+    0 1px 0 rgba(255, 215, 170, 0.22),
+    0 10px 18px rgba(0, 0, 0, 0.50),
+    0 30px 64px rgba(0, 0, 0, 0.60),
+    0 0 32px rgba(249, 115, 22, 0.22);
+}
+
+.oh-btn-cancelar { margin-left: 8px; border-color: #ef4444 !important; color: #fca5a5 !important; }
+.oh-btn-cancelar[hidden] { display: none; }
+
+/* ── tutorial rápido da aba Partitura ── */
+.pt-tut { position: fixed; inset: 0; z-index: 9900; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.68); backdrop-filter: blur(3px); padding: 12px; }
+.pt-tut[hidden] { display: none; }
+.pt-tut-cartao {
+  width: min(760px, 96vw); max-height: 92vh; display: flex; flex-direction: column; border-radius: 20px; padding: 16px 20px; color: #f4ece4;
+  border: 1px solid rgba(255, 168, 96, 0.6);
+  background: linear-gradient(145deg, rgba(255, 170, 90, 0.10) 0%, rgba(255, 170, 90, 0) 38%, rgba(0, 0, 0, 0.30) 100%), linear-gradient(165deg, rgba(28, 18, 10, 0.99), rgba(12, 9, 6, 0.99));
+  box-shadow: inset 0 2px 1px rgba(255, 205, 150, 0.30), inset 2px 0 2px rgba(255, 175, 100, 0.14), inset 0 -4px 10px rgba(0, 0, 0, 0.60), inset -3px 0 8px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(0, 0, 0, 0.75), 0 10px 18px rgba(0, 0, 0, 0.50), 0 30px 64px rgba(0, 0, 0, 0.60), 0 0 32px rgba(249, 115, 22, 0.22);
+}
+.pt-tut-topo { display: flex; justify-content: space-between; align-items: center; color: var(--oh-orange, #f97316); font-weight: 700; font-size: 0.85rem; }
+.pt-tut-x { background: transparent; border: none; color: #f4ece4; font-size: 1.5rem; line-height: 1; cursor: pointer; }
+.pt-tut-pontos { display: flex; gap: 7px; margin: 8px 0 4px; flex-wrap: wrap; }
+.pt-tut-ponto { width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(249, 115, 22, 0.8); background: transparent; padding: 0; cursor: pointer; }
+.pt-tut-ponto.feito { background: rgba(249, 115, 22, 0.45); }
+.pt-tut-ponto.ativo { background: #f97316; transform: scale(1.35); }
+.pt-tut-titulo { margin: 6px 0 8px; font-size: 1.35rem; color: #ffb070; }
+.pt-tut-corpo { overflow-y: auto; flex: 1 1 auto; min-height: 140px; padding-right: 6px; scrollbar-width: thin; scrollbar-color: rgba(249, 115, 22, 0.5) transparent; }
+.pt-tut-p { line-height: 1.55; margin: 0 0 10px; }
+.pt-tut-pauta { background: #fff; color: #111; border-radius: 10px; padding: 4px 6px; margin: 8px 0; }   /* o abcjs desenha com a cor do texto: tem que ser escura sobre o fundo branco */
+.pt-tut-lista { margin: 6px 0 10px; padding-left: 20px; line-height: 1.55; }
+.pt-tut-lista li { margin: 5px 0; }
+.pt-tut-cores { list-style: none; padding: 0; margin: 8px 0; }
+.pt-tut-cores li { display: flex; align-items: center; gap: 10px; margin: 7px 0; line-height: 1.4; }
+.pt-tut-cor { width: 14px; height: 14px; border-radius: 50%; flex: 0 0 14px; }
+.pt-tut-dica { background: rgba(249, 115, 22, 0.12); border-left: 3px solid #f97316; padding: 8px 10px; border-radius: 6px; font-size: 0.88rem; }
+.pt-tut-nav { display: flex; gap: 8px; justify-content: space-between; margin-top: 12px; }
+.pt-tut-prox { margin-left: auto; }
+.pt-tut-nav button[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+.partitura-secoes .oh-select-mini { width: auto; min-width: 150px; flex: 0 0 auto; }

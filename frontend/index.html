@@ -8,9 +8,9 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=10">
-<link rel="stylesheet" href="identidade.css?v=10">
-<link rel="stylesheet" href="abcjs-audio.css?v=10">
+<link rel="stylesheet" href="styles.css?v=11">
+<link rel="stylesheet" href="identidade.css?v=11">
+<link rel="stylesheet" href="abcjs-audio.css?v=11">
 </head>
 <body>
 
@@ -790,7 +790,26 @@
           <label class="oh-partitura-auto"><input type="checkbox" id="partituraAuto" checked> Tocar ao clicar</label>
           <button id="partituraAssistenteBtn" class="oh-btn" type="button" aria-expanded="false"><i class="oh-ic" data-ic="brilho"></i> Assistente musical</button>
         </div>
-        <p class="oh-hint partitura-atalhos">Atalhos: Delete exclui (a nota vira pausa; Delete de novo remove a pausa) · Shift+Delete remove de vez · Ctrl+C copia · Ctrl+X recorta · Ctrl+V cola no lugar da seleção · Ctrl+Z desfaz · Ctrl+Y refaz · ↑↓ meio tom · Shift+↑↓ uma linha · Shift+clique marca um trecho.</p>
+        <div class="oh-partitura-acoes partitura-secoes">
+          <select id="partituraSecaoTipo" class="oh-select-mini" title="Tipo de seção da música">
+            <option value="introducao">Introdução</option>
+            <option value="verso" selected>Verso</option>
+            <option value="pre_refrao">Pré-refrão</option>
+            <option value="refrao">Refrão</option>
+            <option value="pos_refrao">Pós-refrão</option>
+            <option value="ponte">Ponte</option>
+            <option value="solo">Solo</option>
+            <option value="interludio">Interlúdio</option>
+            <option value="final">Final</option>
+          </select>
+          <button id="partituraSecaoMarcar" class="oh-btn oh-btn-secundario" type="button" title="Marca como seção as medidas do trecho verde (ou da nota selecionada)">Marcar seção</button>
+          <button id="partituraSecaoRemover" class="oh-btn oh-btn-secundario" type="button" title="Remove a seção onde está a nota selecionada">Remover seção</button>
+          <label class="oh-partitura-auto"><input type="checkbox" id="partituraNumeros" checked> Números dos compassos</label>
+          <label class="oh-partitura-auto"><input type="checkbox" id="partituraOcultarVazias" checked> Ocultar pautas vazias</label>
+          <button id="partituraTutorialBtn" class="oh-btn oh-btn-secundario" type="button" title="Tutorial rápido da aba Partitura">Tutorial rápido</button>
+        </div>
+        <p id="partituraVazias" class="oh-hint" hidden></p>
+        <p class="oh-hint partitura-atalhos">Atalhos: Delete exclui (a nota vira pausa; Delete de novo remove a pausa) · Shift+Delete remove de vez · Ctrl+C copia · Ctrl+X recorta · Ctrl+V cola no lugar da seleção · Espaço toca/pausa · Ctrl+Z desfaz · Ctrl+Y refaz · ↑↓ meio tom · Shift+↑↓ uma linha · Shift+clique marca um trecho.</p>
         <div class="partitura-legenda">
           <span><i class="pt-cor pt-sel"></i> nota selecionada</span>
           <span><i class="pt-cor pt-trecho"></i> trecho</span>
@@ -1042,14 +1061,14 @@
   </div>
 </div>
 
-<script src="icones.js?v=10"></script>
-<script src="transposicao.js?v=10"></script>
-<script src="player.js?v=10"></script>
-<script src="recorder.js?v=10"></script>
-<script src="app.js?v=10"></script>
-<script src="afinador.js?v=10"></script>
-<script src="historico.js?v=10"></script>
-<script src="fichaAvaliacao.js?v=10"></script>
+<script src="icones.js?v=11"></script>
+<script src="transposicao.js?v=11"></script>
+<script src="player.js?v=11"></script>
+<script src="recorder.js?v=11"></script>
+<script src="app.js?v=11"></script>
+<script src="afinador.js?v=11"></script>
+<script src="historico.js?v=11"></script>
+<script src="fichaAvaliacao.js?v=11"></script>
 <script src="composicoes.js"></script>
 <script src="conversor.js"></script>
 <script src="producao.js"></script>
@@ -1057,16 +1076,17 @@
 <script src="avaliacao.js"></script>
 <script src="laranjinha.js"></script>
 <script src="estudio.js"></script>
-<script src="abcjs-basic-min.js?v=10"></script>
-<script src="songwriter.js?v=10"></script>
-<script src="partitura.js?v=10"></script>
-<script src="partituraModelo.js?v=10"></script>
-<script src="partituraAssistente.js?v=10"></script>
+<script src="abcjs-basic-min.js?v=11"></script>
+<script src="songwriter.js?v=11"></script>
+<script src="partitura.js?v=11"></script>
+<script src="partituraModelo.js?v=11"></script>
+<script src="partituraAssistente.js?v=11"></script>
+<script src="partituraTutorial.js?v=11"></script>
 <script src="acordes.js"></script>
 <script src="news.js"></script>
 <script src="singergame.js"></script>
 <script src="vocalise.js"></script>
 <script src="biblioteca_picker.js"></script>
-<script src="miniplayer.js?v=10"></script>
+<script src="miniplayer.js?v=11"></script>
 </body>
 </html>

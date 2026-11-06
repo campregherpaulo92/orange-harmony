@@ -19,6 +19,10 @@
 (function () {
   const K_ATUAL = "oh-partitura-atual";
   const K_ORIGINAL = "oh-partitura-original";
+  const K_NUMEROS = "oh-partitura-numeros";             // mostrar os números dos compassos
+  const K_VAZIAS = "oh-partitura-ocultar-vazias";       // esconder (só na tela) pautas que só têm pausas
+  const K_SECOES = "oh-partitura-secoes";               // seções da música (verso, refrão...), presas à partitura original
+  let vozesOcultas = [];
   const K_ULTIMA = "oh-partitura-ultima";     // última extraída: reaproveitar sem gastar IA
   const K_TIMBRE = "oh-partitura-timbre";
   const K_AUTO = "oh-partitura-auto";         // "0" desliga o "Tocar ao clicar"
@@ -189,7 +193,7 @@
     }
     try {
       alvo.innerHTML = "";
-      const tunes = window.ABCJS.renderAbc(alvo, abc, { responsive: "resize", add_classes: true, clickListener: aoClicarAbcjs, selectTypes: ["note", "bar"] });
+      const tunes = window.ABCJS.renderAbc(alvo, abcParaDesenho(abc), { responsive: "resize", add_classes: true, clickListener: aoClicarAbcjs, selectTypes: ["note", "bar"] });
       if (!tunes || !tunes.length || !tunes[0].lines || !tunes[0].lines.length) throw new Error("Nenhuma música encontrada no texto.");
       visual = tunes[0];
       if (!lerStorage(K_ORIGINAL)) gravarStorage(K_ORIGINAL, abc);
@@ -203,6 +207,7 @@
       return false;
     }
     mapearNotas();
+    desenharReferencias();
     validarSelecao();
     pintar();
     prepararSom();
@@ -896,7 +901,12 @@
     if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return;
     const meta = ev.ctrlKey || ev.metaKey;
     const tecla = (ev.key || "").toLowerCase();
-    if (!meta && (ev.key === "Delete" || ev.key === "Backspace")) {
+    if (document.querySelector(".pt-tut:not([hidden])")) return;                  // com o tutorial aberto, as teclas são dele
+    if (!meta && !ev.altKey && (ev.key === " " || ev.code === "Space")) {
+      if (el && /^(BUTTON|A|SUMMARY)$/.test(el.tagName)) return;                  // foco num botão: a barra de espaço é dele
+      ev.preventDefault();                                                         // e a página não rola
+      if (visual) alternarPlay();
+    } else if (!meta && (ev.key === "Delete" || ev.key === "Backspace")) {
       if (notasDoAlvo().length) ev.preventDefault();
       excluir(ev.shiftKey);
     } else if (meta && tecla === "c") {
@@ -989,6 +999,29 @@
     $("partituraLimpar").addEventListener("click", limparSelecao);
     $("partituraDesfazer").addEventListener("click", desfazer);
     $("partituraRefazer").addEventListener("click", refazer);
+    $("partituraNumeros").checked = lerStorage(K_NUMEROS) !== "0";
+    $("partituraNumeros").addEventListener("change", (e) => { gravarStorage(K_NUMEROS, e.target.checked ? "1" : "0"); desenharReferencias(); });
+    $("partituraOcultarVazias").checked = ocultarVazias();
+    $("partituraOcultarVazias").addEventListener("change", (e) => { gravarStorage(K_VAZIAS, e.target.checked ? "1" : "0"); renderizar(); });
+    $("partituraSecaoMarcar").addEventListener("click", () => {
+      const f = faixaSelecionada();
+      if (!f) { status("Selecione uma nota ou marque um trecho (Selecionar trecho) para dizer onde fica a seção.", "info"); return; }
+      const tipo = $("partituraSecaoTipo").value;
+      marcarSecao(tipo, f.de, f.ate);
+      const x = lerSecoes().find((q) => q.tipo === tipo && q.de === f.de);
+      status((x ? x.nome : SECOES[tipo].nome) + " marcado nas medidas " + f.de + (f.ate > f.de ? " a " + f.ate : "") + ".", "ok");
+    });
+    $("partituraSecaoRemover").addEventListener("click", () => {
+      const f = faixaSelecionada(), lista = lerSecoes();
+      const alvo = f && lista.find((x) => f.de >= x.de && f.de <= x.ate);
+      if (!alvo) { status("Selecione uma nota dentro da seção que você quer remover.", "info"); return; }
+      gravarSecoes(lista.filter((x) => x !== alvo));
+      status(alvo.nome + " removido.", "ok");
+    });
+    // depois de clicar num botão, ele solta o foco: assim a barra de espaço sempre toca/pausa e nunca repete o botão
+    const soltar = (e) => { const b = e.target.closest && e.target.closest("button, input[type=checkbox]"); if (b) setTimeout(() => b.blur(), 0); };
+    $(PAGINA).addEventListener("click", soltar);
+    const painelAssistente = $("partituraAssistente"); if (painelAssistente) painelAssistente.addEventListener("click", soltar);
     $("partituraCopiar").addEventListener("click", copiar);
     $("partituraRecortar").addEventListener("click", recortar);
     $("partituraColar").addEventListener("click", colar);
@@ -1023,6 +1056,145 @@
   }
 
   // Pequena porta para os testes automáticos (não é usada pelo app)
+  // ── pautas vazias: só pausas. Escondidas apenas no desenho (a posição de cada letra do texto é mantida) ──
+  const ocultarVazias = () => lerStorage(K_VAZIAS) !== "0";
+  function abcParaDesenho(abc) {
+    vozesOcultas = [];
+    const aviso = $("partituraVazias");
+    if (aviso) { aviso.hidden = true; aviso.textContent = ""; }
+    if (!ocultarVazias() || !window.PartituraModelo) return abc;
+    const info = window.PartituraModelo.lerVozes(abc);
+    if (info.lista.length < 2) return abc;
+    const M = window.PartituraModelo.construir(abc);
+    if (!M) return abc;
+    const vazias = M.vozes.filter((v) => !v.eventos.some((e) => e.tipo === "nota"));
+    if (!vazias.length || vazias.length === M.vozes.length) return abc;      // se TODAS estiverem vazias, não esconde nada
+    const ids = new Set(vazias.map((v) => v.id));
+    const marcas = info.marcas, partes = abc.split("");
+    marcas.forEach((mk, i) => {
+      if (!ids.has(mk.id)) return;
+      const fim = i + 1 < marcas.length ? marcas[i + 1].pos : abc.length;
+      for (let k = mk.pos; k < fim; k++) if (partes[k] !== "\n" && partes[k] !== "\r") partes[k] = " ";   // mesmo tamanho: nada se desloca
+    });
+    vozesOcultas = vazias.map((v) => v.nome);
+    if (aviso) { aviso.textContent = "Pauta sem notas escondida: " + vozesOcultas.join(", ") + " (só pausas; não muda a música). Para ver, desmarque \"Ocultar pautas vazias\"."; aviso.hidden = false; }
+    return partes.join("");
+  }
+
+  // ── seções (introdução, verso, pré-refrão, refrão...) presas à partitura original ──
+  const SECOES = {
+    introducao: { nome: "Introdução", cor: "#94a3b8", numerada: false },
+    verso: { nome: "Verso", cor: "#f59e0b", numerada: true },
+    pre_refrao: { nome: "Pré-refrão", cor: "#84cc16", numerada: true },
+    refrao: { nome: "Refrão", cor: "#06b6d4", numerada: true },
+    pos_refrao: { nome: "Pós-refrão", cor: "#818cf8", numerada: false },
+    ponte: { nome: "Ponte", cor: "#fb7185", numerada: false },
+    solo: { nome: "Solo", cor: "#facc15", numerada: false },
+    interludio: { nome: "Interlúdio", cor: "#a8a29e", numerada: false },
+    final: { nome: "Final", cor: "#78716c", numerada: false },
+  };
+  function hashTexto(t) { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return String(h); }
+  function lerSecoes() {
+    try {
+      const o = JSON.parse(lerStorage(K_SECOES) || "null");
+      if (!o || o.o !== hashTexto(lerStorage(K_ORIGINAL) || "")) return [];     // outra música: as seções antigas não valem
+      return Array.isArray(o.l) ? o.l : [];
+    } catch (e) { return []; }
+  }
+  function gravarSecoes(lista) {
+    lista.sort((a, b) => a.de - b.de);
+    const cont = {};
+    lista.forEach((x) => {                                                       // Verso 1, Verso 2... pela ordem na música
+      const d = SECOES[x.tipo];
+      cont[x.tipo] = (cont[x.tipo] || 0) + 1;
+      x.num = d.numerada ? cont[x.tipo] : 0;
+      x.nome = d.numerada ? d.nome + " " + x.num : d.nome;
+    });
+    gravarStorage(K_SECOES, JSON.stringify({ o: hashTexto(lerStorage(K_ORIGINAL) || ""), l: lista }));
+    desenharReferencias();
+    avisar("secoes");
+  }
+  function faixaSelecionada() {                                                   // medidas do trecho verde (ou da nota vermelha)
+    if (!window.PartituraModelo) return null;
+    const M = window.PartituraModelo.construir($("partituraAbc").value);
+    if (!M) return null;
+    const ev = (i) => { const e = M.porInicio.get(i); return e || M.eventos.find((x) => x.inicio > i) || null; };
+    if (trecho) { const a = ev(trecho.de), b = ev(trecho.ate); if (a && b) return { de: Math.min(a.medida, b.medida), ate: Math.max(a.medida + (a.compassos || 1) - 1, b.medida + (b.compassos || 1) - 1) }; }
+    if (selecao != null) { const e = ev(selecao); if (e) return { de: e.medida, ate: e.medida + (e.compassos || 1) - 1 }; }
+    return null;
+  }
+  function marcarSecao(tipo, de, ate) {
+    if (!SECOES[tipo] || de == null || ate == null) return false;
+    const lista = lerSecoes().filter((x) => x.ate < de || x.de > ate);              // quem se sobrepõe é substituído
+    lista.push({ tipo, de, ate });
+    gravarSecoes(lista);
+    return true;
+  }
+
+  // Desenha, POR CIMA da partitura, o número de cada medida e as seções. Não mexe no texto nem nos cliques.
+  function desenharReferencias() {
+    const alvo = $("partituraSvg"), svg = alvo && alvo.querySelector("svg");
+    if (!svg) return;
+    svg.querySelectorAll(".oh-ref").forEach((e) => e.remove());
+    if (!window.PartituraModelo) return;
+    const M = window.PartituraModelo.construir($("partituraAbc").value);
+    if (!M) return;
+    const mostrarNumeros = lerStorage(K_NUMEROS) !== "0", secoes = lerSecoes();
+    const NS = "http://www.w3.org/2000/svg";
+    const el = (tag, attrs, texto) => { const e = document.createElementNS(NS, tag); Object.keys(attrs).forEach((k) => e.setAttribute(k, attrs[k])); if (texto != null) e.textContent = texto; e.setAttribute("class", "oh-ref " + (attrs.class || "")); e.style.pointerEvents = "none"; return e; };
+    const secaoDa = (n) => secoes.find((x) => n >= x.de && n <= x.ate);
+    const outrosTextos = [...svg.querySelectorAll("text")].map((t) => { try { return t.getBBox(); } catch (e) { return null; } }).filter(Boolean);   // obstáculos: textos da partitura e etiquetas já colocadas
+    const atras = document.createElementNS(NS, "g"); atras.setAttribute("class", "oh-ref oh-ref-fundo"); atras.style.pointerEvents = "none";
+    svg.insertBefore(atras, svg.firstChild);
+    const frente = document.createElementNS(NS, "g"); frente.setAttribute("class", "oh-ref oh-ref-frente"); frente.style.pointerEvents = "none";
+    svg.appendChild(frente);
+    const porLinha = new Map();
+    M.eventos.forEach((ev) => {
+      const it = porInicio.get(ev.inicio);
+      if (!it || !it.svg.isConnected) return;
+      const cm = /abcjs-l(\d+)/.exec(it.svg.getAttribute("class") || "");           // a linha vem do DESENHO (o modelo conta outras coisas também)
+      const chave = cm ? cm[1] : String(ev.linha);
+      if (!porLinha.has(chave)) porLinha.set(chave, []);
+      porLinha.get(chave).push({ ev, it });
+    });
+    porLinha.forEach((lista, linha) => {
+      const vozRef = Math.min(...lista.map((x) => x.ev.vozOrdem));                  // numera as medidas da primeira voz desenhada nesta linha
+      const proprios = lista.filter((x) => x.ev.vozOrdem === vozRef);
+      const medidas = [];
+      proprios.forEach((x) => { const u = medidas[medidas.length - 1]; if (u && u.n === x.ev.medida) u.itens.push(x); else medidas.push({ n: x.ev.medida, fim: x.ev.medida + (x.ev.compassos || 1) - 1, itens: [x] }); });
+      const cl = (x, re) => { const m = re.exec(x.it.svg.getAttribute("class") || ""); return m ? m[1] : null; };
+      const staffs = [...svg.querySelectorAll(".abcjs-staff.abcjs-l" + linha)].map((p) => { try { return p.getBBox(); } catch (e) { return null; } }).filter(Boolean);
+      if (!staffs.length) return;
+      const topoVoz = (() => { const v = cl(proprios[0], /abcjs-v(\d+)/); const p = v != null ? svg.querySelector(".abcjs-staff.abcjs-l" + linha + ".abcjs-v" + v) : null; try { return p ? p.getBBox() : staffs[0]; } catch (e) { return staffs[0]; } })();
+      const yTopo = topoVoz.y, bandaTopo = Math.min(...staffs.map((b) => b.y)) - 10, bandaBase = Math.max(...staffs.map((b) => b.y + b.height)) + 6;
+      const box = (x) => { try { return x.it.svg.getBBox(); } catch (e) { return null; } };
+      medidas.forEach((m, i) => {
+        const b0 = box(m.itens[0]); if (!b0) return;
+        const x0 = b0.x - 5;
+        const prox = medidas[i + 1] && box(medidas[i + 1].itens[0]);
+        const ultimo = box(m.itens[m.itens.length - 1]);
+        const x1 = prox ? prox.x - 7 : (ultimo ? ultimo.x + ultimo.width + 8 : x0 + 40);
+        const sec = secaoDa(m.n);
+        if (sec) {
+          const cor = SECOES[sec.tipo].cor;
+          atras.appendChild(el("rect", { x: x0, y: bandaTopo, width: Math.max(4, x1 - x0), height: bandaBase - bandaTopo, fill: cor, "fill-opacity": "0.13", class: "oh-ref-banda" }));
+          frente.appendChild(el("rect", { x: x0, y: yTopo - 9, width: Math.max(4, x1 - x0 - 1), height: 2, fill: cor, class: "oh-ref-barra" }));
+          const primeiraNaLinha = !medidas.slice(0, i).some((mm) => secaoDa(mm.n) === sec);
+          if (primeiraNaLinha) {
+            const larg = sec.nome.length * 5.8 + 10;
+            let y = yTopo - 34;
+            for (let t = 0; t < 4; t++) { const r = { x: x0, y, width: larg, height: 12 }; if (!outrosTextos.some((o) => r.x < o.x + o.width && r.x + r.width > o.x && r.y < o.y + o.height && r.y + r.height > o.y)) break; y -= 12; }
+            y = Math.max(2, y);
+            outrosTextos.push({ x: x0, y, width: larg, height: 12 });
+            frente.appendChild(el("rect", { x: x0, y, width: larg, height: 12, rx: 3, fill: cor, class: "oh-ref-pilula" }));
+            frente.appendChild(el("text", { x: x0 + 5, y: y + 9, class: "oh-ref-secao" }, sec.nome));
+          }
+        }
+        if (mostrarNumeros) frente.appendChild(el("text", { x: x0 + 1, y: yTopo - 12, class: "oh-ref-num" }, m.fim > m.n ? m.n + "–" + m.fim : String(m.n)));
+      });
+    });
+  }
+
   // ── Interface para o assistente musical (partituraAssistente.js) ───────────
   // Ele lê e age pelo editor: não existe uma segunda cópia da partitura em lugar nenhum.
   function rolarPara(inicio) {
@@ -1057,6 +1229,11 @@
     desfazer, refazer, moverSemitom, moverPasso,
     pausar: () => pausarAudio(),
     timbre: () => timbreAtual(),
+    secoes: () => lerSecoes().map((x) => ({ ...x })),
+    marcarSecao, faixaSelecionada,
+    limparSecoes: () => gravarSecoes([]),
+    vozesOcultas: () => vozesOcultas.slice(),
+    redesenharReferencias: desenharReferencias,
     podeDesfazer: () => historico.length, podeRefazer: () => refazerPilha.length,
     // exercício guiado: 'alvo' (roxo) = ainda não mexeu · 'errada' (rosa) = mexeu e não é o alvo · 'certa' (turquesa) = no alvo
     marcarExercicio: (mapa) => notas.forEach((n) => {

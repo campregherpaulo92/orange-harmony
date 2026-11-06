@@ -48,6 +48,23 @@ function inicializarSongwriter() {
   const promptCard = document.getElementById("songwriterPromptCard");
   const promptTexto = document.getElementById("songwriterPromptTexto");
   const btnCopiarPrompt = document.getElementById("btnCopiarPrompt");
+  // Botão "Cancelar" ao lado das operações demoradas. Cancelar para a ESPERA na hora e libera a tela;
+  // o servidor pode já estar trabalhando no Hugging Face e terminar sozinho em segundo plano (isso o navegador não controla).
+  function prepararCancelamento(btn) {
+    let b = btn._btnCancelar;
+    if (!b) {
+      b = document.createElement("button");
+      b.type = "button"; b.className = "oh-btn oh-btn-secundario oh-btn-cancelar"; b.textContent = "Cancelar"; b.hidden = true;
+      btn.insertAdjacentElement("afterend", b);
+      btn._btnCancelar = b;
+    }
+    const ctrl = new AbortController();
+    b.hidden = false; b.disabled = false;
+    b.onclick = () => { b.disabled = true; ctrl.abort(); };
+    return { sinal: ctrl.signal, fim: () => { b.hidden = true; b.onclick = null; } };
+  }
+  const MSG_CANCELADO = "Cancelado. Nada foi entregue. (Se o servidor já tinha começado, ele pode terminar sozinho em segundo plano.)";
+
   const btnGerarMusica = document.getElementById("btnGerarMusica");
   const statusMusica = document.getElementById("songwriterStatusMusica");
   const musicaResultado = document.getElementById("songwriterMusicaResultado");
@@ -190,6 +207,7 @@ function inicializarSongwriter() {
       return;
     }
     btnGerarMusica.disabled = true;
+    const cancelamento = prepararCancelamento(btnGerarMusica);
     statusMusica.textContent = "Gerando música via Hugging Face (YuE2)… pode levar alguns minutos.";
     musicaResultado.hidden = true;
 
@@ -198,7 +216,7 @@ function inicializarSongwriter() {
     form.append("letra", letraTexto.value);
 
     try {
-      const resp = await fetch(`${API_BASE}/api/songwriter/musica`, { method: "POST", body: form });
+      const resp = await fetch(`${API_BASE}/api/songwriter/musica`, { method: "POST", body: form, signal: cancelamento.sinal });
       if (!resp.ok) {
         const erro = await resp.json();
         statusMusica.textContent = erro.detail || "Não foi possível gerar a música.";
@@ -216,8 +234,9 @@ function inicializarSongwriter() {
           letraTexto.value);
       }
     } catch (err) {
-      statusMusica.textContent = `Erro: ${err.message}`;
+      statusMusica.textContent = err && err.name === "AbortError" ? MSG_CANCELADO : `Erro: ${err.message}`;
     } finally {
+      cancelamento.fim();
       btnGerarMusica.disabled = false;
     }
   });
@@ -287,12 +306,13 @@ function inicializarSongwriter() {
         return;
       }
       btnExtrairMelodia.disabled = true;
+      const cancelamento = prepararCancelamento(btnExtrairMelodia);
       statusCover.textContent = "🎧 Ouvindo a gravação e extraindo a melodia… pode levar alguns minutos.";
       const form = new FormData();
       form.append("arquivo", arquivo);
       form.append("idioma", coverIdioma.value);
       try {
-        const resp = await fetch(`${API_BASE}/api/songwriter/analisar-gravacao`, { method: "POST", body: form });
+        const resp = await fetch(`${API_BASE}/api/songwriter/analisar-gravacao`, { method: "POST", body: form, signal: cancelamento.sinal });
         if (!resp.ok) {
           const erro = await resp.json().catch(() => ({}));
           statusCover.textContent = erro.detail || "Não foi possível extrair a melodia.";
@@ -307,8 +327,9 @@ function inicializarSongwriter() {
         const resumo = (dados.resumo || "").replace(/\s+/g, " ").trim().slice(0, 180);
         statusCover.textContent = "✅ Melodia extraída." + (resumo ? " " + resumo : "");
       } catch (err) {
-        statusCover.textContent = `Erro: ${err.message}`;
+        statusCover.textContent = err && err.name === "AbortError" ? MSG_CANCELADO : `Erro: ${err.message}`;
       } finally {
+        cancelamento.fim();
         btnExtrairMelodia.disabled = false;
       }
     });
@@ -329,6 +350,7 @@ function inicializarSongwriter() {
       }
       const aviso = avisoDeMetrica(letra);
       btnGerarCover.disabled = true;
+      const cancelamento = prepararCancelamento(btnGerarCover);
       coverResultado.hidden = true;
       statusCover.textContent = (aviso ? aviso + " " : "") + "🎛️ Gerando a versão com banda… pode levar alguns minutos.";
       const form = new FormData();
@@ -338,7 +360,7 @@ function inicializarSongwriter() {
       form.append("qualidade", coverQualidade.value);
       form.append("seed", "831001");
       try {
-        const resp = await fetch(`${API_BASE}/api/songwriter/cover`, { method: "POST", body: form });
+        const resp = await fetch(`${API_BASE}/api/songwriter/cover`, { method: "POST", body: form, signal: cancelamento.sinal });
         if (!resp.ok) {
           const erro = await resp.json().catch(() => ({}));
           statusCover.textContent = erro.detail || "Não foi possível gerar a versão.";
@@ -349,8 +371,9 @@ function inicializarSongwriter() {
         coverResultado.hidden = false;
         statusCover.textContent = aviso;
       } catch (err) {
-        statusCover.textContent = `Erro: ${err.message}`;
+        statusCover.textContent = err && err.name === "AbortError" ? MSG_CANCELADO : `Erro: ${err.message}`;
       } finally {
+        cancelamento.fim();
         btnGerarCover.disabled = false;
       }
     });
