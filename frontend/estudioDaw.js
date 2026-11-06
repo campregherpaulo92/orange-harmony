@@ -223,7 +223,7 @@
           <div class="dw-vazio" id="dwVazio" hidden>
             <h2>Comece o seu projeto</h2><p>Traga uma música, grave a sua voz ou importe um áudio. Depois é só mexer: cortar, mover, ajustar volume e exportar.</p>
             <div class="opcoes">
-              <button class="opcao" id="dwOpSep">${ic("divide")}<b>Separar uma música</b><small>divide em voz e instrumental (Demucs)</small></button>
+              <button class="opcao" id="dwOpSep">${ic("divide")}<b>Separar uma música</b><small>divide em voz, bateria, baixo, guitarra, piano e outros</small></button>
               <button class="opcao" id="dwOpGravar">${ic("mic")}<b>Gravar uma voz</b><small>cria a faixa e grava pelo microfone</small></button>
               <button class="opcao" id="dwOpImportar">${ic("pasta")}<b>Importar áudio</b><small>traz um arquivo do aparelho</small></button>
             </div>
@@ -245,13 +245,18 @@
       <div class="dw-contagem" id="dwContagemOv" hidden></div>
       <div class="dw-modal" id="dwModalSep" hidden>
         <div class="dw-modal-cartao">
-          <div class="dw-modal-topo"><b>Separar uma música em voz e instrumental</b><button id="dwSepFechar" aria-label="Fechar">×</button></div>
+          <div class="dw-modal-topo"><b>Separar uma música em faixas</b><button id="dwSepFechar" aria-label="Fechar">×</button></div>
           <div class="dw-colab" id="dwColab" hidden><span class="dw-pilula" id="dwColabPilula">Desligado</span><p id="dwColabTexto"></p><a class="dw-btn peq" id="dwColabLink" href="#" target="_blank" rel="noopener" style="width:fit-content;text-decoration:none">Abrir o separador no Colab</a></div>
           <div>
             <input type="file" id="dwSepArq" accept=".wav,.mp3,.m4a,.ogg,.flac,.webm" hidden>
             <div class="dw-acoes" style="justify-content:flex-start"><button class="dw-btn" id="dwSepUpload">${ic("pasta")} Escolher do aparelho</button><button class="dw-btn" id="dwSepBib">${ic("pasta")} Escolher da biblioteca</button></div>
             <div class="dw-dica" id="dwSepNome" style="margin-top:8px">Nenhum áudio escolhido.</div>
           </div>
+          <div class="dw-modos" id="dwModos">
+            <label class="dw-modo"><input type="radio" name="dwModoSep" value="completo"><span><b>Todos os instrumentos</b><small>6 faixas: voz, bateria, baixo, guitarra, piano e outros</small></span></label>
+            <label class="dw-modo"><input type="radio" name="dwModoSep" value="rapido"><span><b>Só voz e instrumental</b><small>2 faixas: mais leve e rápido</small></span></label>
+          </div>
+          <div class="dw-dica" id="dwModoAviso"></div>
           <ol class="dw-passos" id="dwPassos" hidden><li data-p="enviando">Enviando o áudio</li><li data-p="fila">Na fila do separador</li><li data-p="separando">Separando voz e instrumental</li><li data-p="baixando">Trazendo o resultado</li></ol>
           <div class="dw-dica" id="dwSepStatus"></div>
           <div class="dw-acoes"><button class="dw-btn" id="dwSepCancelar">Cancelar</button><button class="dw-btn cheio" id="dwSepIniciar" disabled>Separar e abrir no Estúdio</button></div>
@@ -285,7 +290,7 @@
 
   function renderCab() {
     $("#dwCabLista").innerHTML = S.faixas.map((f) => `
-      <div class="dw-cab ${f.id === S.faixaSel ? "sel" : ""}" data-f="${f.id}">
+      <div class="dw-cab ${f.id === S.faixaSel ? "sel" : ""} ${f.vazia ? "vazia" : ""}" data-f="${f.id}" ${f.vazia ? 'title="Esta faixa quase não tem som nesta música (deixei muda)"' : ""}>
         <i class="cor" style="background:${f.cor}"></i>
         <div class="l1"><input class="nome" value="${esc(f.nome)}" data-nome="${f.id}">
           <button class="dw-mini m ${f.mudo ? "on" : ""}" data-m="${f.id}" title="Mudo">M</button><button class="dw-mini s ${f.solo ? "on" : ""}" data-s="${f.id}" title="Solo">S</button><button class="dw-mini r ${f.arm ? "on" : ""}" data-r="${f.id}" title="Armar para gravar">R</button></div>
@@ -468,7 +473,7 @@
     card.hidden = false; const on = !!(configEst.colab && configEst.colab.online);
     card.classList.toggle("on", on); $("#dwColabPilula").textContent = on ? (configEst.colab.gpu ? "Ligado · GPU" : "Ligado") : "Desligado";
     $("#dwColabTexto").textContent = on ? "Pronto! Escolha um áudio e clique em Separar." : "A separação roda no Google Colab (o servidor gratuito não tem memória para o Demucs). Ligue o separador uma vez: abra o Colab, use Ambiente de execução → Executar tudo e volte aqui. Este cartão fica verde sozinho.";
-    $("#dwColabLink").href = configEst.colab_url || "#"; $("#dwColabLink").hidden = on; atualizarBotaoSep();
+    $("#dwColabLink").href = configEst.colab_url || "#"; $("#dwColabLink").hidden = on; atualizarBotaoSep(); atualizarAvisoModo();
   }
   function colabPronto() { return !configEst || configEst.modo !== "fila" || !!(configEst.colab && configEst.colab.online); }
   function atualizarBotaoSep() { const b = $("#dwSepIniciar"); if (b) b.disabled = sepRodando || !sepArquivo || !colabPronto(); }
@@ -479,16 +484,114 @@
   }
   function fecharSeparar() { $("#dwModalSep").hidden = true; clearInterval(timerColab); if (sepRodando) { sepCancelado = true; dica("A separação continua no servidor, mas o resultado será descartado."); } }
   function etapaSep(e) { const ordem = ["enviando", "fila", "separando", "baixando"], i = ordem.indexOf(e); $$("#dwPassos li").forEach((li, k) => { li.className = k < i ? "feito" : k === i ? "atual" : ""; }); }
+  // ── modos de separação: rápido (2 faixas) ou completo (6 faixas, modelo htdemucs_6s) ──
+  const NOMES_FAIXA = {                       // nome do modelo -> [nome na tela, cor, volume inicial]
+    vocals: ["Voz", "#f97316", 0.9], drums: ["Bateria", "#ef4444", 0.85], bass: ["Baixo", "#38bdf8", 0.85],
+    guitar: ["Guitarra", "#eab308", 0.85], piano: ["Piano", "#a855f7", 0.8], other: ["Outros", "#14b8a6", 0.8],
+  };
+  const ORDEM_FAIXAS = ["vocals", "drums", "bass", "guitar", "piano", "other"];
+  const aparelhoLeve = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || !!(navigator.deviceMemory && navigator.deviceMemory < 4);
+  const modoSep = () => { const r = document.querySelector('input[name="dwModoSep"]:checked'); return r ? r.value : "rapido"; };
+  function atualizarAvisoModo() {
+    const el = $("#dwModoAviso"); if (!el) return;
+    const m = modoSep(), c = configEst && configEst.colab; let t = "";
+    if (m === "completo") {
+      if (aparelhoLeve()) t = "Atenção: neste aparelho o modo completo pode travar por falta de memória (são 6 faixas de áudio abertas ao mesmo tempo). Se travar, use o modo rápido.";
+      if (configEst && configEst.modo === "fila" && c && c.online && c.completo === false) t = "O notebook do Colab está na versão antiga e vai entregar só voz e instrumental. Atualize o notebook e rode de novo para liberar as 6 faixas." + (t ? " " + t : "");
+      if (!t) t = "O piano é a faixa menos confiável. Sintetizador, cordas e metais caem em “Outros”. Voz principal e backing vocal ficam juntas na faixa de voz. A faixa Original não é aberta neste modo, para poupar memória.";
+    } else t = "Modo leve: a voz numa faixa e tudo o que não é voz noutra (mais a faixa Original, só de referência).";
+    el.textContent = t;
+  }
+  function ajustarModoInicial() {
+    let m = null; try { m = localStorage.getItem("oh-dw-modosep"); } catch (e) { /* sem armazenamento */ }
+    if (m !== "rapido" && m !== "completo") m = aparelhoLeve() ? "rapido" : "completo";
+    const r = document.querySelector(`input[name="dwModoSep"][value="${m}"]`); if (r) r.checked = true; atualizarAvisoModo();
+  }
+  const rmsDe = (buf) => { const ch = buf.getChannelData(0); let s = 0, n = 0; for (let i = 0; i < ch.length; i += 37) { s += ch[i] * ch[i]; n++; } return Math.sqrt(s / Math.max(n, 1)); };
+  async function separarCompletoViaColab(arq, etapa) {
+    etapa("enviando");
+    const form = new FormData(); form.append("arquivo", arq); form.append("modo", "completo");
+    const envio = await fetch(`${API_BASE}/api/estudio/fila`, { method: "POST", body: form });
+    if (!envio.ok) { const erro = await envio.json().catch(() => ({})); throw new Error(erro.detail || "Não consegui enviar o áudio pro separador."); }
+    const { job_id } = await envio.json(); etapa("fila");
+    const inicio = Date.now(); let falhas = 0, semColabDesde = null;
+    while (true) {
+      await esperar(3000);
+      if (sepCancelado) throw new Error("Separação cancelada.");
+      if (Date.now() - inicio > 20 * 60 * 1000) throw new Error("A separação demorou mais de 20 minutos e foi cancelada.");
+      let info;
+      try { const r = await fetch(`${API_BASE}/api/estudio/fila/${job_id}`); if (r.status === 404) throw new Error("Perdi o trabalho no servidor. Tente de novo."); info = await r.json(); falhas = 0; }
+      catch (err) { if (String(err.message).startsWith("Perdi")) throw err; if (++falhas >= 6) throw new Error(mensagemDeErroDeRede(err)); continue; }
+      if (info.status === "erro") throw new Error(info.erro || "O separador falhou.");
+      if (info.status === "processando") { etapa("separando"); semColabDesde = null; }
+      if (info.status === "pendente") {
+        etapa("fila");
+        if (info.colab_online === false) { semColabDesde = semColabDesde || Date.now(); if (Date.now() - semColabDesde > 60000) throw new Error("O Colab foi desligado antes de pegar o seu áudio. Ligue de novo e tente outra vez."); } else semColabDesde = null;
+      }
+      if (info.status === "pronto") {
+        etapa("baixando");
+        const nomes = Array.isArray(info.stems) && info.stems.length ? info.stems : null;      // sem lista = Colab antigo: só voz e instrumental
+        const pedir = nomes || ["voz", "instrumental"];
+        const blobs = await Promise.all(pedir.map(async (n) => { const r = await fetch(`${API_BASE}/api/estudio/fila/${job_id}/${n}`); if (!r.ok) throw new Error("Não consegui baixar os stems prontos."); return r.blob(); }));
+        fetch(`${API_BASE}/api/estudio/fila/${job_id}`, { method: "DELETE" }).catch(() => {});
+        if (nomes) { const stems = {}; nomes.forEach((n, i) => { stems[n] = blobs[i]; }); return { stems, bpm: info.bpm, tom: info.tom }; }
+        return { vozBlob: blobs[0], instBlob: blobs[1], bpm: info.bpm, tom: info.tom };
+      }
+    }
+  }
+  async function separarCompletoLocal(arq) {
+    const form = new FormData(); form.append("arquivo", arq); form.append("modo", "completo");
+    const ctrl = new AbortController(), limite = setTimeout(() => ctrl.abort(), 10 * 60 * 1000);
+    try {
+      const resp = await fetch(`${API_BASE}/api/estudio/separar`, { method: "POST", body: form, signal: ctrl.signal });
+      if (!resp.ok) { const erro = await resp.json().catch(() => ({})); throw new Error(erro.detail || "Não foi possível separar os stems."); }
+      const d = await resp.json();
+      if (d.stems) { const stems = {}; Object.keys(d.stems).forEach((n) => { stems[n] = base64ParaBlob(d.stems[n], "audio/mpeg"); }); return { stems, bpm: d.bpm, tom: d.tom }; }
+      return { vozBlob: base64ParaBlob(d.voz_base64, "audio/mpeg"), instBlob: base64ParaBlob(d.instrumental_base64, "audio/mpeg"), bpm: d.bpm, tom: d.tom };
+    } catch (err) { if (err.name === "AbortError") throw new Error("Isso demorou demais (mais de 10 min) e foi cancelado."); throw err; } finally { clearTimeout(limite); }
+  }
+  // Abre as faixas separadas, uma por vez (poupa memória), com nome e cor de cada instrumento.
+  async function aplicarSeparacaoCompleta(res, arq) {
+    if (S.regioes.length) novoProjeto();   // o projeto atual fica salvo: Arquivo → Abrir projeto
+    const antes = foto();
+    S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
+    const nomes = Object.keys(res.stems).sort((a, b) => { const ia = ORDEM_FAIXAS.indexOf(a), ib = ORDEM_FAIXAS.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
+    const feitas = [];
+    for (let k = 0; k < nomes.length; k++) {
+      const n = nomes[k], def = NOMES_FAIXA[n] || [n.charAt(0).toUpperCase() + n.slice(1), CORES[k % CORES.length], 0.8];
+      $("#dwSepStatus").textContent = `Abrindo as faixas… ${def[0]} (${k + 1} de ${nomes.length})`;
+      const blob = res.stems[n], buf = await decodificar(await blob.arrayBuffer());
+      const f = novaFaixa(def[0], def[1], { vol: def[2] }); novaRegiao(f, guardarAudio(buf, blob), def[0], 0, 0);
+      feitas.push({ f, rms: rmsDe(buf) });
+    }
+    // faixa quase sem som (ex.: música sem piano): fica muda e marcada, para não sujar a mixagem
+    const maior = Math.max(...feitas.map((x) => x.rms), 1e-9), vazias = [];
+    feitas.forEach((x) => { if (x.rms < maior * 0.04) { x.f.mudo = true; x.f.vazia = true; vazias.push(x.f.nome); } });
+    S.faixaSel = S.faixas[0].id; S.nome = arq.name.replace(/\.[^.]+$/, "").slice(0, 40); $("#dwNome").value = S.nome;
+    if (res && Number.isFinite(+res.bpm) && +res.bpm >= 40 && +res.bpm <= 220) { S.bpm = Math.round(+res.bpm); $("#dwBpm").value = S.bpm; }
+    S.tom = res && res.tom ? String(res.tom) : ""; $("#dwTom").textContent = S.tom || "—";
+    empilhar(antes); renderTudo(); atualizarNos(); parar();
+    dica(`Música separada em ${S.faixas.length} faixas${S.tom ? ` · tom ${S.tom}` : ""}${res && res.bpm ? ` · ${S.bpm} BPM` : ""}.` +
+      (vazias.length ? ` ${vazias.join(" e ")} quase não têm som nesta música: deixei mudas.` : ""));
+  }
   async function iniciarSeparacao() {
     if (!sepArquivo || sepRodando) return; sepRodando = true; sepCancelado = false; atualizarBotaoSep(); $("#dwPassos").hidden = false; $("#dwSepStatus").textContent = "";
     try {
+      const modo = modoSep(), fila = !!(configEst && configEst.modo === "fila"), msgLocal = "Separando no servidor… isso pode levar alguns minutos.";
       let res;
-      if (configEst && configEst.modo === "fila") res = await separarViaColab(sepArquivo, etapaSep);
-      else { $("#dwPassos").hidden = true; $("#dwSepStatus").textContent = "Separando no servidor… isso pode levar alguns minutos."; res = await separarLocal(sepArquivo); }
+      if (modo === "completo") {
+        if (fila) res = await separarCompletoViaColab(sepArquivo, etapaSep);
+        else { $("#dwPassos").hidden = true; $("#dwSepStatus").textContent = msgLocal; res = await separarCompletoLocal(sepArquivo); }
+      } else if (fila) res = await separarViaColab(sepArquivo, etapaSep);
+      else { $("#dwPassos").hidden = true; $("#dwSepStatus").textContent = msgLocal; res = await separarLocal(sepArquivo); }
       if (sepCancelado) return;
       $("#dwSepStatus").textContent = "Abrindo no Estúdio…";
-      const [bv, bi, bo] = await Promise.all([decodificar(await res.vozBlob.arrayBuffer()), decodificar(await res.instBlob.arrayBuffer()), decodificar(await sepArquivo.arrayBuffer())]);
-      aplicarSeparacao(bv, bi, bo, res, sepArquivo);
+      if (res.stems) await aplicarSeparacaoCompleta(res, sepArquivo);
+      else {
+        const [bv, bi, bo] = await Promise.all([decodificar(await res.vozBlob.arrayBuffer()), decodificar(await res.instBlob.arrayBuffer()), decodificar(await sepArquivo.arrayBuffer())]);
+        aplicarSeparacao(bv, bi, bo, res, sepArquivo);
+        if (modo === "completo") dica("O separador entregou só voz e instrumental: o notebook do Colab está na versão antiga. Atualize o notebook e rode de novo para ter as 6 faixas.");
+      }
       $("#dwModalSep").hidden = true; clearInterval(timerColab);
     } catch (err) { $("#dwSepStatus").textContent = (err && err.message) || "A separação falhou."; $("#dwPassos").hidden = true; }
     finally { sepRodando = false; atualizarBotaoSep(); }
@@ -648,6 +751,7 @@
     $("#dwSepBib").addEventListener("click", (e) => { if (window.escolherDaBiblioteca) window.escolherDaBiblioteca($("#dwSepArq"), e.currentTarget); else $("#dwSepStatus").textContent = "A biblioteca não está disponível agora."; });
     $("#dwSepArq").addEventListener("change", (e) => { sepArquivo = e.target.files[0] || null; $("#dwSepNome").textContent = sepArquivo ? `Escolhido: ${sepArquivo.name}` : "Nenhum áudio escolhido."; atualizarBotaoSep(); });
     $("#dwSepIniciar").addEventListener("click", iniciarSeparacao);
+    $("#dwModos").addEventListener("change", () => { try { localStorage.setItem("oh-dw-modosep", modoSep()); } catch (e) { /* sem armazenamento */ } atualizarAvisoModo(); });
     $("#dwProjFechar").addEventListener("click", () => { $("#dwModalProj").hidden = true; });
     $("#dwProjLista").addEventListener("click", async (e) => {
       const a = e.target.closest("[data-abrir]"), x = e.target.closest("[data-excluir]");
@@ -786,12 +890,12 @@
     montar();
     try { S.metro = localStorage.getItem("oh-dw-metro") || "off"; S.contagem = +(localStorage.getItem("oh-dw-contagem") ?? 1); S.latencia = +(localStorage.getItem("oh-dw-lat") || 0); } catch (e) { /* sem armazenamento */ }
     $("#dwMetro").value = S.metro; $("#dwMetroBtn").classList.toggle("on", S.metro !== "off"); $("#dwContagem").value = String(S.contagem); $("#dwLat").value = S.latencia;
-    usarFerramenta("sel"); renderTudo();
+    usarFerramenta("sel"); ajustarModoInicial(); renderTudo();
   }
   window.EstudioDaw = {
     aoAbrir,
     _teste: {
-      salvarProjeto, listarProjetos, abrirProjeto, S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
+      modoSep, salvarProjeto, listarProjetos, abrirProjeto, S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
       fontes: () => fontes.length, cliques: () => cliquesTotal, cliqueLog: () => cliqueLog.slice(),
       ganhoDe: (id) => { const n = nos.get(id); return n ? n.gain.gain.value : null; },
       nivelDe: (id) => { const n = nos.get(id); return n ? nivel(n.an) : null; },

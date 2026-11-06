@@ -207,3 +207,11 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-proj-item { display: flex; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--dw-borda); border-radius: 12px; background: var(--dw-painel2); margin-bottom: 8px; }
 .dw-proj-item .info { flex: 1; min-width: 0; } .dw-proj-item small { color: var(--dw-suave); }
 #dwSalvo { color: var(--dw-turq); }
+
+.dw-modos { display: flex; flex-direction: column; gap: 8px; }
+.dw-modo { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--dw-borda); border-radius: 12px; padding: 9px 11px; background: var(--dw-painel2); cursor: pointer; }
+.dw-modo:hover { border-color: var(--dw-borda-forte); }
+.dw-modo:has(input:checked) { border-color: var(--dw-laranja); box-shadow: 0 0 12px rgba(249, 115, 22, .3); }
+.dw-modo input { accent-color: var(--dw-laranja); margin-top: 3px; }
+.dw-modo b { display: block; } .dw-modo small { color: var(--dw-suave); }
+.dw-cab.vazia .nome { opacity: .55; }
