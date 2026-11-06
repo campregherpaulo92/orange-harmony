@@ -308,7 +308,7 @@
     const linhas = S.faixas.map((f) => {
       const rs = S.regioes.filter((r) => r.f === f.id).map((r) => `
         <div class="dw-regiao ${r.id === S.regiaoSel ? "sel" : ""} ${f.mudo ? "mudo" : ""} ${r.gravando ? "gravando" : ""}" data-r="${r.id}" style="left:${px(r.ini)}px;width:${px(r.dur)}px;background:${corA(f.cor, 0.16)};border-color:${corA(f.cor, 0.85)}">
-          <div class="rot" style="background:${corA(f.cor, 0.95)}">${esc(r.nome)}</div><canvas></canvas>
+          <div class="rot" style="background:${corA(f.cor, 0.95)}">${esc(r.nome)}${r.limpo ? " · limpa" : ""}</div><canvas></canvas>
           ${r.fi > 0.02 ? `<i class="fade i" style="width:${px(r.fi)}px"></i>` : ""}${r.fo > 0.02 ? `<i class="fade o" style="width:${px(r.fo)}px"></i>` : ""}
           <i class="alca e" data-alca="e"></i><i class="alca d" data-alca="d"></i></div>`).join("");
       return `<div class="dw-linha" data-lf="${f.id}">${rs}</div>`;
@@ -336,7 +336,16 @@
       <div class="dw-bloco"><h4>Volume</h4>
         <div class="dw-param"><span>Ganho</span><input type="range" min="-24" max="12" step="0.5" value="${r.ganho}" data-rg="ganho"><b>${r.ganho} dB</b></div>
         <div class="dw-param"><span>Fade in</span><input type="range" min="0" max="5" step="0.05" value="${r.fi}" data-rg="fi"><b>${r.fi.toFixed(2)}s</b></div>
-        <div class="dw-param"><span>Fade out</span><input type="range" min="0" max="5" step="0.05" value="${r.fo}" data-rg="fo"><b>${r.fo.toFixed(2)}s</b></div></div>`;
+        <div class="dw-param"><span>Fade out</span><input type="range" min="0" max="5" step="0.05" value="${r.fo}" data-rg="fo"><b>${r.fo.toFixed(2)}s</b></div></div>
+      <div class="dw-bloco"><h4>Limpeza de ruído</h4>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <select id="dwLimpaInt" title="Quanto o ruído é atenuado">${[["0.6", "Leve"], ["0.8", "Média"], ["0.95", "Forte"]].map(([v, n]) => `<option value="${v}" ${+v === limpaInt ? "selected" : ""}>${n}</option>`).join("")}</select>
+          <button class="dw-btn peq" data-ra="limpar" ${limpando ? "disabled" : ""}>Limpar ruído</button>${limpando ? '<button class="dw-btn peq" data-ra="cancelar">Cancelar</button>' : ""}
+          ${r.alt ? `<button class="dw-btn peq" data-ra="alternar" title="Compara a versão limpa com o original">Ouvir ${r.limpo ? "o original" : "a versão limpa"}</button><button class="dw-btn peq" data-ra="manter" title="Descarta a outra versão">Manter esta versão</button>` : ""}
+        </div>
+        <div class="dw-dica" id="dwLimpaStatus">${esc(limpaTxt)}</div>
+        <div class="dw-dica">${r.alt ? `Toca agora: <b>${r.limpo ? "a versão limpa ✓" : "o original"}</b>.` : "Mede o ruído nas pausas da gravação (respiros, silêncio). Pensado para voz; o original fica guardado."}</div>
+      </div>`;
   }
   function renderTudo() {
     renderCab(); renderLinhas(); renderMixer(); renderRegiao();
@@ -645,11 +654,11 @@
   let areaCopia = null;
   function dividirRegiao(r, t) {
     if (t <= r.ini + 0.02 || t >= r.ini + r.dur - 0.02) return dica("Coloque o cursor (ou clique) dentro da região para dividir.");
-    mudar(() => { const fim = r.ini + r.dur; r.dur = t - r.ini; const n = { ...r, id: proxId++, ini: t, off: r.off + (t - r.ini), dur: fim - t, nome: r.nome + " (parte 2)" }; r.fo = 0.005; S.regioes.push(n); });
+    mudar(() => { const fim = r.ini + r.dur; r.dur = t - r.ini; const n = { ...r, id: proxId++, ini: t, off: r.off + (t - r.ini), dur: fim - t, nome: r.nome + " (parte 2)" }; if (r.alt) n.alt = { buf: r.alt.buf, off: r.alt.off + (t - r.ini) }; r.fo = 0.005; S.regioes.push(n); });
     dica("Região dividida em duas.");
   }
   function excluirRegiao(id) { mudar(() => { S.regioes = S.regioes.filter((x) => x.id !== id); S.regiaoSel = null; }); dica("Região excluída."); }
-  function duplicarRegiao(r) { mudar(() => { const n = { ...r, id: proxId++, ini: r.ini + r.dur, nome: r.nome + " (cópia)" }; S.regioes.push(n); S.regiaoSel = n.id; }); dica("Região duplicada logo depois da original."); }
+  function duplicarRegiao(r) { mudar(() => { const n = { ...r, id: proxId++, ini: r.ini + r.dur, nome: r.nome + " (cópia)" }; if (n.alt) n.alt = { ...n.alt }; S.regioes.push(n); S.regiaoSel = n.id; }); dica("Região duplicada logo depois da original."); }
   function usarFerramenta(k) { S.ferr = k; $$("#dwFerr .dw-fb").forEach((b) => b.classList.toggle("on", b.dataset.f === k)); const tl = $("#dwTlScroll"); if (tl) tl.style.cursor = k === "mao" ? "grab" : k === "tes" ? "crosshair" : k === "lupa" ? "zoom-in" : ""; }
   function linhaSob(y) { const sc = $("#dwTlScroll"), top = sc.getBoundingClientRect().top + 28 - sc.scrollTop, i = Math.floor((y - top) / (($(".dw-linha") || { offsetHeight: ALT }).offsetHeight)); return S.faixas[i] || null; }
 
@@ -661,12 +670,12 @@
     const r = regiaoPorId(+rg.dataset.r); if (!r || r.gravando) return;
     if (S.ferr === "tes") { dividirRegiao(r, snap((e.clientX - $("#dwTl").getBoundingClientRect().left) / S.pps, e.altKey)); return; }
     S.faixaSel = r.f; S.regiaoSel = r.id;
-    const antes = foto(), alca = e.target.dataset.alca, x0 = e.clientX, ini0 = r.ini, dur0 = r.dur, off0 = r.off, f0 = r.f, buf = bufs.get(r.buf); let mexeu = false;
+    const antes = foto(), alca = e.target.dataset.alca, x0 = e.clientX, ini0 = r.ini, dur0 = r.dur, off0 = r.off, altOff0 = r.alt ? r.alt.off : 0, f0 = r.f, buf = bufs.get(r.buf), bufAlt = r.alt ? bufs.get(r.alt.buf) : null; let mexeu = false;
     $$(".dw-regiao", $("#dwFaixas")).forEach((el) => el.classList.toggle("sel", +el.dataset.r === r.id)); $$(".dw-cab").forEach((el) => el.classList.toggle("sel", el.dataset.f === r.f)); renderRegiao(); selStatus();
     const mv = (ev) => {
       const dx = (ev.clientX - x0) / S.pps; mexeu = true;
-      if (alca === "e") { const novo = Math.max(ini0 - off0, Math.min(ini0 + dur0 - 0.05, snap(ini0 + dx, ev.altKey))); r.dur = dur0 - (novo - ini0); r.off = off0 + (novo - ini0); r.ini = novo; }
-      else if (alca === "d") { r.dur = Math.max(0.05, Math.min(buf ? buf.duration - r.off : 1e9, snap(ini0 + dur0 + dx, ev.altKey) - ini0)); }
+      if (alca === "e") { const novo = Math.max(ini0 - (r.alt ? Math.min(off0, altOff0) : off0), Math.min(ini0 + dur0 - 0.05, snap(ini0 + dx, ev.altKey))); r.dur = dur0 - (novo - ini0); r.off = off0 + (novo - ini0); if (r.alt) r.alt.off = altOff0 + (novo - ini0); r.ini = novo; }
+      else if (alca === "d") { r.dur = Math.max(0.05, Math.min(buf ? buf.duration - r.off : 1e9, bufAlt ? bufAlt.duration - r.alt.off : 1e9, snap(ini0 + dur0 + dx, ev.altKey) - ini0)); }
       else { r.ini = Math.max(0, snap(ini0 + dx, ev.altKey)); const alvo = linhaSob(ev.clientY); if (alvo && alvo.id !== r.f) { r.f = alvo.id; const dest = $(`.dw-linha[data-lf="${alvo.id}"]`); const el0 = $(`.dw-regiao[data-r="${r.id}"]`); if (dest && el0) dest.appendChild(el0); } }
       const el = $(`.dw-regiao[data-r="${r.id}"]`); if (el) { el.style.left = px(r.ini) + "px"; el.style.width = px(r.dur) + "px"; el.style.cursor = "grabbing"; }
     };
@@ -723,11 +732,15 @@
       if (t.dataset.vol) { const f = faixaPorId(t.dataset.vol); f.vol = +t.value; $$(`[data-vol="${f.id}"]`).forEach((i) => { if (i !== t) i.value = t.value; }); const db = $(`[data-db="${f.id}"]`); if (db) db.textContent = dbTxt(f.vol); atualizarNos(); agendarSalvar(); }
       if (t.dataset.pan) { faixaPorId(t.dataset.pan).pan = +t.value; atualizarNos(); agendarSalvar(); }
       if (t.dataset.nome) { faixaPorId(t.dataset.nome).nome = t.value; agendarSalvar(); }
+      if (t.id === "dwLimpaInt") limpaInt = +t.value;
       if (t.id === "dwMestreVol") { S.mestreVol = +t.value; if (mestre) mestre.gain.value = S.mestreVol; }
       if (t.dataset.rg) { const r = regiaoPorId(S.regiaoSel); r[t.dataset.rg] = +t.value; const b = t.parentElement.querySelector("b"); b.textContent = t.dataset.rg === "ganho" ? t.value + " dB" : (+t.value).toFixed(2) + "s"; if (t.dataset.rg !== "ganho") renderLinhas(); agendarSalvar(); if (S.tocando) reagendar(); }
       if (t.hasAttribute("data-rnome")) { const r = regiaoPorId(S.regiaoSel); r.nome = t.value; const rot = $(`.dw-regiao[data-r="${r.id}"] .rot`); if (rot) rot.textContent = t.value; agendarSalvar(); }
     });
-    $("#dwRegp").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); const r = regiaoPorId(S.regiaoSel); if (!b || !r) return; if (b.dataset.ra === "excluir") excluirRegiao(r.id); else if (b.dataset.ra === "duplicar") duplicarRegiao(r); else dividirRegiao(r, S.tAtual); });
+    $("#dwRegp").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); const r = regiaoPorId(S.regiaoSel); if (!b || !r) return; const acao = b.dataset.ra;
+      if (acao === "excluir") excluirRegiao(r.id); else if (acao === "duplicar") duplicarRegiao(r); else if (acao === "dividir") dividirRegiao(r, S.tAtual);
+      else if (acao === "limpar") limparRegiao(r); else if (acao === "cancelar") limpezaCancelada = true;
+      else if (acao === "alternar") alternarLimpeza(r); else if (acao === "manter") manterVersao(r); });
     // abas do editor
     $$(".dw-aba").forEach((a) => a.addEventListener("click", () => abrirAba(a.dataset.aba)));
     $("#dwRecolher").addEventListener("click", () => { const f = $("#dwEditor").classList.toggle("fechado"); $("#dwRecolher").innerHTML = ic("seta") + (f ? " Abrir" : " Recolher"); });
@@ -777,7 +790,7 @@
       else if (meta && k === "z" && !e.shiftKey) { e.preventDefault(); desfazer(); }
       else if (meta && (k === "y" || (k === "z" && e.shiftKey))) { e.preventDefault(); refazer(); }
       else if (meta && k === "c") { if (r) { areaCopia = { ...r }; dica("Região copiada. Ctrl+V cola no cursor."); } }
-      else if (meta && k === "v" && areaCopia) { e.preventDefault(); const alvo = faixaPorId(S.faixaSel) || faixaPorId(areaCopia.f); mudar(() => { const n = { ...areaCopia, id: proxId++, f: alvo.id, ini: snap(S.tAtual), nome: areaCopia.nome + " (cópia)" }; S.regioes.push(n); S.regiaoSel = n.id; }); dica("Região colada no cursor."); }
+      else if (meta && k === "v" && areaCopia) { e.preventDefault(); const alvo = faixaPorId(S.faixaSel) || faixaPorId(areaCopia.f); mudar(() => { const n = { ...areaCopia, id: proxId++, f: alvo.id, ini: snap(S.tAtual), nome: areaCopia.nome + " (cópia)" }; if (n.alt) n.alt = { ...n.alt }; S.regioes.push(n); S.regiaoSel = n.id; }); dica("Região colada no cursor."); }
       else if (meta && k === "d") { e.preventDefault(); if (r) duplicarRegiao(r); }
       else if (meta && k === "s") { e.preventDefault(); salvarProjeto().then((okk) => { if (okk) dica("Projeto salvo neste aparelho."); }); }
       else if ((e.key === "Delete" || e.key === "Backspace") && r) { e.preventDefault(); excluirRegiao(r.id); }
@@ -823,7 +836,7 @@
     // tira uma "foto" agora, de forma síncrona: mesmo que o projeto mude logo em seguida, salva o que estava na tela
     const regs = S.regioes.filter((r) => !r.gravando), pid = S.id;
     const proj = { id: pid, nome: S.nome, atualizado: Date.now(), faixas: JSON.parse(JSON.stringify(S.faixas)), regioes: JSON.parse(JSON.stringify(regs)), bpm: S.bpm, compasso: S.compasso, tom: S.tom, mestreVol: S.mestreVol, proxId, nFaixas: S.faixas.length };
-    const fontes = [...new Set(regs.map((r) => r.buf))].filter((b) => bufs.has(b)).map((b) => [b, blobs.get(b), bufs.get(b), noBanco.has(b)]);
+    const fontes = [...new Set(regs.flatMap((r) => (r.alt ? [r.buf, r.alt.buf] : [r.buf])))].filter((b) => bufs.has(b)).map((b) => [b, blobs.get(b), bufs.get(b), noBanco.has(b)]);
     const trabalho = salvandoAgora.then(async () => {
       mostrarSalvo("Salvando…");
       try {
@@ -854,7 +867,7 @@
   async function abrirProjeto(id) {
     const db = await abrirDB(), proj = await idb(db.transaction("projetos").objectStore("projetos").get(id));
     if (!proj) { db.close(); return false; }
-    const ids = [...new Set(proj.regioes.map((r) => r.buf))], novosBufs = new Map(), novosPicos = new Map(), novosBlobs = new Map();
+    const ids = [...new Set(proj.regioes.flatMap((r) => (r.alt ? [r.buf, r.alt.buf] : [r.buf])))], novosBufs = new Map(), novosPicos = new Map(), novosBlobs = new Map();
     for (const b of ids) {
       const ab = await idb(db.transaction("audios").objectStore("audios").get(id + ":" + b)); if (!ab) continue;
       novosBlobs.set(b, new Blob([ab])); const buf = await decodificar(ab.slice(0)); novosBufs.set(b, buf); novosPicos.set(b, calcularPicos(buf));
@@ -866,7 +879,7 @@
     if (S.tocando) pausar(); pararFontes(); nos.forEach((n) => { try { n.gain.disconnect(); n.pan.disconnect(); } catch (e) { /* solto */ } }); nos.clear();
     bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); novosBufs.forEach((v, k) => { bufs.set(k, v); picos.set(k, novosPicos.get(k)); blobs.set(k, novosBlobs.get(k)); noBanco.add(k); });
     const faltaram = proj.regioes.filter((r) => !bufs.has(r.buf)).length;
-    S.id = proj.id; S.nome = proj.nome; S.faixas = proj.faixas; S.regioes = proj.regioes.filter((r) => bufs.has(r.buf)); S.bpm = proj.bpm; S.compasso = proj.compasso; S.tom = proj.tom || ""; S.mestreVol = proj.mestreVol == null ? 0.9 : proj.mestreVol;
+    S.id = proj.id; S.nome = proj.nome; S.faixas = proj.faixas; S.regioes = proj.regioes.filter((r) => bufs.has(r.buf)); S.regioes.forEach((r) => { if (r.alt && !bufs.has(r.alt.buf)) { r.alt = null; } }); S.bpm = proj.bpm; S.compasso = proj.compasso; S.tom = proj.tom || ""; S.mestreVol = proj.mestreVol == null ? 0.9 : proj.mestreVol;
     proxId = Math.max(proxId, proj.proxId || 0) + 1; S.faixaSel = S.faixas[0] ? S.faixas[0].id : null; S.regiaoSel = null; S.tAtual = 0; S.sujo = false; pilha.length = 0; refaz.length = 0;
     $("#dwNome").value = S.nome; $("#dwBpm").value = S.bpm; $("#dwComp").value = S.compasso; $("#dwTom").textContent = S.tom || "—";
     try { localStorage.setItem("oh-dw-ultimo", S.id); } catch (e) { /* sem armazenamento */ }
@@ -887,6 +900,41 @@
     } catch (e) { el.innerHTML = '<div class="dw-dica">Não consegui ler os projetos salvos neste navegador.</div>'; }
   }
 
+  // ══ LIMPEZA DE RUÍDO (roda no navegador; o original fica guardado dentro da própria região) ═══
+  let limpaInt = 0.8, limpaTxt = "", limpando = false, limpezaCancelada = false;
+  function msgLimpa(t) { limpaTxt = t; const e = $("#dwLimpaStatus"); if (e) e.textContent = t; dica(t); }
+  async function limparRegiao(r) {
+    if (limpando) return;
+    if (S.gravando || S.contando) return dica("Pare a gravação antes de limpar o ruído.");
+    if (!window.EstudioDsp) return msgLimpa("O módulo de limpeza não carregou. Atualize a página.");
+    const buf = bufs.get(r.buf); if (!buf) return msgLimpa("Esta região ainda não tem áudio gravado.");
+    limpando = true; limpezaCancelada = false; renderRegiao();
+    const sr = buf.sampleRate, ini = Math.max(0, Math.round(r.off * sr)), fim = Math.min(buf.length, Math.round((r.off + r.dur) * sr));
+    const canais = []; for (let c = 0; c < buf.numberOfChannels; c++) canais.push(buf.getChannelData(c).slice(ini, fim));
+    const nome = { 0.6: "leve", 0.8: "média", 0.95: "forte" }[limpaInt] || "média";
+    try {
+      msgLimpa(`Limpando o ruído (${nome})… 0%`);
+      let ultimo = -1;
+      const res = await EstudioDsp.limparRuido(canais, sr, { intensidade: limpaInt }, (p) => { const pct = Math.round(p * 100); if (pct !== ultimo) { ultimo = pct; const e = $("#dwLimpaStatus"); if (e) e.textContent = `Limpando o ruído (${nome})… ${pct}%`; } }, () => limpezaCancelada);
+      if (res.cancelado) return msgLimpa("Limpeza cancelada. Nada foi alterado.");
+      if (res.aviso === "sem_pausas") return msgLimpa("Não achei uma pausa só com ruído nesta região, então não dá para medir o ruído (e eu não mexo no áudio sem isso). Dica: deixe uns 2 segundos em silêncio no começo da gravação, ou use uma região que tenha pausas.");
+      if (res.aviso === "silencio") return msgLimpa("Esta região está em silêncio: não há o que limpar.");
+      if (res.aviso === "curto") return msgLimpa("A região é curta demais (menos de 1 segundo) para medir o ruído.");
+      garantirAudio();
+      const novo = ctx.createBuffer(res.canais.length, res.canais[0].length, sr); res.canais.forEach((c, i) => novo.copyToChannel(c, i));
+      const blob = audioBufferParaWavBlob(novo);
+      mudar(() => { const id = guardarAudio(novo, blob); r.alt = { buf: r.buf, off: r.off }; r.buf = id; r.off = 0; r.dur = Math.min(r.dur, novo.duration); r.limpo = true; });
+      msgLimpa(`Ruído reduzido (${nome}) ✓. Compare com “Ouvir o original”.`);
+    } catch (e) { msgLimpa("Não consegui limpar o ruído: " + ((e && e.message) || "erro inesperado") + "."); }
+    finally { limpando = false; renderRegiao(); }
+  }
+  function alternarLimpeza(r) {
+    if (!r.alt) return;
+    mudar(() => { const a = r.alt; r.alt = { buf: r.buf, off: r.off }; r.buf = a.buf; r.off = a.off; r.limpo = !r.limpo; const b = bufs.get(r.buf); if (b) r.dur = Math.min(r.dur, b.duration - r.off); });
+    dica(r.limpo ? "Tocando a versão limpa." : "Tocando o original (sem limpeza).");
+  }
+  function manterVersao(r) { if (!r.alt) return; mudar(() => { r.alt = null; }); dica(r.limpo ? "Mantive a versão limpa e descartei o original desta região." : "Mantive o original e descartei a versão limpa."); }
+
   // ══ INÍCIO ════════════════════════════════════════════════════════════
   let restauradoUmaVez = false;
   function aoAbrir() {
@@ -904,7 +952,7 @@
   window.EstudioDaw = {
     aoAbrir,
     _teste: {
-      modoSep, salvarProjeto, listarProjetos, abrirProjeto, S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
+      limparRegiao, modoSep, salvarProjeto, listarProjetos, abrirProjeto, S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
       fontes: () => fontes.length, cliques: () => cliquesTotal, cliqueLog: () => cliqueLog.slice(),
       ganhoDe: (id) => { const n = nos.get(id); return n ? n.gain.gain.value : null; },
       nivelDe: (id) => { const n = nos.get(id); return n ? nivel(n.an) : null; },
