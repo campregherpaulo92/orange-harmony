@@ -8,9 +8,9 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=7">
-<link rel="stylesheet" href="identidade.css?v=7">
-<link rel="stylesheet" href="abcjs-audio.css?v=7">
+<link rel="stylesheet" href="styles.css?v=9">
+<link rel="stylesheet" href="identidade.css?v=9">
+<link rel="stylesheet" href="abcjs-audio.css?v=9">
 </head>
 <body>
 
@@ -769,7 +769,7 @@
     <section class="oh-page" id="page-partitura">
       <div class="oh-card">
         <div class="oh-section-title"><span><i class="oh-ic" data-ic="partitura"></i></span> Partitura<i class="oh-title-line"></i></div>
-        <p class="oh-hint">A partitura vem do Songwriter. Clique numa nota para selecioná-la (fica vermelha) e depois clique na linha ou no espaço da pauta onde ela deve ficar. O botão de play flutuante toca a partir da nota selecionada.</p>
+        <p class="oh-hint">A partitura vem do Songwriter. Clique numa nota: ela fica vermelha e a música toca a partir dela. Clique na linha ou no espaço da pauta para mudar a altura da nota. O botão de play flutuante pausa e continua a partir da nota ou do trecho; a barra de cima toca a música inteira.</p>
         <p id="partituraStatus" class="oh-hint" data-tipo="info" style="margin:6px 0 10px;">Aguardando partitura.</p>
         <div class="oh-partitura-timbre">
           <label for="partituraTimbre">Timbre</label>
@@ -781,6 +781,14 @@
           <button id="partituraLimpar" class="oh-btn oh-btn-secundario" type="button">Limpar seleção</button>
           <button id="partituraDesfazer" class="oh-btn oh-btn-secundario" type="button">Desfazer</button>
         </div>
+        <div class="oh-partitura-acoes">
+          <button id="partituraCopiar" class="oh-btn oh-btn-secundario" type="button" disabled>Copiar</button>
+          <button id="partituraRecortar" class="oh-btn oh-btn-secundario" type="button" disabled>Recortar</button>
+          <button id="partituraColar" class="oh-btn oh-btn-secundario" type="button" disabled>Colar no lugar</button>
+          <button id="partituraExcluir" class="oh-btn oh-btn-secundario" type="button" disabled>Excluir</button>
+          <label class="oh-partitura-auto"><input type="checkbox" id="partituraAuto" checked> Tocar ao clicar</label>
+        </div>
+        <p class="oh-hint partitura-atalhos">Atalhos: Delete exclui (a nota vira pausa; Delete de novo remove a pausa) · Shift+Delete remove de vez · Ctrl+C copia · Ctrl+X recorta · Ctrl+V cola no lugar da seleção · Ctrl+Z desfaz · Shift+clique marca um trecho.</p>
         <div class="partitura-legenda">
           <span><i class="pt-cor pt-sel"></i> nota selecionada</span>
           <span><i class="pt-cor pt-trecho"></i> trecho</span>
@@ -999,14 +1007,14 @@
   </div>
 </div>
 
-<script src="icones.js?v=7"></script>
-<script src="transposicao.js?v=7"></script>
-<script src="player.js?v=7"></script>
-<script src="recorder.js?v=7"></script>
-<script src="app.js?v=7"></script>
-<script src="afinador.js?v=7"></script>
-<script src="historico.js?v=7"></script>
-<script src="fichaAvaliacao.js?v=7"></script>
+<script src="icones.js?v=9"></script>
+<script src="transposicao.js?v=9"></script>
+<script src="player.js?v=9"></script>
+<script src="recorder.js?v=9"></script>
+<script src="app.js?v=9"></script>
+<script src="afinador.js?v=9"></script>
+<script src="historico.js?v=9"></script>
+<script src="fichaAvaliacao.js?v=9"></script>
 <script src="composicoes.js"></script>
 <script src="conversor.js"></script>
 <script src="producao.js"></script>
@@ -1014,14 +1022,14 @@
 <script src="avaliacao.js"></script>
 <script src="laranjinha.js"></script>
 <script src="estudio.js"></script>
-<script src="abcjs-basic-min.js?v=7"></script>
-<script src="songwriter.js?v=7"></script>
-<script src="partitura.js?v=7"></script>
+<script src="abcjs-basic-min.js?v=9"></script>
+<script src="songwriter.js?v=9"></script>
+<script src="partitura.js?v=9"></script>
 <script src="acordes.js"></script>
 <script src="news.js"></script>
 <script src="singergame.js"></script>
 <script src="vocalise.js"></script>
 <script src="biblioteca_picker.js"></script>
-<script src="miniplayer.js?v=7"></script>
+<script src="miniplayer.js?v=9"></script>
 </body>
 </html>

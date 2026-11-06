@@ -346,6 +346,7 @@ h1, h2, h3 {
   scrollbar-width: thin; scrollbar-color: rgba(249, 115, 22, 0.6) transparent;
 }
 #partituraSvg { min-width: 640px; }
+.partitura-papel { user-select: none; -webkit-user-select: none; }   /* Shift+clique não pode selecionar texto da partitura */
 .partitura-papel svg { cursor: pointer; }
 .partitura-papel [data-index] { cursor: pointer; }
 
@@ -354,6 +355,8 @@ h1, h2, h3 {
 .partitura-papel .oh-nota-trecho, .partitura-papel .oh-nota-trecho * { fill: #16a34a !important; stroke: #16a34a !important; }
 .partitura-papel .oh-nota-sel, .partitura-papel .oh-nota-sel * { fill: #e11d48 !important; stroke: #e11d48 !important; }
 .partitura-papel .abcjs-highlight { fill: #f97316 !important; stroke: #f97316 !important; }
+/* área de clique invisível das notas (precisa vencer as cores acima) */
+.partitura-papel .oh-area-clique { fill: transparent !important; stroke: none !important; pointer-events: all; }
 
 .oh-partitura-editor { margin-top: 14px; }
 .oh-partitura-editor summary { cursor: pointer; color: var(--oh-orange); font-weight: 700; margin-bottom: 8px; }
@@ -378,3 +381,15 @@ h1, h2, h3 {
 .partitura-flutuante .oh-ic { width: 100%; height: 100%; min-width: 0; margin: 0; background: none; box-shadow: none; }
 .partitura-flutuante .oh-ic svg { width: 44%; height: 44%; }
 @media (max-width: 800px) { .partitura-flutuante { right: 104px; bottom: 18px; width: 54px; height: 54px; } }
+
+/* Copiar / Colar / Excluir e "Tocar ao clicar" */
+.oh-partitura-acoes .oh-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.oh-partitura-auto { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--oh-orange); font-size: 0.9rem; cursor: pointer; padding: 0 6px; }
+.oh-partitura-auto input { width: 18px; height: 18px; accent-color: #f97316; }
+.partitura-atalhos { font-size: 0.78rem; margin: 2px 0 8px; }
+
+/* celular não tem teclado: esconde a linha de atalhos */
+@media (hover: none) and (pointer: coarse) { .partitura-atalhos { display: none; } }
+
+/* Barras e notas ganham foco ao clicar: sem contorno do navegador em volta */
+.partitura-papel [data-index]:focus, .partitura-papel svg:focus { outline: none; }
