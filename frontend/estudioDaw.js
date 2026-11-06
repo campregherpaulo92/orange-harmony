@@ -37,7 +37,7 @@
   const CORES = ["#a855f7", "#ec4899", "#eab308", "#38bdf8", "#84cc16", "#fb7185"];
   const S = {
     id: "p" + Date.now().toString(36), nome: "Meu projeto", bpm: 100, compasso: "4/4", tom: "", pps: 40, snap: "off", ferr: "sel", tAtual: 0, tocando: false, seguir: true,
-    metro: "off", contagem: 1, latencia: 0, mestreVol: 0.9, faixas: [], regioes: [], faixaSel: null, regiaoSel: null, sujo: false, gravando: false, contando: false,
+    metro: "off", contagem: 1, latencia: 0, mestreVol: 0.9, monitor: "caixa", faixas: [], regioes: [], faixaSel: null, regiaoSel: null, sujo: false, gravando: false, contando: false,
   };
   let proxId = 1;
   const bufs = new Map();     // id do áudio -> AudioBuffer (o áudio em si; nunca é alterado)
@@ -215,6 +215,7 @@
         <select id="dwMetro" title="Metrônomo: desligado, ligado ou só ao gravar"><option value="off">Desligado</option><option value="on">Ligado</option><option value="rec">Só ao gravar</option></select>
         <label>Contagem <select id="dwContagem" title="Pré-contagem antes de gravar"><option value="0">Nenhuma</option><option value="1" selected>1 compasso</option><option value="2">2 compassos</option></select></label>
         <label title="Se a voz gravada ficar atrasada em relação à música, aumente. Ex.: 80">Atraso <input type="number" id="dwLat" value="0" min="0" max="500" step="10"> ms</label>
+          <label title="Como você ouve a música enquanto grava. Com fone de ouvido a voz sai limpa. Com caixa de som o navegador tenta cancelar o eco, mas parte da música pode vazar no microfone.">Ouço com <select id="dwMonitor"><option value="caixa">Caixa de som</option><option value="fone">Fone de ouvido</option></select></label>
         </div>
       </div>
       <div class="dw-area">
@@ -391,12 +392,18 @@
     if (!alvo) alvo = criarFaixaVoz();
     S.faixaSel = alvo.id; renderTudo(); mostrarFaixa(alvo.id);
     let stream = null, simulado = false;
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }); } catch (e) { simulado = true; }
-    gravacao = { antes, alvo, stream, simulado, regiao: null, rec: null, chunks: [], an: null, dados: null, ini: snap(S.tAtual) };
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: S.monitor === "caixa", noiseSuppression: false, autoGainControl: false } }); } catch (e) { simulado = true; }
+    // Com caixa de som a música sai pelo ar e entra no microfone. Só o cancelamento de eco do navegador ajuda; o fone resolve de vez.
+    let aviso = "";
+    if (stream && S.monitor === "caixa" && S.regioes.some((r) => r.f !== alvo.id && audivel(r.f))) {
+      let aec = null; try { const tr = stream.getAudioTracks()[0]; aec = tr && tr.getSettings ? tr.getSettings().echoCancellation : null; } catch (e) { aec = null; }
+      aviso = aec === false ? " ⚠️ Este navegador não ativou o cancelamento de eco: a música pode vazar no microfone. Use fone de ouvido." : " Com caixa de som, parte da música ainda pode vazar no microfone; o fone deixa a gravação mais limpa.";
+    }
+    gravacao = { aviso, antes, alvo, stream, simulado, regiao: null, rec: null, chunks: [], an: null, dados: null, ini: snap(S.tAtual) };
     $("#dwRec").classList.add("on");
     const total = S.contagem * COMPASSOS[S.compasso].n;
     if (!total) { comecarGravacao(); return; }
-    S.contando = true; dica(simulado ? "Microfone não liberado: vou SIMULAR a gravação, só para você ver o fluxo." : "Pré-contagem… prepare-se para cantar.");
+    S.contando = true; dica((simulado ? "Microfone não liberado: vou SIMULAR a gravação, só para você ver o fluxo." : "Pré-contagem… prepare-se para cantar.") + (gravacao.aviso || ""));
     const bd = beatDur(), n = COMPASSOS[S.compasso].n;
     for (let i = 0; i < total; i++) contTimers.push(setTimeout(() => { cliqueEm(ctx.currentTime + 0.005, i % n === 0); mostrarContagem(String((i % n) + 1)); }, 60 + i * bd * 1000));
     contTimers.push(setTimeout(() => { mostrarContagem(""); comecarGravacao(); }, 60 + total * bd * 1000));
@@ -412,7 +419,7 @@
       const tipo = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
       g.rec = new MediaRecorder(g.stream, tipo ? { mimeType: tipo } : undefined); g.rec.ondataavailable = (ev) => { if (ev.data.size) g.chunks.push(ev.data); }; g.rec.start();
     }
-    renderTudo(); tocar(); dica("Gravando… aperte o botão vermelho (ou a barra de espaço) para parar.");
+    renderTudo(); tocar(); dica("Gravando… aperte o botão vermelho (ou a barra de espaço) para parar." + (g.aviso || ""));
   }
   function atualizarGravacao() {
     const g = gravacao; if (!g || !g.regiao) return; const r = g.regiao; r.dur = Math.max(0.05, S.tAtual - r.ini);
@@ -471,9 +478,10 @@
     const card = $("#dwColab"); if (!card || !configEst) return;
     if (configEst.modo !== "fila") { card.hidden = true; atualizarBotaoSep(); return; }
     card.hidden = false; const on = !!(configEst.colab && configEst.colab.online);
-    card.classList.toggle("on", on); $("#dwColabPilula").textContent = on ? (configEst.colab.gpu ? "Ligado · GPU" : "Ligado") : "Desligado";
-    $("#dwColabTexto").textContent = on ? "Pronto! Escolha um áudio e clique em Separar." : "A separação roda no Google Colab (o servidor gratuito não tem memória para o Demucs). Ligue o separador uma vez: abra o Colab, use Ambiente de execução → Executar tudo e volte aqui. Este cartão fica verde sozinho.";
-    $("#dwColabLink").href = configEst.colab_url || "#"; $("#dwColabLink").hidden = on; atualizarBotaoSep(); atualizarAvisoModo();
+    const comp = configEst.colab ? configEst.colab.completo : undefined;      // true = notebook novo (6 faixas); false = antigo; undefined = servidor ainda não informa
+    card.classList.toggle("on", on); $("#dwColabPilula").textContent = on ? (configEst.colab.gpu ? "Ligado · GPU" : "Ligado") + (comp === true ? " · 6 faixas" : comp === false ? " · versão antiga (só 2 faixas)" : "") : "Desligado";
+    $("#dwColabTexto").textContent = on && comp === false ? "O Colab que está ligado é a versão ANTIGA do notebook: ele só separa voz e instrumental. Pare-o (no Colab: Ambiente de execução → Desconectar e excluir ambiente de execução), abra o notebook novo pelo botão abaixo e rode Executar tudo." : on ? "Pronto! Escolha um áudio e clique em Separar." : "A separação roda no Google Colab (o servidor gratuito não tem memória para o Demucs). Ligue o separador uma vez: abra o Colab, use Ambiente de execução → Executar tudo e volte aqui. Este cartão fica verde sozinho.";
+    $("#dwColabLink").href = configEst.colab_url || "#"; $("#dwColabLink").hidden = on && comp !== false; atualizarBotaoSep(); atualizarAvisoModo();
   }
   function colabPronto() { return !configEst || configEst.modo !== "fila" || !!(configEst.colab && configEst.colab.online); }
   function atualizarBotaoSep() { const b = $("#dwSepIniciar"); if (b) b.disabled = sepRodando || !sepArquivo || !colabPronto(); }
@@ -690,6 +698,7 @@
     $("#dwSeguir").addEventListener("change", (e) => { S.seguir = e.target.checked; });
     $("#dwMetroBtn").addEventListener("click", () => { $("#dwMetro").value = S.metro === "off" ? "on" : "off"; $("#dwMetro").dispatchEvent(new Event("change")); });
     $("#dwMetro").addEventListener("change", (e) => { S.metro = e.target.value; $("#dwMetroBtn").classList.toggle("on", S.metro !== "off"); garantirAudio(); localStorage.setItem("oh-dw-metro", S.metro); dica({ off: "Metrônomo desligado.", on: "Metrônomo ligado: um clique por tempo, o 1º de cada compasso é mais agudo.", rec: "Metrônomo só toca enquanto você grava." }[S.metro]); });
+    $("#dwMonitor").addEventListener("change", (e) => { S.monitor = e.target.value; try { localStorage.setItem("oh-dw-monitor", S.monitor); } catch (err) { /* sem armazenamento */ } dica(S.monitor === "fone" ? "Fone de ouvido: o microfone grava a voz crua, sem nada da música (é o ideal)." : "Caixa de som: o navegador tenta cancelar o eco da música no microfone. Funciona em parte; o fone deixa mais limpo."); });
     $("#dwContagem").addEventListener("change", (e) => { S.contagem = +e.target.value; localStorage.setItem("oh-dw-contagem", S.contagem); dica(S.contagem ? `Pré-contagem de ${S.contagem} compasso(s) antes de gravar.` : "Sem pré-contagem: a gravação começa na hora."); });
     $("#dwLat").addEventListener("change", (e) => { S.latencia = Math.max(0, Math.min(500, +e.target.value || 0)); e.target.value = S.latencia; localStorage.setItem("oh-dw-lat", S.latencia); dica(`Atraso de gravação: ${S.latencia} ms (as próximas gravações começam esse tanto mais adiantadas).`); });
     // faixas
@@ -888,8 +897,8 @@
   }
   function iniciar() {
     montar();
-    try { S.metro = localStorage.getItem("oh-dw-metro") || "off"; S.contagem = +(localStorage.getItem("oh-dw-contagem") ?? 1); S.latencia = +(localStorage.getItem("oh-dw-lat") || 0); } catch (e) { /* sem armazenamento */ }
-    $("#dwMetro").value = S.metro; $("#dwMetroBtn").classList.toggle("on", S.metro !== "off"); $("#dwContagem").value = String(S.contagem); $("#dwLat").value = S.latencia;
+    try { S.metro = localStorage.getItem("oh-dw-metro") || "off"; S.contagem = +(localStorage.getItem("oh-dw-contagem") ?? 1); S.latencia = +(localStorage.getItem("oh-dw-lat") || 0); S.monitor = localStorage.getItem("oh-dw-monitor") === "fone" ? "fone" : "caixa"; } catch (e) { /* sem armazenamento */ }
+    $("#dwMetro").value = S.metro; $("#dwMetroBtn").classList.toggle("on", S.metro !== "off"); $("#dwContagem").value = String(S.contagem); $("#dwLat").value = S.latencia; $("#dwMonitor").value = S.monitor;
     usarFerramenta("sel"); ajustarModoInicial(); renderTudo();
   }
   window.EstudioDaw = {
