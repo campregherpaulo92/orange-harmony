@@ -123,6 +123,7 @@
         "\"Na medida 25, segunda nota, sobe meio tom\" · \"desce o verso 2 um tom\"",
         "Ele propõe, deixa a nota em roxo e você escolhe: ajustar sozinho (rosa até acertar, turquesa quando acerta) ou \"Aplicar por mim\", ouvindo a prévia antes.",
         "\"O que é semitom?\": ele ensina com exemplos da sua partitura.",
+        "Você pode mudar o tamanho da caixa do assistente (e da Laranjinha e do Studio) puxando pelas bordas e pelos cantos. Duplo clique numa borda volta ao tamanho padrão.",
       ],
     },
     {
