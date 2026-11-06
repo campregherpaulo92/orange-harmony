@@ -24,6 +24,7 @@ COLECAO_JOBS = "estudio_jobs"
 COLECAO_STATUS = "estudio_status"
 DOC_STATUS = "colab"
 
+MODOS = ("rapido", "completo")   # rapido = voz + instrumental; completo = 6 faixas (htdemucs_6s)
 ONLINE_SE_BATIDA_EM_S = 75      # sem sinal do Colab há mais que isso = desligado
 JOB_EXPIRA_S = 20 * 60          # trabalho parado há 20 min = desiste
 GUARDAR_JOBS_HORAS = 24         # limpeza: apaga trabalhos com mais de 24 h
@@ -66,13 +67,14 @@ def status_colab():
         return {
             "online": bool(d.get("online")) and idade <= ONLINE_SE_BATIDA_EM_S,
             "gpu": bool(d.get("gpu")),
+            "completo": bool(d.get("completo")),     # o notebook do Colab já sabe separar em 6 faixas?
             "segundos_desde_a_ultima_batida": int(idade),
         }
     except Exception as e:
         return {"online": False, "motivo": f"{e}"}
 
 
-def criar_job(arquivo, nome_arquivo, content_type):
+def criar_job(arquivo, nome_arquivo, content_type, modo="rapido"):
     """Sobe o áudio pro Storage (sem carregar tudo na memória) e cria o trabalho.
     `arquivo` é um objeto tipo-arquivo (UploadFile.file). Devolve (job_id, None)
     ou (None, mensagem_de_erro)."""
@@ -93,6 +95,7 @@ def criar_job(arquivo, nome_arquivo, content_type):
             "criado_em": agora,
             "atualizado_em": agora,
             "nome_original": nome_arquivo or "audio",
+            "modo": modo if modo in MODOS else "rapido",
             "entrada_path": caminho,
         })
     except Exception as e:
@@ -126,20 +129,27 @@ def consultar_job(job_id):
     if status == "pronto":
         saida["bpm"] = d.get("bpm")
         saida["tom"] = d.get("tom")
+        saida["modo"] = d.get("modo") or "rapido"
+        saida["stems"] = d.get("stems")          # lista de nomes (modo completo) ou None (modo rápido / Colab antigo)
     if status == "pendente":
         saida["colab_online"] = status_colab().get("online", False)
     return saida
 
 
 def baixar_stem(job_id, stem):
-    """Bytes do MP3 do stem ('voz' ou 'instrumental'), ou None."""
+    """Bytes do MP3 do stem, ou None. Aceita 'voz'/'instrumental' (modo rápido) ou qualquer
+    nome de fonte que o próprio trabalho registrou em `stems_paths` (modo completo)."""
     db, bucket = get_db(), get_bucket()
-    if db is None or bucket is None or stem not in ("voz", "instrumental"):
+    if db is None or bucket is None:
         return None
     doc = db.collection(COLECAO_JOBS).document(job_id).get()
     if not doc.exists:
         return None
-    caminho = (doc.to_dict() or {}).get("voz_path" if stem == "voz" else "inst_path")
+    d = doc.to_dict() or {}
+    if stem in ("voz", "instrumental"):
+        caminho = d.get("voz_path" if stem == "voz" else "inst_path")
+    else:
+        caminho = (d.get("stems_paths") or {}).get(stem)       # só nomes que o trabalho registrou
     if not caminho:
         return None
     return bucket.blob(caminho).download_as_bytes()

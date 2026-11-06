@@ -14,14 +14,14 @@ import tempfile
 import gc
 
 
-def _carregar_modelo():
+def _carregar_modelo(nome="htdemucs"):
     # Propositalmente SEM cache entre chamadas — em um host com pouca memória
     # (512MB), manter o modelo carregado pra sempre economiza tempo mas nunca
     # libera essa memória de volta, mesmo quando ninguém está usando o
     # Estúdio. Recarregar a cada vez custa alguns segundos extras, mas evita
     # que o processo inteiro seja reiniciado por estourar o limite de RAM.
     from demucs.pretrained import get_model
-    modelo = get_model("htdemucs")
+    modelo = get_model(nome)
     modelo.eval()
     return modelo
 
@@ -118,4 +118,106 @@ def separar(dados_audio, nome_arquivo):
         # lixo — em host com pouca RAM, isso é a diferença entre o processo
         # sobreviver ou ser reiniciado por estourar o limite de memória.
         modelo = wav = wav_normalizado = fontes = voz = instrumental = referencia = None
+        gc.collect()
+
+
+# ════════════════════════════════════════════════════════
+# MODO COMPLETO — separa cada instrumento (modelo htdemucs_6s)
+# O modelo entrega 6 fontes: voz, bateria, baixo, guitarra, piano e "outros"
+# (tudo que sobra: teclados/sintetizadores, cordas, metais, efeitos...).
+# Limites reais: o "piano" é a fonte menos confiável do modelo; voz principal x
+# backing vocal e duas vozes diferentes NÃO são separadas aqui.
+# ════════════════════════════════════════════════════════
+MODELO_COMPLETO = "htdemucs_6s"
+
+
+def wav_para_mp3(wav_bytes, kbps=192):
+    """WAV (mono/estéreo) -> MP3. Cada fonte em WAV pesa ~30 MB por música; em MP3, ~4 MB."""
+    import io
+    import numpy as np
+    import soundfile as sf
+    import lameenc
+    dados, sr = sf.read(io.BytesIO(wav_bytes), dtype="int16", always_2d=True)
+    enc = lameenc.Encoder()
+    enc.set_bit_rate(kbps)
+    enc.set_in_sample_rate(int(sr))
+    enc.set_channels(int(dados.shape[1]))
+    enc.set_quality(2)
+    return bytes(enc.encode(np.ascontiguousarray(dados).tobytes()) + enc.flush())
+
+
+def _wav_bytes(tensor, taxa):
+    """Salva um tensor (canais x amostras) como WAV e devolve os bytes. Usa arquivo
+    temporário de verdade (o backend torchcodec do torchaudio não aceita BytesIO)."""
+    import torchaudio
+    fd, caminho = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    try:
+        torchaudio.save(caminho, tensor.clamp(-1, 1), taxa, format="wav")
+        with open(caminho, "rb") as f:
+            return f.read()
+    finally:
+        if os.path.exists(caminho):
+            os.remove(caminho)
+
+
+def separar_completo(dados_audio, nome_arquivo):
+    """Retorna ({fonte: wav_bytes}, None) em sucesso, ou (None, mensagem_de_erro).
+    As chaves são os nomes do próprio modelo: 'vocals', 'drums', 'bass', 'guitar',
+    'piano', 'other'."""
+    if not dados_audio:
+        return None, "Grave ou suba um áudio primeiro."
+
+    try:
+        import torch
+        import torchaudio
+        from demucs.apply import apply_model
+    except Exception:
+        return None, (
+            "A separação de stems não está disponível nesta hospedagem gratuita "
+            "(o Demucs precisa de mais memória do que os 512 MB do plano). "
+            "Use o notebook do Colab para separar os stems, ou hospede num plano com mais RAM."
+        )
+
+    caminho_temp = None
+    try:
+        modelo = _carregar_modelo(MODELO_COMPLETO)
+
+        sufixo = os.path.splitext(nome_arquivo or "")[1] or ".wav"
+        fd, caminho_temp = tempfile.mkstemp(suffix=sufixo)
+        with os.fdopen(fd, "wb") as f:
+            f.write(dados_audio)
+
+        wav, sr = torchaudio.load(caminho_temp)
+        if sr != modelo.samplerate:
+            wav = torchaudio.functional.resample(wav, sr, modelo.samplerate)
+        if wav.shape[0] == 1:
+            wav = wav.repeat(2, 1)
+        elif wav.shape[0] > 2:
+            wav = wav[:2]
+
+        referencia = wav.mean(0)
+        media, desvio = referencia.mean(), referencia.std() + 1e-8
+        wav_normalizado = (wav - media) / desvio
+
+        with torch.no_grad():
+            dispositivo = _dispositivo()
+            try:
+                fontes = apply_model(modelo, wav_normalizado[None], device=dispositivo, progress=False)[0]
+            except Exception:
+                if dispositivo == "cpu":
+                    raise
+                fontes = apply_model(modelo, wav_normalizado[None], device="cpu", progress=False)[0]
+        fontes = fontes * desvio + media
+
+        saidas = {}
+        for i, nome in enumerate(modelo.sources):      # ex.: ['drums','bass','other','vocals','guitar','piano']
+            saidas[nome] = _wav_bytes(fontes[i], modelo.samplerate)
+        return saidas, None
+    except Exception as e:
+        return None, f"Não foi possível separar os stems: {e}"
+    finally:
+        if caminho_temp and os.path.exists(caminho_temp):
+            os.remove(caminho_temp)
+        modelo = wav = wav_normalizado = fontes = referencia = None
         gc.collect()

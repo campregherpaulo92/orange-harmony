@@ -223,32 +223,64 @@ def laranjinha_mensagem_rota(mensagem: str = Form(...), chat_id: str = Form(None
 # ══════════════════════════════════════════════════════════════
 # ORANGE STUDIO (separação de stems + agente embutido de limpeza)
 # ══════════════════════════════════════════════════════════════
-@app.post("/api/estudio/separar")
-def separar_stems_rota(arquivo: UploadFile = File(...)):
-    """Rota síncrona (não async) de propósito: a separação com Demucs é uma
-    operação pesada e bloqueante (import de torch + inferência em CPU).
-    O FastAPI roda rotas 'def' comuns numa threadpool à parte, então isso
-    não trava o loop de eventos e o resto do app continua respondendo
-    normalmente enquanto a separação roda."""
-    dados = arquivo.file.read()
-    voz_bytes, inst_bytes, erro = stems.separar(dados, arquivo.filename or "audio.wav")
-    if erro:
-        raise HTTPException(status_code=400, detail=erro)
-    import base64
+MODOS_SEPARACAO = ("rapido", "completo")
 
+
+def _comprimir_stem(wav):
+    """MP3 (~8x menor) quando possível; se a conversão falhar devolve o WAV mesmo (resposta bem maior)."""
+    try:
+        return stems.wav_para_mp3(wav)
+    except Exception:
+        return wav
+
+
+def _bpm_e_tom(dados, nome):
+    """BPM e tom da música original (só um extra pra mostrar no app)."""
     bpm = tom = None
     try:
-        audio, sr = carregar_audio_bytes(dados, arquivo.filename or "audio.wav")
+        audio, sr = carregar_audio_bytes(dados, nome)
         if audio is not None:
             bpm, _ = detectar_bpm_e_beats(audio, sr)
             tom = detectar_tom(audio, sr)
     except Exception:
         pass
+    return (round(bpm, 1) if bpm else None), tom
 
+
+@app.post("/api/estudio/separar")
+def separar_stems_rota(arquivo: UploadFile = File(...), modo: str = Form("rapido")):
+    """Rota síncrona (não async) de propósito: a separação com Demucs é uma
+    operação pesada e bloqueante (import de torch + inferência em CPU).
+    O FastAPI roda rotas 'def' comuns numa threadpool à parte, então isso
+    não trava o loop de eventos e o resto do app continua respondendo
+    normalmente enquanto a separação roda."""
+    # modo="completo": 6 faixas (voz, bateria, baixo, guitarra, piano, outros) com o htdemucs_6s.
+    if modo not in MODOS_SEPARACAO:
+        raise HTTPException(status_code=400, detail="Modo de separação inválido.")
+    dados = arquivo.file.read()
+    nome = arquivo.filename or "audio.wav"
+    import base64
+
+    if modo == "completo":
+        fontes, erro = stems.separar_completo(dados, nome)
+        if erro:
+            raise HTTPException(status_code=400, detail=erro)
+        bpm, tom = _bpm_e_tom(dados, nome)
+        return {
+            "modo": "completo",
+            "stems": {k: base64.b64encode(_comprimir_stem(v)).decode("ascii") for k, v in fontes.items()},
+            "bpm": bpm,
+            "tom": tom,
+        }
+
+    voz_bytes, inst_bytes, erro = stems.separar(dados, nome)
+    if erro:
+        raise HTTPException(status_code=400, detail=erro)
+    bpm, tom = _bpm_e_tom(dados, nome)
     return {
         "voz_base64": base64.b64encode(voz_bytes).decode("ascii"),
         "instrumental_base64": base64.b64encode(inst_bytes).decode("ascii"),
-        "bpm": round(bpm, 1) if bpm else None,
+        "bpm": bpm,
         "tom": tom,
     }
 
@@ -340,11 +372,11 @@ def escalas_descrever(tonica: str = Form(...), tipo: str = Form(...)):
 
 
 # ── Separação de stems via Colab (fila no Firebase) ──
-# Link do notebook no Colab (abre direto do GitHub). Dá pra trocar pela variável
+# Link do notebook no Colab (abre direto do GitHub, da branch cloudrun, a mesma do deploy). Dá pra trocar pela variável
 # de ambiente COLAB_SEPARADOR_URL no Render, se você mover o notebook de lugar.
 COLAB_SEPARADOR_URL = os.environ.get(
     "COLAB_SEPARADOR_URL",
-    "https://colab.research.google.com/github/campregherpaulo92/orange-harmony/blob/main/notebooks/separador_stems.ipynb",
+    "https://colab.research.google.com/github/campregherpaulo92/orange-harmony/blob/cloudrun/notebooks/separador_stems.ipynb",
 )
 
 
@@ -354,19 +386,23 @@ def estudio_config():
     'fila' (manda pro Colab), e se o Colab está ligado agora."""
     modo = estudio_fila.modo_separacao()
     resp = {"modo": modo, "colab_url": COLAB_SEPARADOR_URL}
+    if modo == "local":
+        resp["completo"] = True        # este servidor tem Demucs: pode separar em 6 faixas
     if modo == "fila":
         resp["colab"] = estudio_fila.status_colab()
     return resp
 
 
 @app.post("/api/estudio/fila")
-def estudio_fila_criar(arquivo: UploadFile = File(...)):
+def estudio_fila_criar(arquivo: UploadFile = File(...), modo: str = Form("rapido")):
+    if modo not in MODOS_SEPARACAO:
+        raise HTTPException(status_code=400, detail="Modo de separação inválido.")
     if not estudio_fila.status_colab().get("online"):
         raise HTTPException(
             status_code=409,
             detail="O separador do Colab está desligado. Abra o notebook no Colab e execute-o.",
         )
-    job_id, erro = estudio_fila.criar_job(arquivo.file, arquivo.filename, arquivo.content_type)
+    job_id, erro = estudio_fila.criar_job(arquivo.file, arquivo.filename, arquivo.content_type, modo)
     if erro:
         raise HTTPException(status_code=502, detail=erro)
     return {"job_id": job_id}
