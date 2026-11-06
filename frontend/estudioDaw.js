@@ -234,12 +234,12 @@
       <section class="dw-editor" id="dwEditor">
         <div class="dw-abas">
           <button class="dw-aba on" data-aba="mix">Mixer</button><button class="dw-aba" data-aba="reg">Região</button>
-          <button class="dw-aba" data-aba="afin">Afinação <small>EM BREVE</small></button><button class="dw-aba" data-aba="fx">Efeitos <small>EM BREVE</small></button>
+          <button class="dw-aba" data-aba="afin">Afinação</button><button class="dw-aba" data-aba="fx">Efeitos <small>EM BREVE</small></button>
           <span class="esp"></span><button class="dw-btn peq" id="dwRecolher">${ic("seta")} Recolher</button>
         </div>
         <div class="dw-painel-aba on" id="dwP-mix"><div class="dw-mix" id="dwMix"></div></div>
         <div class="dw-painel-aba" id="dwP-reg"><div class="dw-regp" id="dwRegp"></div></div>
-        <div class="dw-painel-aba" id="dwP-afin"><div class="dw-breve"><b>Afinação por blocos de nota (estilo Melodyne)</b><br>Na próxima etapa, cada nota que você cantou vira um bloco numa grade. Você arrasta o bloco para afinar e ouve na hora. A tela já está na maquete que aprovamos.</div></div>
+        <div class="dw-painel-aba" id="dwP-afin"><div class="dw-afin" id="dwAfin"></div></div>
         <div class="dw-painel-aba" id="dwP-fx"><div class="dw-breve"><b>Efeitos por faixa</b><br>Na etapa seguinte entram equalizador, compressor, reverb e delay em cada faixa, com predefinições como "Voz limpa" e "Voz de rádio".</div></div>
       </section>
       <div class="dw-status"><span class="e" id="dwStatus">Pronto.</span><span id="dwStatusSel"></span><span id="dwSalvo"></span><span>Espaço toca/pausa · R grava · V seleciona · C divide · S divide no cursor · Ctrl+Z desfaz</span></div>
@@ -308,7 +308,7 @@
     const linhas = S.faixas.map((f) => {
       const rs = S.regioes.filter((r) => r.f === f.id).map((r) => `
         <div class="dw-regiao ${r.id === S.regiaoSel ? "sel" : ""} ${f.mudo ? "mudo" : ""} ${r.gravando ? "gravando" : ""}" data-r="${r.id}" style="left:${px(r.ini)}px;width:${px(r.dur)}px;background:${corA(f.cor, 0.16)};border-color:${corA(f.cor, 0.85)}">
-          <div class="rot" style="background:${corA(f.cor, 0.95)}">${esc(r.nome)}${r.limpo ? " · limpa" : ""}</div><canvas></canvas>
+          <div class="rot" style="background:${corA(f.cor, 0.95)}">${esc(r.nome)}${r.limpo ? " · limpa" : ""}${r.afinada ? " · afinada" : ""}</div><canvas></canvas>
           ${r.fi > 0.02 ? `<i class="fade i" style="width:${px(r.fi)}px"></i>` : ""}${r.fo > 0.02 ? `<i class="fade o" style="width:${px(r.fo)}px"></i>` : ""}
           <i class="alca e" data-alca="e"></i><i class="alca d" data-alca="d"></i></div>`).join("");
       return `<div class="dw-linha" data-lf="${f.id}">${rs}</div>`;
@@ -340,18 +340,18 @@
       <div class="dw-bloco"><h4>Limpeza de ruído</h4>
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
           <select id="dwLimpaInt" title="Quanto o ruído é atenuado">${[["0.6", "Leve"], ["0.8", "Média"], ["0.95", "Forte"]].map(([v, n]) => `<option value="${v}" ${+v === limpaInt ? "selected" : ""}>${n}</option>`).join("")}</select>
-          <button class="dw-btn peq" data-ra="limpar" ${limpando ? "disabled" : ""}>Limpar ruído</button>${limpando ? '<button class="dw-btn peq" data-ra="cancelar">Cancelar</button>' : ""}
-          ${r.alt ? `<button class="dw-btn peq" data-ra="alternar" title="Compara a versão limpa com o original">Ouvir ${r.limpo ? "o original" : "a versão limpa"}</button><button class="dw-btn peq" data-ra="manter" title="Descarta a outra versão">Manter esta versão</button>` : ""}
+          <button class="dw-btn peq" data-ra="limpar" ${limpando || r.afin ? "disabled" : ""} ${r.afin ? 'title="Esta região tem afinação aplicada: desfaça a afinação antes de limpar o ruído"' : ""}>Limpar ruído</button>${limpando ? '<button class="dw-btn peq" data-ra="cancelar">Cancelar</button>' : ""}
+          ${r.alt ? `<button class="dw-btn peq" data-ra="alternar" title="Compara com a outra versão">Ouvir ${(r.afin ? r.afinada : r.limpo) ? (r.afin ? "a versão sem afinação" : "o original") : (r.afin ? "a versão afinada" : "a versão limpa")}</button><button class="dw-btn peq" data-ra="manter" title="Descarta a outra versão">Manter esta versão</button>` : ""}
         </div>
         <div class="dw-dica" id="dwLimpaStatus">${esc(limpaTxt)}</div>
-        <div class="dw-dica">${r.alt ? `Toca agora: <b>${r.limpo ? "a versão limpa ✓" : "o original"}</b>.` : "Mede o ruído nas pausas da gravação (respiros, silêncio). Pensado para voz; o original fica guardado."}</div>
+        <div class="dw-dica">${r.alt ? `Toca agora: <b>${(r.afin ? r.afinada : r.limpo) ? (r.afin ? "a versão afinada ✓" : "a versão limpa ✓") : (r.afin ? "a versão sem afinação" : "o original")}</b>.` : "Mede o ruído nas pausas da gravação (respiros, silêncio). Pensado para voz; o original fica guardado."}</div>
       </div>`;
   }
   function renderTudo() {
     renderCab(); renderLinhas(); renderMixer(); renderRegiao();
     selStatus(); atualizarUndo();
   }
-  function selStatus() { const r = regiaoPorId(S.regiaoSel), e = $("#dwStatusSel"); if (e) e.textContent = r ? `Região: ${r.nome}` : ""; }
+  function selStatus() { const r = regiaoPorId(S.regiaoSel), e = $("#dwStatusSel"); if (e) e.textContent = r ? `Região: ${r.nome}` : ""; if (abaAtiva === "afin") prepararAfinacao(); }
   function posicionar() {
     const ph = $("#dwPlayhead"); if (!ph) return; ph.style.left = px(S.tAtual) + "px";
     const bd = beatDur(), c = Math.floor(S.tAtual / BAR()), bt = Math.floor((S.tAtual % BAR()) / bd);
@@ -654,7 +654,7 @@
   let areaCopia = null;
   function dividirRegiao(r, t) {
     if (t <= r.ini + 0.02 || t >= r.ini + r.dur - 0.02) return dica("Coloque o cursor (ou clique) dentro da região para dividir.");
-    mudar(() => { const fim = r.ini + r.dur; r.dur = t - r.ini; const n = { ...r, id: proxId++, ini: t, off: r.off + (t - r.ini), dur: fim - t, nome: r.nome + " (parte 2)" }; if (r.alt) n.alt = { buf: r.alt.buf, off: r.alt.off + (t - r.ini) }; r.fo = 0.005; S.regioes.push(n); });
+    mudar(() => { const fim = r.ini + r.dur; r.dur = t - r.ini; const n = { ...r, id: proxId++, ini: t, off: r.off + (t - r.ini), dur: fim - t, nome: r.nome + " (parte 2)" }; if (r.alt) n.alt = { buf: r.alt.buf, off: r.alt.off + (t - r.ini) }; if (r.afin) { delete r.afin; delete n.afin; } r.fo = 0.005; S.regioes.push(n); });
     dica("Região dividida em duas.");
   }
   function excluirRegiao(id) { mudar(() => { S.regioes = S.regioes.filter((x) => x.id !== id); S.regiaoSel = null; }); dica("Região excluída."); }
@@ -674,7 +674,7 @@
     $$(".dw-regiao", $("#dwFaixas")).forEach((el) => el.classList.toggle("sel", +el.dataset.r === r.id)); $$(".dw-cab").forEach((el) => el.classList.toggle("sel", el.dataset.f === r.f)); renderRegiao(); selStatus();
     const mv = (ev) => {
       const dx = (ev.clientX - x0) / S.pps; mexeu = true;
-      if (alca === "e") { const novo = Math.max(ini0 - (r.alt ? Math.min(off0, altOff0) : off0), Math.min(ini0 + dur0 - 0.05, snap(ini0 + dx, ev.altKey))); r.dur = dur0 - (novo - ini0); r.off = off0 + (novo - ini0); if (r.alt) r.alt.off = altOff0 + (novo - ini0); r.ini = novo; }
+      if (alca === "e") { const novo = Math.max(ini0 - (r.alt ? Math.min(off0, altOff0) : off0), Math.min(ini0 + dur0 - 0.05, snap(ini0 + dx, ev.altKey))); r.dur = dur0 - (novo - ini0); r.off = off0 + (novo - ini0); if (r.alt) r.alt.off = altOff0 + (novo - ini0); if (r.afin) delete r.afin; r.ini = novo; }
       else if (alca === "d") { r.dur = Math.max(0.05, Math.min(buf ? buf.duration - r.off : 1e9, bufAlt ? bufAlt.duration - r.alt.off : 1e9, snap(ini0 + dur0 + dx, ev.altKey) - ini0)); }
       else { r.ini = Math.max(0, snap(ini0 + dx, ev.altKey)); const alvo = linhaSob(ev.clientY); if (alvo && alvo.id !== r.f) { r.f = alvo.id; const dest = $(`.dw-linha[data-lf="${alvo.id}"]`); const el0 = $(`.dw-regiao[data-r="${r.id}"]`); if (dest && el0) dest.appendChild(el0); } }
       const el = $(`.dw-regiao[data-r="${r.id}"]`); if (el) { el.style.left = px(r.ini) + "px"; el.style.width = px(r.dur) + "px"; el.style.cursor = "grabbing"; }
@@ -785,6 +785,11 @@
       const pag = $("#page-estudio"); if (!pag || !pag.classList.contains("oh-page-ativa")) return;
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
       if (!$("#dwModalSep").hidden || !$("#dwModalProj").hidden) return;
+      if (abaAtiva === "afin") {
+        if (afin && afin.tecla(e)) return;
+        if (e.code === "Space") { if (!/^(BUTTON|A)$/.test(e.target.tagName)) { e.preventDefault(); const p = document.getElementById("afPlay"); if (p) p.click(); } return; }
+        if (!(e.ctrlKey || e.metaKey)) return;
+      }
       const meta = e.ctrlKey || e.metaKey, k = e.key.toLowerCase(), r = regiaoPorId(S.regiaoSel);
       if (e.key === " " || e.code === "Space") { if (/^(BUTTON|A|SUMMARY)$/.test(e.target.tagName)) return; e.preventDefault(); if (S.gravando || S.contando) pararGravacao(); else S.tocando ? pausar() : tocar(); }
       else if (meta && k === "z" && !e.shiftKey) { e.preventDefault(); desfazer(); }
@@ -804,7 +809,11 @@
     $("#dwRaiz").addEventListener("click", (e) => { const b = e.target.closest("button, input[type=checkbox]"); if (b) setTimeout(() => b.blur(), 0); });
     window.addEventListener("beforeunload", (e) => { if (S.sujo && S.regioes.length) { e.preventDefault(); e.returnValue = ""; } });
   }
-  function abrirAba(n) { $$(".dw-aba").forEach((a) => a.classList.toggle("on", a.dataset.aba === n)); $$(".dw-painel-aba").forEach((p) => p.classList.toggle("on", p.id === "dwP-" + n)); $("#dwEditor").classList.remove("fechado"); $("#dwRecolher").innerHTML = ic("seta") + " Recolher"; }
+  function abrirAba(n) {
+    abaAtiva = n; $$(".dw-aba").forEach((a) => a.classList.toggle("on", a.dataset.aba === n)); $$(".dw-painel-aba").forEach((p) => p.classList.toggle("on", p.id === "dwP-" + n));
+    const ed = $("#dwEditor"); ed.classList.remove("fechado"); ed.classList.toggle("alto", n === "afin"); $("#dwRecolher").innerHTML = ic("seta") + " Recolher";
+    if (n !== "afin") { ed.classList.remove("ampliado"); if (afin) { afin.parar(); afin.definirModoAmpliado(false); } } else prepararAfinacao();
+  }
   function novoProjeto() {
     salvarProjeto();                                   // o projeto atual fica guardado (Arquivo → Abrir projeto)
     if (S.tocando) pausar(); pararFontes(); nos.forEach((n) => { try { n.gain.disconnect(); n.pan.disconnect(); } catch (e) { /* solto */ } }); nos.clear();
@@ -905,6 +914,7 @@
   function msgLimpa(t) { limpaTxt = t; const e = $("#dwLimpaStatus"); if (e) e.textContent = t; dica(t); }
   async function limparRegiao(r) {
     if (limpando) return;
+    if (r.afin) return msgLimpa("Esta região tem afinação aplicada. Desfaça a afinação (aba Afinação → Reverter tudo → Aplicar, ou Ctrl+Z) antes de limpar o ruído.");
     if (S.gravando || S.contando) return dica("Pare a gravação antes de limpar o ruído.");
     if (!window.EstudioDsp) return msgLimpa("O módulo de limpeza não carregou. Atualize a página.");
     const buf = bufs.get(r.buf); if (!buf) return msgLimpa("Esta região ainda não tem áudio gravado.");
@@ -930,10 +940,56 @@
   }
   function alternarLimpeza(r) {
     if (!r.alt) return;
-    mudar(() => { const a = r.alt; r.alt = { buf: r.buf, off: r.off }; r.buf = a.buf; r.off = a.off; r.limpo = !r.limpo; const b = bufs.get(r.buf); if (b) r.dur = Math.min(r.dur, b.duration - r.off); });
-    dica(r.limpo ? "Tocando a versão limpa." : "Tocando o original (sem limpeza).");
+    mudar(() => { const a = r.alt; r.alt = { buf: r.buf, off: r.off }; r.buf = a.buf; r.off = a.off; if (r.afin) r.afinada = !r.afinada; else r.limpo = !r.limpo; const b = bufs.get(r.buf); if (b) r.dur = Math.min(r.dur, b.duration - r.off); });
+    dica(r.afin ? (r.afinada ? "Tocando a versão afinada." : "Tocando a versão sem afinação.") : (r.limpo ? "Tocando a versão limpa." : "Tocando o original (sem limpeza)."));
   }
-  function manterVersao(r) { if (!r.alt) return; mudar(() => { r.alt = null; }); dica(r.limpo ? "Mantive a versão limpa e descartei o original desta região." : "Mantive o original e descartei a versão limpa."); }
+  function manterVersao(r) { if (!r.alt) return; const tipo = r.afin ? "afinação" : "limpeza", ativa = r.afin ? r.afinada : r.limpo; mudar(() => { r.alt = null; if (r.afin) delete r.afin; }); dica(ativa ? `Mantive a versão com ${tipo} e descartei a outra desta região.` : `Mantive a versão sem ${tipo} e descartei a outra.`); }
+
+  // ══ AFINAÇÃO (aba Afinação: editor de linha contínua; o resultado é gravado na região e a versão sem afinação fica guardada) ═══
+  let afin = null, abaAtiva = "mix", afinTutVisto = false;
+  function baseDaRegiao(r) {   // o áudio ANTES da afinação (se a região já foi afinada, é a versão guardada em alt)
+    const ref = r.afinada && r.alt ? r.alt : { buf: r.buf, off: r.off }, buf = bufs.get(ref.buf); if (!buf) return null;
+    const sr = buf.sampleRate, ini = Math.max(0, Math.round(ref.off * sr)), fim = Math.min(buf.length, ini + Math.round(r.dur * sr));
+    return { buf, ini, fim, sr, ref };
+  }
+  function criarAfin() {
+    if (afin || !window.EstudioAfinacaoUI || !window.EstudioAfinacao) return afin;
+    afin = EstudioAfinacaoUI.criar($("#dwAfin"), { modo: "estudio", aoAplicar: aplicarAfinacao, aoAmpliar: ampliarAfin, aoTocar: () => { if (S.tocando) pausar(); } });
+    return afin;
+  }
+  function prepararAfinacao() {
+    const a = criarAfin(); if (!a) { $("#dwAfin").innerHTML = '<div class="dw-breve">O editor de afinação não carregou. Atualize a página.</div>'; return; }
+    const r = regiaoPorId(S.regiaoSel);
+    if (!r || r.gravando) { a.limpar("Selecione uma região de voz na linha do tempo (clique nela) para ver e ajustar a afinação."); return; }
+    const base = baseDaRegiao(r); if (!base) { a.limpar("Esta região ainda não tem áudio."); return; }
+    const chave = `${base.ref.buf}:${base.ref.off.toFixed(3)}:${r.dur.toFixed(3)}`, comp = COMPASSOS[S.compasso];
+    const dados = { chave, cents: r.afin ? r.afin.cents : null, origemTempo: r.ini, batidaSeg: beatDur(), porCompasso: comp.n, tonica: S.tom, nome: r.nome };
+    if (!(a.E.carregado && a.E.chave === chave)) {
+      const nc = base.buf.numberOfChannels, n = base.fim - base.ini, mono = new Float32Array(n);
+      for (let c = 0; c < nc; c++) { const d = base.buf.getChannelData(c); for (let i = 0; i < n; i++) mono[i] += d[base.ini + i] / nc; }
+      dados.mono = mono; dados.sr = base.sr;
+    }
+    a.carregar(dados).then((okk) => { if (okk && !afinTutVisto) { afinTutVisto = true; a.definirTutorialAuto(); } }).catch(() => {});
+  }
+  function ampliarAfin() { const ed = $("#dwEditor"), on = ed.classList.toggle("ampliado"); if (afin) afin.definirModoAmpliado(on); }
+  async function aplicarAfinacao(cents, det) {
+    const r = regiaoPorId(S.regiaoSel); if (!r) return dica("Selecione uma região com voz primeiro.");
+    const base = baseDaRegiao(r); if (!base) return;
+    if (!cents.some((v) => Math.abs(v) > 0.5)) {
+      if (r.afin && r.alt) { mudar(() => { if (r.afinada) { r.buf = r.alt.buf; r.off = r.alt.off; } r.alt = null; r.afinada = false; delete r.afin; }); if (afin) afin.zerarHistorico(); dica("Afinação desfeita: a região voltou ao áudio sem afinação."); }
+      else dica("Não há nada para aplicar: a linha não foi mexida. Puxe pontos ou use “Corrigir tudo” primeiro.");
+      return;
+    }
+    dica("Aplicando a afinação… (isso leva alguns segundos)"); await new Promise((ok) => setTimeout(ok, 40));
+    try {
+      garantirAudio(); const nc = base.buf.numberOfChannels, n = base.fim - base.ini, novo = ctx.createBuffer(nc, n, base.sr);
+      for (let c = 0; c < nc; c++) novo.copyToChannel(EstudioAfinacao.corrigirAltura(base.buf.getChannelData(c).slice(base.ini, base.fim), base.sr, det, cents), c);
+      const blob = audioBufferParaWavBlob(novo), guardar = Array.from(cents, (v) => Math.round(v * 10) / 10);
+      mudar(() => { const id = guardarAudio(novo, blob); if (!r.afinada) r.alt = { buf: r.buf, off: r.off }; r.buf = id; r.off = 0; r.dur = Math.min(r.dur, novo.duration); r.afinada = true; r.limpo = false; r.afin = { cents: guardar, n: det.n }; });
+      if (afin) afin.zerarHistorico();
+      dica("Afinação aplicada ✓. Ouça a região; em Região você compara com “Ouvir a versão sem afinação”. Ctrl+Z desfaz.");
+    } catch (e) { dica("Não consegui aplicar a afinação: " + ((e && e.message) || "erro inesperado") + "."); }
+  }
 
   // ══ INÍCIO ════════════════════════════════════════════════════════════
   let restauradoUmaVez = false;
@@ -952,7 +1008,7 @@
   window.EstudioDaw = {
     aoAbrir,
     _teste: {
-      limparRegiao, modoSep, salvarProjeto, listarProjetos, abrirProjeto, S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
+      afin: () => afin, aplicarAfinacao, prepararAfinacao, limparRegiao, modoSep, salvarProjeto, listarProjetos, abrirProjeto, S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
       fontes: () => fontes.length, cliques: () => cliquesTotal, cliqueLog: () => cliqueLog.slice(),
       ganhoDe: (id) => { const n = nos.get(id); return n ? n.gain.gain.value : null; },
       nivelDe: (id) => { const n = nos.get(id); return n ? nivel(n.an) : null; },

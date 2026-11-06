@@ -215,3 +215,7 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-modo input { accent-color: var(--dw-laranja); margin-top: 3px; }
 .dw-modo b { display: block; } .dw-modo small { color: var(--dw-suave); }
 .dw-cab.vazia .nome { opacity: .55; }
+
+.dw-editor.alto { height: clamp(340px, 62vh, 620px); }
+.dw-editor.ampliado { position: absolute; inset: 0; height: auto; z-index: 60; border-top: 0; }
+#dwP-afin.on { display: block; overflow: hidden; } .dw-afin { height: 100%; min-height: 0; }
