@@ -42,6 +42,8 @@ function inicializarNavegacao() {
       if (alvo === "gravador") carregarListaGravacoes();
       if (alvo === "historico") carregarHistorico();
       if (alvo === "composicoes") carregarListaComposicoes();
+      document.body.classList.toggle("estudio-ativo", alvo === "estudio");   // o Estúdio usa a tela toda
+      if (alvo === "estudio" && window.EstudioDaw) window.EstudioDaw.aoAbrir();
     });
   });
 }
