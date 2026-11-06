@@ -8,9 +8,9 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=6">
-<link rel="stylesheet" href="identidade.css?v=6">
-<link rel="stylesheet" href="abcjs-audio.css?v=6">
+<link rel="stylesheet" href="styles.css?v=7">
+<link rel="stylesheet" href="identidade.css?v=7">
+<link rel="stylesheet" href="abcjs-audio.css?v=7">
 </head>
 <body>
 
@@ -769,7 +769,7 @@
     <section class="oh-page" id="page-partitura">
       <div class="oh-card">
         <div class="oh-section-title"><span><i class="oh-ic" data-ic="partitura"></i></span> Partitura<i class="oh-title-line"></i></div>
-        <p class="oh-hint">A partitura vem do Songwriter. Corrija o texto ABC aqui, ouça a melodia e só depois envie para a geração.</p>
+        <p class="oh-hint">A partitura vem do Songwriter. Clique numa nota para selecioná-la (fica vermelha) e depois clique na linha ou no espaço da pauta onde ela deve ficar. O botão de play flutuante toca a partir da nota selecionada.</p>
         <p id="partituraStatus" class="oh-hint" data-tipo="info" style="margin:6px 0 10px;">Aguardando partitura.</p>
         <div class="oh-partitura-timbre">
           <label for="partituraTimbre">Timbre</label>
@@ -777,37 +777,30 @@
         </div>
         <div id="partituraTransporte" class="oh-partitura-transporte"></div>
         <div class="oh-partitura-acoes">
+          <button id="partituraTrecho" class="oh-btn oh-btn-secundario" type="button">Selecionar trecho</button>
+          <button id="partituraLimpar" class="oh-btn oh-btn-secundario" type="button">Limpar seleção</button>
+          <button id="partituraDesfazer" class="oh-btn oh-btn-secundario" type="button">Desfazer</button>
+        </div>
+        <div class="partitura-legenda">
+          <span><i class="pt-cor pt-sel"></i> nota selecionada</span>
+          <span><i class="pt-cor pt-trecho"></i> trecho</span>
+          <span><i class="pt-cor pt-editada"></i> nota ajustada</span>
+        </div>
+        <div id="partituraPapel" class="partitura-papel">
+          <div id="partituraSvg"></div>
+        </div>
+        <div class="oh-partitura-acoes">
           <button id="partituraSalvar" class="oh-btn oh-btn-secundario" type="button">Salvar correção</button>
           <button id="partituraRestaurar" class="oh-btn oh-btn-secundario" type="button">Restaurar original</button>
+          <button id="partituraCarregarUltima" class="oh-btn oh-btn-secundario" type="button" hidden>Carregar última partitura extraída</button>
           <button id="partituraSongwriter" class="oh-btn" type="button">Usar no Songwriter</button>
-        </div>
-        <div id="partituraArea" class="partitura-area">
-          <div id="partituraPapel" class="partitura-papel">
-            <div id="partituraSvg"></div>
-          </div>
-          <div id="partituraCaixa" class="partitura-caixa" hidden>
-            <div class="partitura-caixa-topo">
-              <span id="partituraCaixaNota"></span>
-              <button id="partituraCaixaFechar" class="partitura-caixa-x" type="button" aria-label="Fechar">×</button>
-            </div>
-            <div class="partitura-caixa-botoes">
-              <button id="partituraVoltar" class="partitura-caixa-btn" type="button" title="Nota anterior" aria-label="Nota anterior">⏮</button>
-              <button id="partituraPausar" class="partitura-caixa-btn" type="button" title="Pausar" aria-label="Pausar">⏸</button>
-              <button id="partituraTocarDaqui" class="partitura-caixa-btn" type="button" title="Tocar a partir desta nota" aria-label="Tocar daqui">▶</button>
-              <button id="partituraAvancar" class="partitura-caixa-btn" type="button" title="Próxima nota" aria-label="Próxima nota">⏭</button>
-            </div>
-            <div class="partitura-caixa-botoes">
-              <button id="partituraSubir" class="oh-btn oh-btn-secundario" type="button">↑ Subir</button>
-              <button id="partituraDescer" class="oh-btn oh-btn-secundario" type="button">↓ Descer</button>
-              <button id="partituraDesfazer" class="oh-btn oh-btn-secundario" type="button">Desfazer</button>
-            </div>
-          </div>
         </div>
         <details class="oh-partitura-editor">
           <summary>Editar texto ABC</summary>
           <textarea id="partituraAbc" rows="10" spellcheck="false" placeholder="X:1&#10;T:Minha música&#10;M:4/4&#10;L:1/8&#10;K:C&#10;C D E F | G2 E2 C4 |"></textarea>
         </details>
       </div>
+      <button id="partituraFlutuante" class="partitura-flutuante" type="button" hidden aria-label="Tocar"></button>
     </section>
 
   </main>
@@ -1006,14 +999,14 @@
   </div>
 </div>
 
-<script src="icones.js?v=6"></script>
-<script src="transposicao.js?v=6"></script>
-<script src="player.js?v=6"></script>
-<script src="recorder.js?v=6"></script>
-<script src="app.js?v=6"></script>
-<script src="afinador.js?v=6"></script>
-<script src="historico.js?v=6"></script>
-<script src="fichaAvaliacao.js?v=6"></script>
+<script src="icones.js?v=7"></script>
+<script src="transposicao.js?v=7"></script>
+<script src="player.js?v=7"></script>
+<script src="recorder.js?v=7"></script>
+<script src="app.js?v=7"></script>
+<script src="afinador.js?v=7"></script>
+<script src="historico.js?v=7"></script>
+<script src="fichaAvaliacao.js?v=7"></script>
 <script src="composicoes.js"></script>
 <script src="conversor.js"></script>
 <script src="producao.js"></script>
@@ -1021,14 +1014,14 @@
 <script src="avaliacao.js"></script>
 <script src="laranjinha.js"></script>
 <script src="estudio.js"></script>
-<script src="abcjs-basic-min.js?v=6"></script>
-<script src="songwriter.js?v=6"></script>
-<script src="partitura.js?v=6"></script>
+<script src="abcjs-basic-min.js?v=7"></script>
+<script src="songwriter.js?v=7"></script>
+<script src="partitura.js?v=7"></script>
 <script src="acordes.js"></script>
 <script src="news.js"></script>
 <script src="singergame.js"></script>
 <script src="vocalise.js"></script>
 <script src="biblioteca_picker.js"></script>
-<script src="miniplayer.js?v=6"></script>
+<script src="miniplayer.js?v=7"></script>
 </body>
 </html>

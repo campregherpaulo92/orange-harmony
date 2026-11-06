@@ -1,16 +1,23 @@
-// ══════════════════════════════════════════════════════════════
-// partitura.js — Aba Partitura (ABC Studio).
-// Mostra a notação ABC vinda do Songwriter, reproduz a melodia no navegador
-// (abcjs), destaca a nota que está tocando e deixa ajustar o texto ABC.
-// Sem IA, sem gerar nada no servidor e sem gastar cota.
-// ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
+// partitura.js — Aba Partitura (ABC Studio)
+//
+// Como usar na tela:
+//   • Clique numa nota: ela fica VERMELHA (selecionada).
+//   • Clique numa linha ou espaço da pauta: a nota selecionada vai para lá
+//     (a nota ajustada fica AZUL).
+//   • Botão de play flutuante: toca a partir da nota selecionada (ou o trecho).
+//   • "Selecionar trecho" (ou Shift + clique numa segunda nota): marca um trecho
+//     em VERDE, e o play toca só aquele pedaço.
+//
+// Tudo roda no navegador (abcjs). Sem IA, sem servidor e sem gastar cota.
+// ══════════════════════════════════════════════════════════════════════════
 (function () {
   const K_ATUAL = "oh-partitura-atual";
   const K_ORIGINAL = "oh-partitura-original";
+  const K_ULTIMA = "oh-partitura-ultima";     // última extraída: reaproveitar sem gastar IA
   const K_TIMBRE = "oh-partitura-timbre";
   const PAGINA = "page-partitura";
 
-  // Timbres (programas MIDI padrão): o usuário escolhe, e a notação segue igual
   const TIMBRES = [
     { n: 0, nome: "Piano" },
     { n: 24, nome: "Violão de nylon" },
@@ -21,17 +28,30 @@
   ];
 
   const $ = (id) => document.getElementById(id);
-  let visualAtual = null;
-  let controle = null;      // SynthController (play, pausa, reinício, velocidade e progresso)
-  let areaEditada = false;
-  let timer = null;
-  let selecao = null;          // nota clicada: { inicio, fim, token }
-  let marcadosSel = [];        // elementos SVG da nota selecionada
-  let tempo = null;            // tempo de cada nota (TimingCallbacks), para voltar/avançar
-  let reproduzindo = false;
-  const historico = [];        // versões anteriores do texto ABC (para "Desfazer")
   const LETRAS = "CDEFGAB";
 
+  // ── estado ───────────────────────────────────────────────────────────────
+  let visual = null;               // partitura desenhada (abcjs)
+  let controle = null;             // SynthController do abcjs (play, pausa, seek)
+  let notas = [];                  // notas da partitura: { inicio, fim, rest, svg }
+  let porInicio = new Map();       // posição no texto -> nota
+  let ordemPorInicio = new Map();  // posição no texto -> ordem no tempo
+  let selecao = null;              // posição (no texto ABC) da nota vermelha
+  let trecho = null;               // { de, ate }: trecho verde
+  let modoTrecho = false;          // esperando a nota final do trecho
+  let editadas = new Set();        // notas ajustadas (azul)
+  let historico = [];              // para o "Desfazer"
+  let retomar = false;             // true: o próximo play continua de onde pausou
+  let fimTrechoMs = null;          // quando tocar um trecho: onde parar
+  let areaEditada = false;
+  let ultimaRolagemUsuario = 0;
+  let ultimoFim = 0;
+  let marcados = [];               // notas em destaque durante o play
+  let timerDigitando = null;
+  let botaoEstado = "";
+  let toqueEmNotaAte = 0;          // celular: o toque numa nota gera um 'clique' extra logo depois; ele deve ser ignorado
+
+  // ── armazenamento ────────────────────────────────────────────────────────
   function lerStorage(chave) { try { return localStorage.getItem(chave) || ""; } catch (e) { return ""; } }
   function gravarStorage(chave, valor) { try { localStorage.setItem(chave, valor); } catch (e) { /* sem armazenamento */ } }
 
@@ -42,336 +62,424 @@
     el.dataset.tipo = tipo || "info";
   }
 
-  // Destaque da nota que está tocando (cursor do abcjs)
-  let marcados = [];
-  const cursor = {
-    onStart() { limparDestaque(); },
-    onFinished() { limparDestaque(); status("Melodia terminada.", "ok"); },
-    onEvent(evento) {
-      limparDestaque();
-      (evento.elements || []).forEach((grupo) => (grupo || []).forEach((el) => {
-        el.classList.add("abcjs-highlight");
-        marcados.push(el);
-      }));
-    },
-  };
+  // ══ 1. LÓGICA DA NOTA (pura, testável) ═══════════════════════════════════
+
+  // Separa o texto de uma nota ABC em: prefixo (acorde de cifra, decoração),
+  // acidente, letra, marcas de oitava e o resto (duração, ligadura...).
+  function separarNota(token) {
+    let i = 0;
+    for (;;) {
+      const c = token[i];
+      if (c === '"' || c === "!" || c === "+") {
+        const f = token.indexOf(c, i + 1);
+        if (f < 0) return null;
+        i = f + 1;
+      } else if (c === "{") {
+        const f = token.indexOf("}", i + 1);
+        if (f < 0) return null;
+        i = f + 1;
+      } else if (c === "(") {
+        const m = /^\(\d+(?::\d+){0,2}/.exec(token.slice(i));
+        if (!m) return null;
+        i += m[0].length;
+      } else if (c && ".~HLMOPSTuv".indexOf(c) >= 0) {
+        i += 1;
+      } else break;
+    }
+    const m = /^(\^\^|\^|__|_|=)?([A-Ga-g])([,']*)([\s\S]*)$/.exec(token.slice(i));
+    if (!m) return null;
+    return { prefixo: token.slice(0, i), acidente: m[1] || "", letra: m[2], marcas: m[3], resto: m[4] };
+  }
+
+  function oitavaDe(p) {
+    let o = p.letra === p.letra.toUpperCase() ? 4 : 5;
+    for (const ch of p.marcas) o += ch === "'" ? 1 : -1;
+    return o;
+  }
+
+  // Move a nota 'passos' linhas/espaços da pauta (positivo = para cima).
+  // O acidente é retirado: a nota passa a seguir a armadura da tonalidade.
+  function moverToken(token, passos) {
+    const p = separarNota(token);
+    if (!p) return null;
+    const abs = oitavaDe(p) * 7 + LETRAS.indexOf(p.letra.toUpperCase()) + passos;
+    const oitava = Math.floor(abs / 7);
+    if (oitava < 2 || oitava > 7) return null;
+    const letra = LETRAS[((abs % 7) + 7) % 7];
+    const nova = oitava >= 5 ? letra.toLowerCase() + "'".repeat(oitava - 5) : letra + ",".repeat(4 - oitava);
+    return p.prefixo + nova + p.resto;
+  }
+
+  // Nome legível: "d'4" -> "D5"
+  function nomeDaNota(token) {
+    const p = separarNota(token);
+    if (!p) return token;
+    const acid = p.acidente.indexOf("^") >= 0 ? "#" : p.acidente.indexOf("_") >= 0 ? "b" : "";
+    return p.letra.toUpperCase() + acid + oitavaDe(p);
+  }
+
+  // ══ 2. DESENHO, SELEÇÃO E CORES ══════════════════════════════════════════
+
+  function limparEstado() {
+    selecao = null; trecho = null; modoTrecho = false; fimTrechoMs = null;
+    editadas = new Set(); historico = []; retomar = false;
+  }
+
+  function renderizar() {
+    const area = $("partituraAbc");
+    const alvo = $("partituraSvg");
+    const abc = area.value;                       // sem trim: as posições do abcjs precisam bater com o texto
+    visual = null; notas = []; porInicio = new Map(); ordemPorInicio = new Map();
+    limparDestaque();
+    if (!abc.trim()) {
+      alvo.innerHTML = `<p class="oh-hint" style="color:#555">Nenhuma partitura carregada. Gere a melodia na aba Songwriter, ou cole um texto ABC em "Editar texto ABC".</p>`;
+      status("Aguardando partitura.", "info");
+      prepararSom();
+      atualizarBotaoPlay(true);
+      return false;
+    }
+    try {
+      alvo.innerHTML = "";
+      const tunes = window.ABCJS.renderAbc(alvo, abc, { responsive: "resize", add_classes: true, clickListener: aoClicarAbcjs });
+      if (!tunes || !tunes.length || !tunes[0].lines || !tunes[0].lines.length) throw new Error("Nenhuma música encontrada no texto.");
+      visual = tunes[0];
+    } catch (erro) {
+      alvo.innerHTML = "";
+      status("Não consegui ler esse texto ABC. Confira as linhas X:, M:, L:, K: e as notas. " + (erro.message || ""), "erro");
+      prepararSom();
+      atualizarBotaoPlay(true);
+      return false;
+    }
+    mapearNotas();
+    pintar();
+    prepararSom();
+    atualizarBotaoPlay(true);
+    return true;
+  }
+
+  // Lista as notas desenhadas e a ordem delas no tempo (para o trecho)
+  function mapearNotas() {
+    const sels = (visual.engraver && visual.engraver.selectables) || [];
+    sels.forEach((s) => {
+      const e = s.absEl && s.absEl.abcelem;
+      if (!e || e.el_type !== "note" || e.startChar == null) return;
+      const n = { inicio: e.startChar, fim: e.endChar, rest: !!e.rest, svg: s.svgEl };
+      notas.push(n);
+      porInicio.set(n.inicio, n);
+    });
+    try {
+      const t = new window.ABCJS.TimingCallbacks(visual, {});
+      (t.noteTimings || []).forEach((ev, idx) => {
+        if (ev.type !== "event") return;
+        (ev.startCharArray || [ev.startChar]).forEach((sc) => { if (sc != null && !ordemPorInicio.has(sc)) ordemPorInicio.set(sc, idx); });
+      });
+    } catch (e) { /* sem ordem: o trecho cai para a ordem de desenho */ }
+  }
+
+  function limitesDoTrecho() {
+    if (!trecho) return null;
+    const a = ordemPorInicio.get(trecho.de), b = ordemPorInicio.get(trecho.ate);
+    if (a == null || b == null) return null;
+    return { a: Math.min(a, b), b: Math.max(a, b) };
+  }
+
+  // Vermelho = selecionada · Verde = trecho · Azul = ajustada
+  function pintar() {
+    const lim = limitesDoTrecho();
+    notas.forEach((n) => {
+      const ord = ordemPorInicio.get(n.inicio);
+      n.svg.classList.toggle("oh-nota-sel", selecao === n.inicio);
+      n.svg.classList.toggle("oh-nota-trecho", !!lim && ord != null && ord >= lim.a && ord <= lim.b);
+      n.svg.classList.toggle("oh-nota-editada", editadas.has(n.inicio));
+    });
+    const bt = $("partituraTrecho");
+    if (bt) {
+      bt.classList.toggle("oh-ativo", modoTrecho);
+      bt.textContent = modoTrecho ? "Clique na última nota do trecho" : "Selecionar trecho";
+    }
+  }
+
   function limparDestaque() {
     marcados.forEach((el) => el.classList.remove("abcjs-highlight"));
     marcados = [];
   }
 
-  function timbreAtual() {
-    const n = parseInt(lerStorage(K_TIMBRE), 10);
-    return TIMBRES.some((t) => t.n === n) ? n : 0;
+  // ══ 3. CLIQUES ═══════════════════════════════════════════════════════════
+
+  // O abcjs também avisa quando o clique foi PERTO de uma nota. Só vale o clique
+  // em cima dela; o resto é clique na pauta (tratado em aoClicarPauta).
+  function aoClicarAbcjs(abcElem, tuneNumber, classes, analysis, drag, mouseEvent) {
+    try {
+      const alvo = mouseEvent && mouseEvent.target;
+      if (!alvo || !alvo.closest || !alvo.closest("[data-index]")) return;
+      if (!abcElem || abcElem.el_type !== "note" || abcElem.startChar == null) return;
+      cliqueNaNota(abcElem.startChar, !!mouseEvent.shiftKey);
+    } catch (erro) {
+      status("Não consegui selecionar essa nota: " + (erro.message || erro), "erro");
+    }
   }
 
-  function montarTimbres() {
-    const sel = $("partituraTimbre");
-    if (!sel || sel.dataset.pronto) return;
-    sel.innerHTML = TIMBRES.map((t) => `<option value="${t.n}">${t.nome}</option>`).join("");
-    sel.value = String(timbreAtual());
-    sel.addEventListener("change", () => {
-      gravarStorage(K_TIMBRE, sel.value);
-      if (visualAtual && controle) aplicarMelodia();
-    });
-    sel.dataset.pronto = "1";
+  async function cliqueNaNota(inicio, shift) {
+    const nota = porInicio.get(inicio);
+    if (!nota) return;
+    await pausarAudio();
+    // segunda nota de um trecho
+    if ((modoTrecho || shift) && selecao != null && selecao !== inicio) {
+      trecho = { de: selecao, ate: inicio };
+      modoTrecho = false; fimTrechoMs = null; retomar = false;
+      pintar();
+      status("Trecho marcado em verde. Aperte o play para ouvir só esse pedaço.", "ok");
+      return;
+    }
+    selecao = inicio; trecho = null; fimTrechoMs = null; retomar = false;
+    pintar();
+    if (modoTrecho) { status("Agora clique na última nota do trecho.", "info"); return; }
+    const token = $("partituraAbc").value.slice(nota.inicio, nota.fim);
+    status(nota.rest
+      ? "Pausa selecionada. O play toca a partir daqui."
+      : `Nota ${nomeDaNota(token)} selecionada. Clique numa linha ou espaço da pauta para mudar a altura, ou aperte o play.`, "info");
   }
 
-  // Desenha a partitura e prepara o controle de reprodução
-  function renderizar() {
-    soltarCaixa();
-    const abc = $("partituraAbc").value.trim();
-    const papel = $("partituraSvg");
-    visualAtual = null;
-    tempo = null;
+  // Altura (em pixels) de um passo da pauta: metade da distância entre duas linhas
+  function passoDaPauta(grupo) {
+    const ys = [...grupo.querySelectorAll("path")].map((p) => { const r = p.getBoundingClientRect(); return r.top + r.height / 2; }).sort((a, b) => a - b);
+    if (ys.length < 2) return 0;
+    return (ys[ys.length - 1] - ys[0]) / (2 * (ys.length - 1));
+  }
+
+  // A pauta (as 5 linhas) onde está a nota: mesma linha de partitura e mais próxima
+  function pautaDaNota(nota, yNota) {
+    const m = /abcjs-l(\d+)/.exec(nota.svg.getAttribute("class") || "");
+    const raiz = nota.svg.ownerSVGElement || document;
+    const cand = [...raiz.querySelectorAll(m ? `.abcjs-staff.abcjs-l${m[1]}` : ".abcjs-staff")];
+    let melhor = null, dist = Infinity;
+    cand.forEach((g) => { const r = g.getBoundingClientRect(); const d = Math.abs(r.top + r.height / 2 - yNota); if (d < dist) { dist = d; melhor = g; } });
+    return melhor;
+  }
+
+  // Clique na pauta (fora de qualquer nota): a nota vermelha vai para essa linha/espaço
+  function aoClicarPauta(ev) {
+    if (Date.now() < toqueEmNotaAte) return;                               // sobra do toque numa nota (celular)
+    if (ev.target.closest && ev.target.closest("[data-index]")) return;   // foi numa nota
+    if (selecao == null || !visual) return;
+    const nota = porInicio.get(selecao);
+    if (!nota || !nota.svg.isConnected) return;
+    if (nota.rest) { status("Pausas não têm altura. Selecione uma nota.", "info"); return; }
+    const texto = $("partituraAbc").value;
+    const token = texto.slice(nota.inicio, nota.fim);
+    if (!separarNota(token)) { status("Esse trecho é um acorde ou um grupo de notas. Selecione uma nota simples.", "erro"); return; }
+
+    const cabeca = nota.svg.querySelector(".abcjs-notehead") || nota.svg;
+    const rc = cabeca.getBoundingClientRect();
+    const yNota = rc.top + rc.height / 2;
+    const pauta = pautaDaNota(nota, yNota);
+    if (!pauta) return;
+    const passo = passoDaPauta(pauta);
+    if (!passo) return;
+    const pr = pauta.getBoundingClientRect();
+    if (ev.clientX < pr.left - 6 || ev.clientX > pr.right + 6) return;                 // fora da pauta
+    if (ev.clientY < pr.top - 8 * passo || ev.clientY > pr.bottom + 8 * passo) return; // longe demais
+    const delta = Math.round((yNota - ev.clientY) / passo);
+    if (delta === 0) return;
+    const novo = moverToken(token, delta);
+    if (!novo) { status("Essa nota não pode ir tão longe.", "erro"); return; }
+    aplicarEdicao(nota, token, novo);
+  }
+
+  // Troca o texto da nota, atualiza as posições das outras notas e redesenha
+  function aplicarEdicao(nota, token, novo) {
+    const area = $("partituraAbc");
+    historico.push({ texto: area.value, editadas: [...editadas], selecao, trecho: trecho ? { ...trecho } : null });
+    if (historico.length > 50) historico.shift();
+    const dif = novo.length - token.length;
+    const mover = (p) => (p > nota.inicio ? p + dif : p);
+    area.value = area.value.slice(0, nota.inicio) + novo + area.value.slice(nota.fim);
+    editadas = new Set([...editadas].map(mover));
+    editadas.add(nota.inicio);
+    if (trecho) trecho = { de: mover(trecho.de), ate: mover(trecho.ate) };
+    gravarStorage(K_ATUAL, area.value);
+    areaEditada = false; retomar = false; fimTrechoMs = null;
+    renderizar();
+    status(`Nota ${nomeDaNota(token)} → ${nomeDaNota(novo)}. Aperte o play para ouvir a partir dela.`, "ok");
+  }
+
+  function desfazer() {
+    const h = historico.pop();
+    if (!h) { status("Nada para desfazer.", "info"); return; }
+    $("partituraAbc").value = h.texto;
+    editadas = new Set(h.editadas); selecao = h.selecao; trecho = h.trecho;
+    gravarStorage(K_ATUAL, h.texto);
+    retomar = false; fimTrechoMs = null;
+    const resto = historico;
+    renderizar();
+    historico = resto;
+    status("Última mudança desfeita.", "ok");
+  }
+
+  function limparSelecao() {
+    selecao = null; trecho = null; modoTrecho = false; fimTrechoMs = null; retomar = false;
+    pintar();
+    status("Seleção limpa. O play toca a música inteira.", "info");
+  }
+
+  function alternarModoTrecho() {
+    modoTrecho = !modoTrecho;
+    pintar();
+    if (!modoTrecho) { status("Seleção de trecho cancelada.", "info"); return; }
+    status(selecao != null
+      ? "Clique na última nota do trecho."
+      : "Clique na primeira nota do trecho e depois na última.", "info");
+  }
+
+  // ══ 4. SOM (play, pausa, seek, trecho) ═══════════════════════════════════
+  // Atenção ao abcjs: (1) controle.play() é um INTERRUPTOR (toca/pausa);
+  // (2) trocar a partitura NÃO recarrega o áudio sozinho: o som continuaria a
+  // versão antiga. Por isso prepararSom() descarta o áudio a cada mudança.
+
+  function tocando() { return !!(controle && controle.isStarted); }
+  function timbreAtual() { const n = parseInt(lerStorage(K_TIMBRE), 10); return TIMBRES.some((t) => t.n === n) ? n : 0; }
+
+  function prepararSom() {
+    if (!controle) return;
+    try { controle.destroy(); } catch (e) { /* ainda sem áudio criado */ }
+    controle.isLoaded = false; controle.isLoading = false; controle.isStarted = false;
+    if (visual) { try { controle.setTune(visual, false, { program: timbreAtual(), chordsOff: false }); } catch (e) { /* tenta de novo no play */ } }
+  }
+
+  async function garantirAudio() {
+    if (!controle || !visual) return false;
+    if (!controle.isLoaded) {
+      status("Carregando o som…", "info");
+      await controle.go();
+    }
+    return true;
+  }
+
+  async function pausarAudio() {
+    if (controle && controle.isStarted) { try { await controle.play(); } catch (e) { /* já parado */ } }
+    atualizarBotaoPlay(true);
+  }
+
+  // Evento (tempo) de uma nota, no relógio do próprio áudio
+  function eventoDaNota(inicio) {
+    const t = controle && controle.timer;
+    const evs = t && t.noteTimings;
+    if (!evs) return null;
+    for (let i = 0; i < evs.length; i++) {
+      const e = evs[i];
+      if (e.type !== "event") continue;
+      if (e.startChar === inicio || (e.startCharArray && e.startCharArray.indexOf(inicio) >= 0)) return { i, e, evs };
+    }
+    return null;
+  }
+
+  // Posição de início (e fim, se for trecho) em milissegundos
+  function alvoDeInicio() {
+    if (trecho) {
+      const a = eventoDaNota(trecho.de), b = eventoDaNota(trecho.ate);
+      if (a && b) {
+        const primeiro = a.i <= b.i ? a : b, ultimo = a.i <= b.i ? b : a;
+        const prox = ultimo.evs[ultimo.i + 1];
+        return { ms: primeiro.e.milliseconds, paradaMs: prox ? prox.milliseconds : null };
+      }
+    }
+    if (selecao != null) {
+      const a = eventoDaNota(selecao);
+      if (a) return { ms: a.e.milliseconds, paradaMs: null };
+    }
+    return null;
+  }
+
+  // Muda a posição do áudio e do cursor ao mesmo tempo (mesma unidade: segundos)
+  function irPara(ms) {
+    const t = controle.timer;
+    controle.seek(ms / 1000, "seconds");
+    controle.setProgress(t && t.lastMoment ? Math.min(1, ms / t.lastMoment) : 0, t ? t.lastMoment : 0);
+  }
+
+  async function iniciar() {
+    if (!visual || !controle) { status("Carregue uma partitura primeiro.", "erro"); return; }
+    try {
+      if (!(await garantirAudio())) return;
+      if (!retomar) {
+        const alvo = alvoDeInicio();
+        if (alvo) { irPara(alvo.ms); fimTrechoMs = alvo.paradaMs; }
+        else fimTrechoMs = null;
+      }
+      retomar = false;
+      if (!controle.isStarted) await controle.play();
+      status(trecho ? "Tocando o trecho selecionado." : selecao != null ? "Tocando a partir da nota selecionada." : "Tocando a música.", "ok");
+    } catch (erro) {
+      status("Não consegui tocar. Os timbres vêm de fora do app, confira a conexão. " + (erro && erro.message ? erro.message : ""), "erro");
+    }
+    atualizarBotaoPlay(true);
+  }
+
+  async function alternarPlay() {
+    if (tocando()) { await pausarAudio(); retomar = true; return; }
+    await iniciar();
+  }
+
+  async function terminarTrecho() {
+    fimTrechoMs = null;
+    await pausarAudio();
+    retomar = false;
     limparDestaque();
-    if (controle) { try { controle.pause(); } catch (e) { /* já parado */ } }
-    if (!abc) {
-      papel.innerHTML = `<p class="oh-hint">Nenhuma partitura carregada. Gere a melodia na aba Songwriter, ou cole um texto ABC aqui.</p>`;
-      status("Aguardando partitura.", "info");
-      return false;
-    }
-    try {
-      papel.innerHTML = "";
-      const tunes = window.ABCJS.renderAbc(papel, abc, { responsive: "resize", add_classes: true, clickListener: aoClicarNota });
-      if (!tunes || !tunes.length) throw new Error("Nenhuma música encontrada no texto.");
-      visualAtual = tunes[0];
-      try { tempo = new window.ABCJS.TimingCallbacks(visualAtual, {}); } catch (e) { tempo = null; }
-      status("Partitura pronta. Ouça antes de enviar para a geração.", "ok");
-      aplicarMelodia();
-      reaplicarSelecao();
-      return true;
-    } catch (erro) {
-      papel.innerHTML = "";
-      status("Não consegui ler esse texto ABC. Confira as linhas X:, M:, L:, K: e as notas. " + (erro.message || ""), "erro");
-      return false;
-    }
+    status("Trecho terminado. Aperte o play para ouvir de novo.", "ok");
   }
 
-  // Passa a melodia para o controle de reprodução, com o timbre escolhido
-  async function aplicarMelodia() {
-    if (!visualAtual || !controle) return;
-    try {
-      await controle.setTune(visualAtual, false, { program: timbreAtual(), chordsOff: false });
-    } catch (erro) {
-      status("Não consegui preparar o som desta partitura. Verifique a conexão, porque os timbres vêm de fora do app.", "erro");
-    }
+  // Acompanha a nota que está tocando dentro da caixa de rolagem (sem puxar a página)
+  function seguirNota(ev) {
+    const papel = $("partituraPapel");
+    if (!papel || Date.now() - ultimaRolagemUsuario < 4000) return;
+    const el = ev.elements && ev.elements[0] && ev.elements[0][0];
+    if (!el || !el.getBoundingClientRect) return;
+    const r = el.getBoundingClientRect(), p = papel.getBoundingClientRect(), margem = 40;
+    if (r.top < p.top + margem || r.bottom > p.bottom - margem) papel.scrollTop += (r.top - p.top) - p.height / 3;
+    if (r.left < p.left + margem || r.right > p.right - margem) papel.scrollLeft += (r.left - p.left) - p.width / 3;
   }
+
+  const cursor = {
+    onStart() { limparDestaque(); },
+    onFinished() { limparDestaque(); fimTrechoMs = null; retomar = false; ultimoFim = Date.now(); atualizarBotaoPlay(true); },
+    onEvent(ev) {
+      limparDestaque();
+      (ev.elements || []).forEach((grupo) => (grupo || []).forEach((el) => { el.classList.add("abcjs-highlight"); marcados.push(el); }));
+      seguirNota(ev);
+      if (fimTrechoMs != null && ev.milliseconds >= fimTrechoMs) terminarTrecho();
+    },
+  };
 
   function prepararControle() {
     const transporte = $("partituraTransporte");
     if (!transporte || !window.ABCJS || !window.ABCJS.synth) return;
     controle = new window.ABCJS.synth.SynthController();
-    controle.load(transporte, cursor, {
-      displayPlay: true,
-      displayRestart: true,
-      displayProgress: true,
-      displayWarp: true,      // velocidade da reprodução
-      displayLoop: false,
-      displayClock: false,
-    });
+    controle.load(transporte, cursor, { displayPlay: true, displayRestart: true, displayProgress: true, displayWarp: true, displayLoop: false, displayClock: false });
   }
 
-  // ── Edição por nota: clicar, depois subir ou descer uma linha/espaço da pauta ──
-  function aoClicarNota(abcElem) {
-    try { selecionarNota(abcElem); }
-    catch (erro) { status("Não consegui selecionar essa nota: " + (erro.message || erro), "erro"); }
+  // Botão de play flutuante: mostra play ou pausa conforme o estado do áudio
+  function atualizarBotaoPlay(forcar) {
+    const b = $("partituraFlutuante");
+    if (!b) return;
+    const t = tocando();
+    // pausou por fora (barra do abcjs): o próximo play continua de onde parou
+    if (botaoEstado === "tocando" && !t && Date.now() - ultimoFim > 1000) retomar = true;
+    const estado = (visual ? "ativo" : "oculto") + ":" + (t ? "tocando" : "parado");
+    b.hidden = !visual;
+    if (!forcar && estado.split(":")[1] === botaoEstado && b.dataset.estado === estado) return;
+    botaoEstado = t ? "tocando" : "parado";
+    b.dataset.estado = estado;
+    b.innerHTML = window.ICONE ? window.ICONE(t ? "pausa" : "play") : (t ? "⏸" : "▶");
+    b.setAttribute("aria-label", t ? "Pausar" : "Tocar");
+    b.classList.toggle("oh-tocando", t);
   }
 
-  function selecionarNota(abcElem) {
-    if (!abcElem || abcElem.el_type !== "note" || abcElem.startChar === undefined) return;
-    const texto = $("partituraAbc").value;
-    const token = texto.slice(abcElem.startChar, abcElem.endChar);
-    if (!token || /[\[\]]/.test(token)) {
-      status("Essa parte é um acorde ou um grupo de notas. Escolha uma nota simples.", "erro");
-      return;
-    }
-    selecao = { inicio: abcElem.startChar, fim: abcElem.endChar, token };
-    if (controle) { try { controle.pause(); } catch (e) { /* já parado */ } }
-    const { eventos, total } = posicaoDaNota();
-    const i = indiceDaSelecao(eventos);
-    if (i >= 0 && total) irParaMs(eventos[i].milliseconds, total);
-    marcarSelecao(abcElem.elemset || []);
-    posicionarCaixa(abcElem.elemset || []);
-    mostrarCaixa();
-  }
-
-  // Destaca a nota selecionada em vermelho (sem perder a marcação ao redesenhar)
-  function marcarSelecao(elementos) {
-    marcadosSel.forEach((el) => el.classList.remove("oh-nota-selecionada"));
-    marcadosSel = [];
-    (elementos || []).forEach((el) => { if (el && el.classList) { el.classList.add("oh-nota-selecionada"); marcadosSel.push(el); } });
-  }
-
-  // Ao redesenhar, procura de novo a nota selecionada pelo início dela no texto ABC
-  function reaplicarSelecao() {
-    if (!selecao || !visualAtual) return;
-    let achado = null;
-    (visualAtual.lines || []).forEach((linha) => (linha.staff || []).forEach((pauta) => (pauta.voices || []).forEach((voz) => (voz || []).forEach((el) => {
-      if (!achado && el && el.startChar === selecao.inicio && el.elemset) achado = el.elemset;
-    }))));
-    if (achado) { marcarSelecao(achado); posicionarCaixa(achado); mostrarCaixa(); }
-    else { selecao = null; mostrarCaixa(); }
-  }
-
-  // Caixinha flutuante colada na nota, para não precisar rolar até embaixo da partitura
-  const NS_SVG = "http://www.w3.org/2000/svg";
-  const NS_HTML = "http://www.w3.org/1999/xhtml";
-
-  // Devolve a caixinha para o papel (casa dela) e retira o suporte que a segurava dentro do desenho
-  function soltarCaixa() {
-    const caixa = $("partituraCaixa");
-    const papel = $("partituraPapel");
-    if (!caixa || !papel) return;
-    const suporte = caixa._suporte;
-    if (suporte && suporte.parentNode) suporte.parentNode.removeChild(suporte);
-    caixa._suporte = null;
-    if (caixa.parentElement !== papel) papel.appendChild(caixa);
-    caixa.style.position = "";
-    caixa.style.left = "";
-    caixa.style.top = "";
-  }
-
-  // Coloca a caixinha DENTRO do desenho da partitura, logo abaixo da nota.
-  // Ela passa a ser parte do próprio desenho: rola, redimensiona e acompanha a nota
-  // sem depender de cálculo de tela.
-  function posicionarCaixa(elementos) {
-    const caixa = $("partituraCaixa");
-    if (!caixa || !elementos || !elementos.length) return;
-    soltarCaixa();
-
-    // Escolhe o elemento da nota que tem área (a cabeça), e não a haste
-    let base = null, area = -1, caixaBB = null;
-    elementos.forEach((el) => {
-      if (!el || typeof el.getBBox !== "function") return;
-      let bb;
-      try { bb = el.getBBox(); } catch (e) { return; }
-      const a = (bb.width || 0) * (bb.height || 0);
-      if (a > area) { area = a; base = el; caixaBB = bb; }
-    });
-    if (!base || !caixaBB) return;
-
-    const pai = base.parentNode;
-    if (!pai || !pai.appendChild) return;
-
-    // Suporte: um foreignObject no mesmo sistema de coordenadas da nota
-    const suporte = document.createElementNS(NS_SVG, "foreignObject");
-    const x = caixaBB.x + caixaBB.width + 6;     // à direita da nota
-    const y = caixaBB.y + caixaBB.height + 6;    // um pouco abaixo dela
-    suporte.setAttribute("x", String(x));
-    suporte.setAttribute("y", String(y));
-    suporte.setAttribute("width", "240");
-    suporte.setAttribute("height", "140");
-    suporte.setAttribute("class", "oh-caixa-suporte");
-
-    const corpo = document.createElementNS(NS_HTML, "div");
-    corpo.setAttribute("xmlns", NS_HTML);
-    corpo.style.width = "100%";
-    corpo.style.height = "100%";
-    suporte.appendChild(corpo);
-    pai.appendChild(suporte);
-
-    caixa.style.position = "relative";
-    caixa.style.left = "0";
-    caixa.style.top = "0";
-    corpo.appendChild(caixa);
-    caixa._suporte = suporte;
-    caixa.dataset.posicionada = "1";
-  }
-
-  function mostrarCaixa() {
-    const caixa = $("partituraCaixa");
-    if (!caixa) return;
-    caixa.hidden = !selecao;
-    if (selecao) {
-      $("partituraCaixaNota").textContent = `Nota: ${selecao.token}`;
-      status(`Nota selecionada: ${selecao.token}.`, "info");
-    }
-  }
-
-  // Interpreta uma nota ABC: acidente, letra, oitavas (' ou ,) e duração
-  function lerNota(token) {
-    const m = /^(\^{1,2}|_{1,2}|=)?([A-Ga-g])([,']*)(.*)$/.exec(token);
-    if (!m) return null;
-    const letra = m[2];
-    const maiuscula = letra === letra.toUpperCase();
-    let oitava = maiuscula ? 4 : 5;
-    for (const marca of m[3]) oitava += marca === "'" ? 1 : -1;
-    return { letra: letra.toUpperCase(), oitava, resto: m[4] };
-  }
-
-  // Monta de volta a nota com a nova posição (letra e oitava) e a duração original
-  function montarNota(passo, resto, letraNova, oitavaNova) {
-    let marcas = "";
-    let letra = letraNova;
-    if (oitavaNova >= 5) { letra = letraNova.toLowerCase(); marcas = "'".repeat(oitavaNova - 5); }
-    else { marcas = ",".repeat(4 - oitavaNova); }
-    return letra + marcas + resto;
-  }
-
-  function moverNota(direcao) {
-    if (!selecao) return;
-    const nota = lerNota(selecao.token);
-    if (!nota) { status("Não consegui entender essa nota para mover.", "erro"); return; }
-    // Um passo da pauta = a próxima letra da escala (linha ou espaço vizinho)
-    const absoluto = nota.oitava * 7 + LETRAS.indexOf(nota.letra) + direcao;
-    const oitavaNova = Math.floor(absoluto / 7);
-    const letraNova = LETRAS[((absoluto % 7) + 7) % 7];
-    const novoToken = montarNota(0, nota.resto, letraNova, oitavaNova);
-    const area = $("partituraAbc");
-    historico.push(area.value);
-    if (historico.length > 30) historico.shift();
-    area.value = area.value.slice(0, selecao.inicio) + novoToken + area.value.slice(selecao.fim);
-    gravarStorage(K_ATUAL, area.value.trim());
-    areaEditada = false;
-    status(`Nota trocada: ${selecao.token} → ${novoToken}. Ouça de novo.`, "ok");
-    selecao = { inicio: selecao.inicio, fim: selecao.inicio + novoToken.length, token: novoToken };
-    renderizar();
-    reaplicarSelecao();
-  }
-
-  function desfazerEdicao() {
-    if (!historico.length) { status("Nada para desfazer.", "info"); return; }
-    $("partituraAbc").value = historico.pop();
-    gravarStorage(K_ATUAL, $("partituraAbc").value.trim());
-    selecao = null;
-    renderizar();
-    marcarSelecao([]);
-    mostrarCaixa();
-    status("Última mudança desfeita.", "ok");
-  }
-
-  // Posição de uma nota na música, em milissegundos, e o total da música
-  function posicaoDaNota(indice) {
-    const eventos = (tempo && tempo.noteTimings) || [];
-    const total = eventos.length ? eventos[eventos.length - 1].milliseconds : 0;
-    return { eventos, total, indice };
-  }
-
-  // Muda a posição real do áudio (seek). setProgress só mexe na barra visual.
-  function irParaMs(ms, total) {
-    if (!controle || !total) return;
-    const fracao = Math.min(1, Math.max(0, ms / total));
-    if (typeof controle.seek === "function") controle.seek(fracao);
-    else controle.setProgress(fracao, total);
-  }
-
-  function indiceDaSelecao(eventos) {
-    return eventos.findIndex((e) => e.startChar === selecao.inicio);
-  }
-
-  // Começa a música a partir da nota selecionada
-  function tocarDaqui() {
-    if (!controle) { status("O player ainda não está pronto.", "erro"); return; }
-    try {
-      // sem nota selecionada: toca a música inteira
-      if (!selecao || !tempo) {
-        Promise.resolve(controle.play && controle.play()).catch(() => {});
-        reproduzindo = true;
-        status("Tocando a música completa.", "ok");
-        return;
-      }
-      const { eventos, total } = posicaoDaNota();
-      const i = indiceDaSelecao(eventos);
-      if (i < 0 || !total) { status("Não consegui localizar essa nota no tempo da música.", "erro"); return; }
-      const ms = eventos[i].milliseconds;
-      // o áudio precisa estar iniciado para aceitar o salto: toca e, em seguida, pula para a nota
-      Promise.resolve(controle.play && controle.play()).then(() => {
-        irParaMs(ms, total);
-        setTimeout(() => irParaMs(ms, total), 300);
-      });
-      reproduzindo = true;
-      status(`Tocando a partir de ${selecao.token}.`, "ok");
-    } catch (erro) {
-      status("Não consegui começar a partir dessa nota. " + (erro.message || ""), "erro");
-    }
-  }
-
-  // Pausa a música sem perder a posição
-  function pausar() {
-    if (controle) { try { controle.pause(); } catch (e) { /* já parado */ } }
-    reproduzindo = false;
-  }
-
-  // Vai para a nota anterior ou a próxima, a partir da nota selecionada
-  function irParaVizinha(direcao) {
-    if (!selecao || !controle || !tempo) { status("Selecione uma nota primeiro.", "erro"); return; }
-    const { eventos, total } = posicaoDaNota();
-    const i = indiceDaSelecao(eventos);
-    const j = i + direcao;
-    if (i < 0 || j < 0 || j >= eventos.length) { status("Não há mais notas nessa direção.", "info"); return; }
-    const alvo = eventos[j];
-    // ao trocar de nota, também seleciona a nova para a caixinha acompanhar
-    if (alvo.elements && alvo.elements.length) {
-      // mantém a seleção só pelo tempo: a caixinha continua na nota atual
-    }
-    irParaMs(alvo.milliseconds, total);
-    if (reproduzindo) controle.play();
-    status(`Posição: ${direcao > 0 ? "próxima" : "anterior"} nota.`, "ok");
-  }
+  // ══ 5. SALVAR, RESTAURAR, ENVIAR ═════════════════════════════════════════
 
   function salvar() {
-    gravarStorage(K_ATUAL, $("partituraAbc").value.trim());
+    const abc = $("partituraAbc").value;
+    gravarStorage(K_ATUAL, abc);
+    gravarStorage(K_ULTIMA, abc);
     areaEditada = false;
     status("Correção salva neste aparelho.", "ok");
   }
@@ -382,8 +490,21 @@
     $("partituraAbc").value = original;
     gravarStorage(K_ATUAL, original);
     areaEditada = false;
+    limparEstado();
     renderizar();
     status("Partitura original restaurada.", "ok");
+  }
+
+  function carregarUltima() {
+    const ultima = lerStorage(K_ULTIMA);
+    if (!ultima) { status("Não há partitura anterior guardada.", "erro"); return; }
+    $("partituraAbc").value = ultima;
+    gravarStorage(K_ATUAL, ultima);
+    gravarStorage(K_ORIGINAL, ultima);
+    areaEditada = false;
+    limparEstado();
+    renderizar();
+    status("Última partitura extraída carregada, sem gastar IA.", "ok");
   }
 
   function usarNoSongwriter() {
@@ -396,66 +517,100 @@
     if (botao) botao.click();
   }
 
-  // Carrega a partitura mais recente quando a aba é aberta, sem apagar uma edição em andamento
+  // Ao abrir a aba, carrega a partitura mais recente sem apagar uma edição em andamento
   function carregarSeNecessario() {
     const salvo = lerStorage(K_ATUAL);
     const area = $("partituraAbc");
     if (!area) return;
     if (!areaEditada && salvo && area.value !== salvo) {
       area.value = salvo;
+      limparEstado();
       renderizar();
     } else if (!area.value && !salvo) {
       renderizar();
     }
   }
 
-  function iniciar() {
+  // ══ 6. INÍCIO ════════════════════════════════════════════════════════════
+
+  function montarTimbres() {
+    const sel = $("partituraTimbre");
+    if (!sel || sel.dataset.pronto) return;
+    sel.innerHTML = TIMBRES.map((t) => `<option value="${t.n}">${t.nome}</option>`).join("");
+    sel.value = String(timbreAtual());
+    sel.addEventListener("change", async () => {
+      gravarStorage(K_TIMBRE, sel.value);
+      await pausarAudio();
+      prepararSom();
+    });
+    sel.dataset.pronto = "1";
+  }
+
+  function iniciarAba() {
     const area = $("partituraAbc");
     if (!area) return;
+
     // Ao abrir ou atualizar a página, a partitura começa vazia, como o Songwriter.
-    // Ela só volta a aparecer quando o Songwriter gerar uma nova nesta mesma sessão.
-    try { localStorage.removeItem(K_ATUAL); localStorage.removeItem(K_ORIGINAL); } catch (e) { /* sem armazenamento */ }
-    window.addEventListener("resize", () => { if (selecao) reaplicarSelecao(); });
-    // A caixinha vai para o fim do corpo da página: assim nenhum contêiner com
-    // transformação ou sobreposição a esconde, e ela fica fixa na tela.
-    const caixa = $("partituraCaixa");
-    const papel = $("partituraPapel");
-    if (caixa && papel && caixa.parentElement !== papel) papel.appendChild(caixa);
+    // A última extraída fica guardada para reaproveitar sem gastar IA.
+    try {
+      const atual = localStorage.getItem(K_ATUAL);
+      if (atual) localStorage.setItem(K_ULTIMA, atual);
+      localStorage.removeItem(K_ATUAL);
+      localStorage.removeItem(K_ORIGINAL);
+    } catch (e) { /* sem armazenamento */ }
+    const botaoUltima = $("partituraCarregarUltima");
+    if (botaoUltima) {
+      botaoUltima.hidden = !lerStorage(K_ULTIMA);
+      botaoUltima.addEventListener("click", carregarUltima);
+    }
+
     montarTimbres();
     prepararControle();
-    area.addEventListener("input", () => {
+
+    area.addEventListener("input", () => {            // digitou no texto ABC: as posições mudam
       areaEditada = true;
-      selecao = null;
-      marcarSelecao([]);
-      soltarCaixa();
-      mostrarCaixa();
-      clearTimeout(timer);
-      timer = setTimeout(renderizar, 400);
+      limparEstado();
+      clearTimeout(timerDigitando);
+      timerDigitando = setTimeout(renderizar, 400);
     });
-    $("partituraSubir").addEventListener("click", () => moverNota(1));
-    $("partituraDescer").addEventListener("click", () => moverNota(-1));
-    $("partituraDesfazer").addEventListener("click", desfazerEdicao);
-    $("partituraTocarDaqui").addEventListener("click", tocarDaqui);
-    const caixaEl = $("partituraCaixa");
-    if (caixaEl) ["click", "pointerdown", "mousedown", "touchstart"].forEach((ev) => caixaEl.addEventListener(ev, (e) => e.stopPropagation()));
-    $("partituraPausar").addEventListener("click", pausar);
-    $("partituraVoltar").addEventListener("click", () => irParaVizinha(-1));
-    $("partituraAvancar").addEventListener("click", () => irParaVizinha(1));
-    $("partituraCaixaFechar").addEventListener("click", () => { selecao = null; marcarSelecao([]); soltarCaixa(); mostrarCaixa(); });
+
+    $("partituraSvg").addEventListener("click", aoClicarPauta);
+    $("partituraSvg").addEventListener("touchend", (ev) => {
+      toqueEmNotaAte = ev.target.closest && ev.target.closest("[data-index]") ? Date.now() + 800 : 0;
+    }, { passive: true, capture: true });
+    $("partituraTrecho").addEventListener("click", alternarModoTrecho);
+    $("partituraLimpar").addEventListener("click", limparSelecao);
+    $("partituraDesfazer").addEventListener("click", desfazer);
     $("partituraSalvar").addEventListener("click", salvar);
     $("partituraRestaurar").addEventListener("click", restaurarOriginal);
     $("partituraSongwriter").addEventListener("click", usarNoSongwriter);
+    $("partituraFlutuante").addEventListener("click", alternarPlay);
+
+    const papel = $("partituraPapel");
+    ["wheel", "touchmove", "pointerdown", "keydown"].forEach((ev) => papel.addEventListener(ev, () => { ultimaRolagemUsuario = Date.now(); }, { passive: true }));
 
     const pagina = $(PAGINA);
     if (pagina) {
       new MutationObserver(() => {
         if (pagina.classList.contains("oh-page-ativa")) carregarSeNecessario();
-        else if (controle) { try { controle.pause(); } catch (e) { /* já parado */ } limparDestaque(); }
+        else pausarAudio();
       }).observe(pagina, { attributes: true, attributeFilter: ["class"] });
     }
+    setInterval(() => atualizarBotaoPlay(false), 300);
     carregarSeNecessario();
+    atualizarBotaoPlay(true);
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", iniciar);
-  else iniciar();
+  // Pequena porta para os testes automáticos (não é usada pelo app)
+  window.Partitura = {
+    _teste: {
+      separarNota, moverToken, nomeDaNota,
+      estado: () => ({ selecao, trecho, modoTrecho, editadas: [...editadas], historico: historico.length, retomar, fimTrechoMs, notas: notas.length, tocando: tocando() }),
+      controle: () => controle,
+      renderizar,
+    },
+  };
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", iniciarAba);
+  else iniciarAba();
 })();

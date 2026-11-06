@@ -323,14 +323,38 @@ h1, h2, h3 {
   #fichaImprimir, .oh-hint, #fichaNome { display: none !important; }
 }
 
-/* ═══════════════ ABA PARTITURA ═══════════════ */
-.oh-partitura-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+/* ═══════════════ ABA PARTITURA (ABC Studio) ═══════════════ */
+.oh-partitura-timbre { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.oh-partitura-timbre label { font-weight: 700; color: var(--oh-orange); font-size: 0.9rem; }
+.oh-partitura-transporte { margin-bottom: 12px; }
+.oh-partitura-transporte .abcjs-inline-audio { background: #17110d; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 12px; }
+.oh-partitura-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.oh-partitura-acoes .oh-btn.oh-ativo { background: #e11d48; color: #fff; border-color: #e11d48; }
+
+.partitura-legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8rem; margin: 4px 0 8px; opacity: 0.9; }
+.partitura-legenda .pt-cor { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: baseline; }
+.pt-sel { background: #e11d48; }
+.pt-trecho { background: #16a34a; }
+.pt-editada { background: #0ea5e9; }
+
+/* A partitura fica numa caixa com rolagem: músicas longas não esticam a página */
 .partitura-papel {
   background: #ffffff; color: #111111; border-radius: 10px;
-  padding: 16px 12px; min-height: 120px; overflow-x: auto;
+  padding: 12px; min-height: 120px; max-height: 68vh;
+  overflow: auto; overscroll-behavior: contain;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  scrollbar-width: thin; scrollbar-color: rgba(249, 115, 22, 0.6) transparent;
 }
-.partitura-papel svg { max-width: 100%; height: auto; }
+#partituraSvg { min-width: 640px; }
+.partitura-papel svg { cursor: pointer; }
+.partitura-papel [data-index] { cursor: pointer; }
+
+/* Cores das notas. Ordem importa: a nota tocando (laranja) vence todas; depois vermelha, verde e azul */
+.partitura-papel .oh-nota-editada, .partitura-papel .oh-nota-editada * { fill: #0ea5e9 !important; stroke: #0ea5e9 !important; }
+.partitura-papel .oh-nota-trecho, .partitura-papel .oh-nota-trecho * { fill: #16a34a !important; stroke: #16a34a !important; }
+.partitura-papel .oh-nota-sel, .partitura-papel .oh-nota-sel * { fill: #e11d48 !important; stroke: #e11d48 !important; }
+.partitura-papel .abcjs-highlight { fill: #f97316 !important; stroke: #f97316 !important; }
+
 .oh-partitura-editor { margin-top: 14px; }
 .oh-partitura-editor summary { cursor: pointer; color: var(--oh-orange); font-weight: 700; margin-bottom: 8px; }
 .oh-partitura-editor textarea {
@@ -340,72 +364,17 @@ h1, h2, h3 {
 #partituraStatus[data-tipo="ok"] { color: #86efac; }
 #partituraStatus[data-tipo="erro"] { color: #fca5a5; }
 
-/* ═══════════════ ABC STUDIO: transporte, timbre e nota em destaque ═══════════════ */
-.oh-partitura-timbre { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.oh-partitura-timbre label { font-weight: 700; color: var(--oh-orange); font-size: 0.9rem; }
-.oh-partitura-transporte { margin-bottom: 14px; }
-.oh-partitura-transporte .abcjs-inline-audio { background: #17110d; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 12px; }
-/* nota ou compasso que está tocando, destacado na partitura */
-.partitura-papel .abcjs-highlight { fill: #f97316 !important; }
-.partitura-papel .abcjs-cursor { stroke: #f97316; }
-
-/* Barra da nota selecionada (ABC Studio, edição por nota) */
-.partitura-nota-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; padding: 10px; border: 1px solid rgba(249,115,22,0.45); border-radius: 12px; background: #17110d; }
-.partitura-nota-barra[hidden] { display: none; }
-#partituraNotaInfo { font-weight: 700; color: var(--oh-orange); margin-right: 6px; }
-.partitura-papel .abcjs-note.abcjs-selected, .partitura-papel .abcjs-selected { fill: #f97316 !important; }
-
-/* ═══════════════ CAIXINHA DA NOTA (edição na própria partitura) ═══════════════ */
-.partitura-area { position: relative; }
-.partitura-caixa {
-  position: absolute; z-index: 5; min-width: 220px; max-width: 92%;
-  background: #17110d; border: 1px solid rgba(249,115,22,0.6); border-radius: 12px;
-  box-shadow: 0 10px 28px rgba(0,0,0,0.45); padding: 10px;
+/* Botão de play flutuante: sempre visível enquanto a aba está aberta */
+.partitura-flutuante {
+  position: fixed; right: 92px; bottom: 22px; z-index: 900;
+  width: 58px; height: 58px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
+  display: grid; place-items: center;
+  background: radial-gradient(circle at 35% 30%, #ffa04d, #f26b10);
+  box-shadow: 0 8px 22px rgba(242, 107, 16, 0.45);
 }
-.partitura-caixa[hidden] { display: none; }
-.partitura-caixa-topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-#partituraCaixaNota { font-weight: 800; color: var(--oh-orange); }
-.partitura-caixa-x { background: transparent; border: none; color: #f4ece4; font-size: 1.2rem; cursor: pointer; line-height: 1; }
-.partitura-caixa-botoes { display: flex; flex-wrap: wrap; gap: 6px; }
-/* nota selecionada em vermelho; a nota em execução segue amarela/laranja */
-.partitura-papel .oh-nota-selecionada, .partitura-papel .oh-nota-selecionada * { fill: #e11d48 !important; stroke: #e11d48 !important; }
-
-
-/* ═══════════════ CAIXINHA DA NOTA: pequena, dentro da partitura, ao lado da nota ═══════════════ */
-.partitura-papel { position: relative; }
-.partitura-papel .partitura-caixa {
-  position: absolute !important;
-  bottom: auto !important; right: auto !important;
-  transform: none !important;
-  left: 0; top: 0;
-  width: auto !important; min-width: 0 !important; max-width: 230px !important;
-  z-index: 50;
-  padding: 8px;
-  border-radius: 10px;
-  box-shadow: 0 8px 22px rgba(0,0,0,0.35);
-}
-.partitura-caixa-btn {
-  width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer;
-  background: radial-gradient(circle at 35% 30%, #ffa04d, #f26b10); color: #0a0a0a;
-  font-weight: 800; font-size: 0.95rem; line-height: 1; padding: 0;
-}
-.partitura-caixa-botoes { gap: 4px !important; }
-.partitura-caixa-botoes .oh-btn { font-size: 0.75rem; padding: 6px 8px; }
-.partitura-caixa-topo { margin-bottom: 6px !important; }
-
-/* ═══════════════ CAIXINHA DENTRO DO DESENHO (ao lado da nota) ═══════════════
-   Quando a caixinha está dentro do desenho da partitura, ela deixa de ser posicionada
-   pelo papel: ela segue o desenho e fica encostada na nota. */
-.oh-caixa-suporte { overflow: visible; }
-.oh-caixa-suporte > div { overflow: visible; }
-.oh-caixa-suporte .partitura-caixa {
-  position: relative !important;
-  left: auto !important;
-  top: auto !important;
-  right: auto !important;
-  bottom: auto !important;
-  transform: none !important;
-  width: 220px !important;
-  max-width: 220px !important;
-  margin: 0;
-}
+.partitura-flutuante[hidden] { display: none; }
+.partitura-flutuante:hover { background: radial-gradient(circle at 35% 30%, #ffb070, #f26b10); }
+.partitura-flutuante.oh-tocando { box-shadow: 0 0 0 3px #ffb070, 0 8px 22px rgba(242, 107, 16, 0.55); }
+.partitura-flutuante .oh-ic { width: 100%; height: 100%; min-width: 0; margin: 0; background: none; box-shadow: none; }
+.partitura-flutuante .oh-ic svg { width: 44%; height: 44%; }
+@media (max-width: 800px) { .partitura-flutuante { right: 104px; bottom: 18px; width: 54px; height: 54px; } }
