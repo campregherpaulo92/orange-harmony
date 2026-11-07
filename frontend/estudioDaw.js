@@ -93,7 +93,7 @@
   }
   function criarLimitador(c) { const l = c.createDynamicsCompressor(); l.threshold.value = -2; l.knee.value = 0; l.ratio.value = 20; l.attack.value = 0.003; l.release.value = 0.12; return l; }
   let fxOk = false, fxErro = null;
-  const ambFx = () => ({ bpm: S.bpm });
+  const ambFx = () => ({ bpm: S.bpm, origem: S.tocando ? baseCtx - base0 : 0 });   // origem = instante do relógio de áudio em que o projeto estaria no tempo 0
   // Cadeia de efeitos da faixa. Só reconstrói quando a LISTA muda (adicionar, remover, ordem, ligar/desligar); mexer num parâmetro só atualiza.
   function montarCadeia(f, n) {
     if (!window.EstudioFx) return;
@@ -250,13 +250,14 @@
         <div class="dw-ed-redim" id="dwEdRedim" title="Arraste para mudar a altura deste painel (duplo clique volta ao padrão)"></div>
         <div class="dw-abas">
           <button class="dw-aba on" data-aba="mix">Mixer</button><button class="dw-aba" data-aba="reg">Região</button>
-          <button class="dw-aba" data-aba="afin">Afinação</button><button class="dw-aba" data-aba="fx">Efeitos</button>
+          <button class="dw-aba" data-aba="afin">Afinação</button><button class="dw-aba" data-aba="fx">Efeitos</button><button class="dw-aba" data-aba="sm">Samples</button>
           <span class="esp"></span><button class="dw-btn peq" id="dwRecolher">${ic("seta")} Recolher</button>
         </div>
         <div class="dw-painel-aba on" id="dwP-mix"><div class="dw-mix" id="dwMix"></div></div>
         <div class="dw-painel-aba" id="dwP-reg"><div class="dw-regp" id="dwRegp"></div></div>
         <div class="dw-painel-aba" id="dwP-afin"><div class="dw-afin" id="dwAfin"></div></div>
         <div class="dw-painel-aba" id="dwP-fx"><div class="dw-fx" id="dwFx"></div></div>
+        <div class="dw-painel-aba" id="dwP-sm"><div class="dw-sm" id="dwSm"></div></div>
       </section>
       <div class="dw-status"><span class="e" id="dwStatus">Pronto.</span><span id="dwStatusSel"></span><span id="dwSalvo"></span><span>Espaço toca/pausa · R grava · V seleciona · C divide · S divide no cursor · Ctrl+Z desfaz</span></div>
       <div class="dw-contagem" id="dwContagemOv" hidden></div>
@@ -294,6 +295,7 @@
           <div class="dw-acoes"><button class="dw-btn" id="dwCalFechar2">Fechar</button><button class="dw-btn cheio" id="dwCalIniciar">Começar a medir</button></div>
         </div>
       </div>
+      <input type="file" id="dwArqSample" accept="audio/*" hidden>
       <input type="file" id="dwArqAudio" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.webm" hidden>
     </div>
     <div class="dw-menu" id="dwMenuArquivo" hidden>
@@ -379,7 +381,7 @@
   }
   function renderTudo() {
     renderCab(); renderLinhas(); renderMixer(); renderRegiao();
-    selStatus(); atualizarUndo(); if (abaAtiva === "fx") renderFx();
+    selStatus(); atualizarUndo(); if (abaAtiva === "fx") renderFx(); if (abaAtiva === "sm") renderSm();
   }
   function selStatus() { const r = regiaoPorId(S.regiaoSel), e = $("#dwStatusSel"); if (e) e.textContent = r ? `Região: ${r.nome}` : ""; if (abaAtiva === "afin") prepararAfinacao(); }
   function posicionar() {
@@ -404,7 +406,7 @@
   }
   function tocar() {
     if (S.tocando) return; if (!garantirAudio()) return dica("Este navegador não toca áudio aqui.");
-    atualizarNos(); S.tocando = true; base0 = S.tAtual; baseCtx = ctx.currentTime; agendarRegioes(S.tAtual);
+    atualizarNos(); S.tocando = true; base0 = S.tAtual; baseCtx = ctx.currentTime; agendarRegioes(S.tAtual); atualizarNos();   // 2ª vez: agora os efeitos presos ao andamento conhecem a origem do play
     $("#dwPlay").innerHTML = ic("pause"); $("#dwPlay").classList.add("on"); requestAnimationFrame(tick); dica("Tocando…");
   }
   function pausar() {
@@ -412,7 +414,7 @@
     $("#dwPlay").innerHTML = ic("play"); $("#dwPlay").classList.remove("on"); medidores(false); posicionar(); dica("Pausado.");
   }
   function parar() { pausar(); S.tAtual = 0; posicionar(); $("#dwTlScroll").scrollLeft = 0; dica("Parado no início."); }
-  function ir(t) { if (S.gravando) return; S.tAtual = Math.max(0, t); posicionar(); if (S.tocando) { base0 = S.tAtual; baseCtx = ctx.currentTime; agendarRegioes(S.tAtual); } }
+  function ir(t) { if (S.gravando) return; S.tAtual = Math.max(0, t); posicionar(); if (S.tocando) { base0 = S.tAtual; baseCtx = ctx.currentTime; agendarRegioes(S.tAtual); atualizarNos(); } }
   function mudarZoom(v) { S.pps = Math.max(8, Math.min(120, v)); $("#dwZoom").value = S.pps; renderLinhas(); }
 
   // ══ GRAVAÇÃO ══════════════════════════════════════════════════════════
@@ -668,7 +670,7 @@
     if (window.EstudioFx && audiveis.some((f) => EstudioFx.precisaWorklet(f.fx))) await EstudioFx.carregarWorklet(off);
     audiveis.forEach((f) => {
       const g = off.createGain(); g.gain.value = f.vol; if (off.createStereoPanner) { const p = off.createStereoPanner(); p.pan.value = f.pan; g.connect(p); p.connect(m); } else g.connect(m);
-      const cad = window.EstudioFx ? EstudioFx.criarCadeia(off, f.fx || [], ambFx()) : null, alvo = cad ? cad.entrada : g; if (cad) cad.saida.connect(g);
+      const cad = window.EstudioFx ? EstudioFx.criarCadeia(off, f.fx || [], Object.assign(ambFx(), { origem: 0 })) : null, alvo = cad ? cad.entrada : g; if (cad) cad.saida.connect(g);
       S.regioes.filter((r) => r.f === f.id).forEach((r) => programarRegiao(off, r, alvo, 0, 0));
     });
     return off.startRendering();
@@ -765,7 +767,7 @@
       const t = e.target;
       if (t.dataset.vol) { const f = faixaPorId(t.dataset.vol); f.vol = +t.value; $$(`[data-vol="${f.id}"]`).forEach((i) => { if (i !== t) i.value = t.value; }); const db = $(`[data-db="${f.id}"]`); if (db) db.textContent = dbTxt(f.vol); atualizarNos(); agendarSalvar(); }
       if (t.dataset.pan) { faixaPorId(t.dataset.pan).pan = +t.value; atualizarNos(); agendarSalvar(); }
-      if (t.dataset.nome) { faixaPorId(t.dataset.nome).nome = t.value; agendarSalvar(); }
+      if (t.dataset.nome) { faixaPorId(t.dataset.nome).nome = t.value; delete catFxMap[t.dataset.nome]; agendarSalvar(); }   // renomear a faixa refaz a sugestão de instrumento
       if (t.id === "dwLimpaInt") limpaInt = +t.value;
       if (t.id === "dwMestreVol") { S.mestreVol = +t.value; if (mestre) mestre.gain.value = S.mestreVol; }
       if (t.dataset.rg) { const r = regiaoPorId(S.regiaoSel); r[t.dataset.rg] = +t.value; const b = t.parentElement.querySelector("b"); b.textContent = t.dataset.rg === "ganho" ? t.value + " dB" : (+t.value).toFixed(2) + "s"; if (t.dataset.rg !== "ganho") renderLinhas(); agendarSalvar(); if (S.tocando) reagendar(); }
@@ -807,7 +809,7 @@
     $("#dwSepBib").addEventListener("click", (e) => { if (window.escolherDaBiblioteca) window.escolherDaBiblioteca($("#dwSepArq"), e.currentTarget); else $("#dwSepStatus").textContent = "A biblioteca não está disponível agora."; });
     $("#dwSepArq").addEventListener("change", (e) => { sepArquivo = e.target.files[0] || null; $("#dwSepNome").textContent = sepArquivo ? `Escolhido: ${sepArquivo.name}` : "Nenhum áudio escolhido."; atualizarBotaoSep(); });
     $("#dwSepIniciar").addEventListener("click", iniciarSeparacao);
-    ligarEventosFx();
+    ligarEventosFx(); ligarEventosSm();
     { // altura do painel de baixo: arrastar a alça da borda de cima (fica guardada; duplo clique volta ao padrão)
       const ed = $("#dwEditor"), alca = $("#dwEdRedim"), lim = (h) => Math.max(120, Math.min(window.innerHeight - 330, h));   // sempre sobra espaço para a linha do tempo
       const salvo = parseInt(localStorage.getItem("oh-dw-ed-h"), 10); if (salvo) ed.style.height = lim(salvo) + "px";
@@ -861,9 +863,9 @@
   }
   function abrirAba(n) {
     abaAtiva = n; $$(".dw-aba").forEach((a) => a.classList.toggle("on", a.dataset.aba === n)); $$(".dw-painel-aba").forEach((p) => p.classList.toggle("on", p.id === "dwP-" + n));
-    const ed = $("#dwEditor"); ed.classList.remove("fechado"); ed.classList.toggle("alto", n === "afin"); ed.classList.toggle("medio", n === "fx"); $("#dwRecolher").innerHTML = ic("seta") + " Recolher";
+    const ed = $("#dwEditor"); ed.classList.remove("fechado"); ed.classList.toggle("alto", n === "afin"); ed.classList.toggle("medio", n === "fx" || n === "sm"); $("#dwRecolher").innerHTML = ic("seta") + " Recolher";
     if (n !== "afin") { ed.classList.remove("ampliado"); if (afin) { afin.parar(); afin.definirModoAmpliado(false); } }
-    if (n === "afin") prepararAfinacao(); else if (n === "fx") renderFx();
+    if (n === "afin") prepararAfinacao(); else if (n === "fx") renderFx(); else if (n === "sm") renderSm();
   }
   function novoProjeto() {
     salvarProjeto();                                   // o projeto atual fica guardado (Arquivo → Abrir projeto)
@@ -1043,7 +1045,13 @@
   }
 
   // ══ EFEITOS POR FAIXA (aba Efeitos: os cartões são gerados a partir do registro de efeitos) ═══
-  let arrastandoFx = null;
+  let arrastandoFx = null; const catFxMap = {};
+  function categoriaDaFaixa(f) { const n = (f.nome || "").toLowerCase(); return /voz|vocal|cant|backing/.test(n) ? "voz" : /viol/.test(n) ? "violao" : /guitarr|guitar/.test(n) ? "guitarra" : /baix|bass/.test(n) ? "baixo" : /bater|drum|percu/.test(n) ? "bateria" : "todos"; }
+  const catAtual = (f) => catFxMap[f.id] || categoriaDaFaixa(f);
+  function montarMenuFx(f) {
+    const R = EstudioFx.REGISTRO, cat = catAtual(f), cats = [["todos", "Todos"], ...EstudioFx.CATEGORIAS];
+    $("#dwMenuFx").innerHTML = `<div class="cats">${cats.map(([k, n]) => `<button class="${k === cat ? "on" : ""}" data-fxcat="${k}">${n}</button>`).join("")}</div>` + EstudioFx.GRUPOS.map((g) => { const itens = Object.keys(R).filter((k) => R[k].grupo === g && (cat === "todos" || R[k].inst.includes(cat))); return itens.length ? `<div class="grp">${esc(g)}</div>` + itens.map((k) => `<button data-fxnovo="${k}"><b>${esc(R[k].nome)}</b><small>${esc(R[k].descr)}</small></button>`).join("") : ""; }).join("");
+  }
   const faixaFx = () => faixaPorId(S.faixaSel) || S.faixas[0] || null;
   const minhasPre = () => { try { return JSON.parse(localStorage.getItem("oh-dw-presets") || "[]"); } catch (e) { return []; } };
   const casasFx = (q) => (q.passo != null ? (String(q.passo).split(".")[1] || "").length : q.max - q.min >= 100 ? 0 : q.max - q.min >= 10 ? 1 : 2);
@@ -1077,7 +1085,7 @@
     const top = el.querySelector(".dw-fx-cadeia"), rolagem = top ? top.scrollLeft : 0;
     el.innerHTML = `<div class="dw-fx-barra">
         <div class="chips">${S.faixas.map((x) => `<button class="dw-chip ${x.id === f.id ? "on" : ""}" data-fxfaixa="${x.id}"><i style="background:${x.cor}"></i>${esc(x.nome)}${(x.fx || []).filter((y) => y.ligado).length ? ` <small>${(x.fx || []).filter((y) => y.ligado).length}</small>` : ""}</button>`).join("")}</div>
-        <select id="dwFxPre" title="Troca a cadeia desta faixa por uma pronta (dá para desfazer)"><option value="">Predefinição…</option><optgroup label="Prontas">${EstudioFx.PREDEFINICOES.map((p) => `<option value="p:${p.id}" title="${esc(p.descr)}">${esc(p.nome)}</option>`).join("")}</optgroup>${mine.length ? `<optgroup label="Minhas">${mine.map((m, k) => `<option value="m:${k}">${esc(m.nome)}</option>`).join("")}</optgroup>` : ""}</select>
+        <select id="dwFxPre" title="Troca a cadeia desta faixa por uma pronta (dá para desfazer)"><option value="">Predefinição…</option>${(() => { const c0 = catAtual(f), ordem = [...EstudioFx.CATEGORIAS].sort((a, b) => (a[0] === c0 ? -1 : 0) - (b[0] === c0 ? -1 : 0)); return ordem.map(([k, n]) => { const ps = EstudioFx.PREDEFINICOES.filter((p) => p.inst === k); return ps.length ? `<optgroup label="${n}">${ps.map((p) => `<option value="p:${p.id}" title="${esc(p.descr)}">${esc(p.nome)}</option>`).join("")}</optgroup>` : ""; }).join(""); })()}${mine.length ? `<optgroup label="Minhas">${mine.map((m, k) => `<option value="m:${k}">${esc(m.nome)}</option>`).join("")}</optgroup>` : ""}</select>
         <button class="dw-btn peq" id="dwFxAdd">${ic("mais")} Adicionar efeito</button><button class="dw-btn peq" id="dwFxSalvar" title="Guarda a cadeia desta faixa para usar em outros projetos">Salvar como minha predefinição</button>
         <button class="dw-btn peq" id="dwFxTodos" title="Liga ou desliga todos os efeitos desta faixa (para comparar com e sem)">${lista.length && lista.every((x) => !x.ligado) ? "Ligar todos" : "Desligar todos"}</button><button class="dw-btn peq" id="dwFxLimpar">Limpar cadeia</button>
         ${fxErro ? '<span class="dw-dica" style="color:#ef4444">Este navegador não tem AudioWorklet: compressor, limitador, porta de ruído, de-esser, bitcrusher, flanger, phaser e harmonizador ficam mudos.</span>' : ""}</div>
@@ -1117,8 +1125,7 @@
       const del = t.closest("[data-fxdel]"); if (del) { mudarFx(() => { f.fx = f.fx.filter((x) => x.id !== del.dataset.fxdel); }); dica("Efeito removido. Ctrl+Z traz de volta."); return; }
       const rs = t.closest("[data-fxreset]"); if (rs) { mudarFx(() => { const fx = f.fx.find((x) => x.id === rs.dataset.fxreset); if (fx) fx.p = EstudioFx.padroes(fx.tipo); }); return; }
       if (t.closest("#dwFxAdd")) {
-        const m = $("#dwMenuFx"), r = t.closest("#dwFxAdd").getBoundingClientRect(); const R = EstudioFx.REGISTRO;
-        m.innerHTML = EstudioFx.GRUPOS.map((g) => `<div class="grp">${esc(g)}</div>` + Object.keys(R).filter((k) => R[k].grupo === g).map((k) => `<button data-fxnovo="${k}"><b>${esc(R[k].nome)}</b><small>${esc(R[k].descr)}</small></button>`).join("")).join("");
+        const m = $("#dwMenuFx"), r = t.closest("#dwFxAdd").getBoundingClientRect(); montarMenuFx(f);
         const altura = Math.min(520, innerHeight - 16); m.style.maxHeight = altura + "px"; m.style.top = Math.max(8, Math.min(r.bottom + 6, innerHeight - altura - 8)) + "px"; m.style.left = Math.max(8, Math.min(r.left, innerWidth - 330)) + "px"; $("#dwMenuArquivo").hidden = true; $("#dwMenuFaixa").hidden = true; m.hidden = !m.hidden; e.stopPropagation(); return;
       }
       if (t.closest("#dwFxSalvar")) { if (!f.fx.length) return dica("Esta faixa não tem efeitos para guardar."); const nome = (prompt("Nome da sua predefinição:", f.nome + " — minha cadeia") || "").trim(); if (!nome) return; const lista = minhasPre(); lista.push({ nome, fx: f.fx.map((x) => ({ tipo: x.tipo, p: JSON.parse(JSON.stringify(x.p)) })) }); try { localStorage.setItem("oh-dw-presets", JSON.stringify(lista)); dica(`Predefinição “${nome}” guardada neste aparelho (aparece em “Minhas”).`); } catch (err) { dica("Não consegui guardar a predefinição."); } renderFx(); return; }
@@ -1126,10 +1133,90 @@
       if (t.closest("#dwFxLimpar")) { if (f.fx.length) { mudarFx(() => { f.fx = []; }); dica("Cadeia limpa. Ctrl+Z desfaz."); } }
     });
     $("#dwMenuFx").addEventListener("click", (e) => {
+      const ct = e.target.closest("[data-fxcat]"); if (ct) { const f0 = faixaFx(); if (f0) { catFxMap[f0.id] = ct.dataset.fxcat; montarMenuFx(f0); } e.stopPropagation(); return; }
       const b = e.target.closest("[data-fxnovo]"); if (!b) return; const f = faixaFx(); if (!f) return; $("#dwMenuFx").hidden = true; let novoId = null;
       mudarFx(() => { f.fx = f.fx || []; const fx = EstudioFx.novo(b.dataset.fxnovo); f.fx.push(fx); novoId = fx.id; }); dica(`${EstudioFx.REGISTRO[b.dataset.fxnovo].nome} adicionado a ${f.nome}.`);
       const c = $(`[data-fxc="${novoId}"]`); if (c) c.scrollIntoView({ inline: "end", block: "nearest" });
     });
+  }
+
+  // ══ SAMPLES: transformar um trecho (solo, riff, batida) numa peça reutilizável, guardada no aparelho ═══
+  const smBufs = new Map(); let amostras = [], smCarregadas = false, smSel = null, smTeclado = false, smBase = 4, smRaiz = 0, smSegurar = false; const smVivos = new Map();
+  const smDB = () => new Promise((ok, err) => { const rq = indexedDB.open("oh-estudio-samples", 1); rq.onupgradeneeded = () => rq.result.createObjectStore("amostras", { keyPath: "id" }); rq.onsuccess = () => ok(rq.result); rq.onerror = () => err(rq.error); });
+  const smTx = async (modo, fn) => { const db = await smDB(); return new Promise((ok, err) => { const tx = db.transaction("amostras", modo), r = fn(tx.objectStore("amostras")); tx.oncomplete = () => { db.close(); ok(r ? r.result : undefined); }; tx.onerror = () => err(tx.error); }); };
+  async function carregarAmostras() { try { amostras = ((await smTx("readonly", (st) => st.getAll())) || []).sort((a, b) => b.criado - a.criado); smCarregadas = true; } catch (e) { amostras = []; smCarregadas = true; dica("Não consegui abrir a biblioteca de samples neste aparelho."); } if (abaAtiva === "sm") renderSm(); return amostras; }
+  async function smBuffer(id) { if (smBufs.has(id)) return smBufs.get(id); const a = amostras.find((x) => x.id === id); if (!a) return null; garantirAudio(); const buf = await decodificar(await a.wav.arrayBuffer()); smBufs.set(id, buf); return buf; }
+  // bounce: a região (e, se quiser, passando pelos efeitos da faixa, com a cauda do reverb e do eco)
+  async function renderizarRegiao(r, comEfeitos) {
+    garantirAudio(); const f = faixaPorId(r.f), OC = window.OfflineAudioContext || window.webkitOfflineAudioContext, sr = ctx.sampleRate, lista = comEfeitos && f ? f.fx || [] : [], temFx = lista.some((x) => x.ligado);
+    const cauda = temFx && window.EstudioFx ? Math.min(8, EstudioFx.cauda(lista)) : 0.02, off = new OC(2, Math.max(1, Math.ceil((r.dur + cauda) * sr)), sr);
+    if (temFx && window.EstudioFx && EstudioFx.precisaWorklet(lista)) await EstudioFx.carregarWorklet(off);
+    const cad = temFx ? EstudioFx.criarCadeia(off, lista, Object.assign(ambFx(), { origem: -r.ini })) : null, g = off.createGain(); if (cad) { cad.saida.connect(g); } g.connect(off.destination);
+    programarRegiao(off, Object.assign({}, r, { ini: 0 }), cad ? cad.entrada : g, 0, 0); return off.startRendering();
+  }
+  async function guardarAmostra(buf, nome) { const a = { id: "s" + Date.now().toString(36) + Math.floor(Math.random() * 1e4), nome: (nome || "Sample").slice(0, 40), criado: Date.now(), dur: buf.duration, sr: buf.sampleRate, canais: buf.numberOfChannels, wav: audioBufferParaWavBlob(buf) }; await smTx("readwrite", (st) => st.put(a)); amostras.unshift(a); smBufs.set(a.id, buf); return a; }
+  async function criarAmostra(r, comEfeitos) {
+    if (!r || r.gravando) return dica("Selecione uma região com áudio para criar o sample."); dica("Criando o sample…");
+    try { const buf = await renderizarRegiao(r, comEfeitos), a = await guardarAmostra(buf, r.nome.replace(/\s*·.*$/, "")); smSel = a.id; dica(`Sample “${a.nome}” criado (${fmt(a.dur)})${comEfeitos ? " com os efeitos da faixa" : ""}. Ele fica guardado neste aparelho, na aba Samples.`); if (abaAtiva !== "sm") abrirAba("sm"); else renderSm(); return a; }
+    catch (e) { dica("Não consegui criar o sample: " + ((e && e.message) || "erro inesperado") + "."); }
+  }
+  async function importarAmostra(arq) { garantirAudio(); try { const buf = await decodificar(await arq.arrayBuffer()), a = await guardarAmostra(buf, arq.name.replace(/\.[^.]+$/, "")); smSel = a.id; dica(`Sample “${a.nome}” importado (${fmt(a.dur)}).`); renderSm(); return a; } catch (e) { dica("Não consegui ler esse arquivo de áudio."); } }
+  async function inserirAmostra(id, vezes) {
+    const a = amostras.find((x) => x.id === id), buf = await smBuffer(id); if (!a || !buf) return; vezes = Math.max(1, Math.min(64, Math.round(vezes || 1)));
+    const antes = foto(); let f = faixaPorId(S.faixaSel); if (!f) f = novaFaixa(a.nome); const ini = snap(S.tAtual), bid = guardarAudio(buf, a.wav); let ultimo = null;
+    for (let k = 0; k < vezes; k++) ultimo = novaRegiao(f, bid, a.nome, Math.round((ini + k * buf.duration) * 1000) / 1000, 0);
+    S.faixaSel = f.id; S.regiaoSel = ultimo.id; empilhar(antes); renderTudo(); dica(`“${a.nome}” inserido em ${f.nome}${vezes > 1 ? ` ${vezes}×, em sequência` : ""}, a partir de ${fmt(ini)}. Ctrl+Z desfaz.`);
+  }
+  async function renomearAmostra(id, nome) { const a = amostras.find((x) => x.id === id); if (!a || !nome.trim()) return; a.nome = nome.trim().slice(0, 40); await smTx("readwrite", (st) => st.put(a)); }
+  async function excluirAmostra(id) { await smTx("readwrite", (st) => st.delete(id)); amostras = amostras.filter((x) => x.id !== id); smBufs.delete(id); if (smSel === id) smSel = null; renderSm(); dica("Sample excluído da biblioteca."); }
+  const smTaxa = (semis) => Math.pow(2, semis / 12);
+  async function tocarAmostra(id, semis, loop) {   // semis = quantos semitons acima ou abaixo do som original; devolve a taxa de reprodução usada
+    const buf = await smBuffer(id); if (!buf) return null; garantirAudio(); if (ctx.state === "suspended") ctx.resume();
+    const src = ctx.createBufferSource(), g = ctx.createGain(), taxa = smTaxa(semis || 0); src.buffer = buf; src.playbackRate.value = taxa; src.loop = !!loop; g.gain.value = 0.9; src.connect(g); g.connect(mestre || ctx.destination); src.start();
+    const chave = id + ":" + semis; if (smVivos.has(chave)) { try { smVivos.get(chave).src.stop(); } catch (e) { /* já parou */ } } smVivos.set(chave, { src, g }); src.onended = () => { if (smVivos.get(chave) && smVivos.get(chave).src === src) smVivos.delete(chave); }; return taxa;
+  }
+  function soltarAmostra(id, semis) { const v = smVivos.get(id + ":" + semis); if (!v) return; const t = ctx.currentTime; v.g.gain.setTargetAtTime(0, t, 0.03); try { v.src.stop(t + 0.15); } catch (e) { /* já parou */ } smVivos.delete(id + ":" + semis); }
+  function pararAmostras() { smVivos.forEach((v) => { try { v.src.stop(); } catch (e) { /* já parou */ } }); smVivos.clear(); }
+  const NOTAS_NOME = ["Dó", "Dó#", "Ré", "Ré#", "Mi", "Fá", "Fá#", "Sol", "Sol#", "Lá", "Lá#", "Si"], PRETA = new Set([1, 3, 6, 8, 10]);
+  function renderSm() {
+    const el = $("#dwSm"); if (!el) return; if (!smCarregadas) { el.innerHTML = '<div class="dw-fx-vazio">Abrindo a biblioteca de samples…</div>'; carregarAmostras(); return; }
+    const r = regiaoPorId(S.regiaoSel), f = faixaPorId(S.faixaSel), temFx = f && (f.fx || []).some((x) => x.ligado);
+    const cartoes = amostras.map((a) => `<div class="dw-smc ${a.id === smSel ? "sel" : ""}" data-smid="${a.id}">
+        <input class="nome" value="${esc(a.nome)}" data-smnome="${a.id}" title="Clique para renomear">
+        <div class="meta">${fmt(a.dur)} · ${a.canais === 1 ? "mono" : "estéreo"} · ${Math.round(a.sr / 100) / 10} kHz</div>
+        <div class="acoes"><button class="dw-btn peq" data-sma="ouvir">▶ Ouvir</button><button class="dw-btn peq" data-sma="inserir" title="Coloca o sample na faixa selecionada, no ponto onde está o cursor">Inserir na faixa</button>
+          <span class="rep"><input type="number" min="2" max="64" value="4" data-smrep="${a.id}" title="Quantas vezes repetir em sequência"><button class="dw-btn peq" data-sma="repetir">Inserir ×</button></span>
+          <button class="dw-btn peq ${a.id === smSel && smTeclado ? "on" : ""}" data-sma="teclas" title="Toca o sample nas teclas, mudando a altura da nota">Teclado</button><button class="dw-btn peq" data-sma="excluir">Excluir</button></div></div>`).join("");
+    let tecl = ""; if (smTeclado && smSel) { const a = amostras.find((x) => x.id === smSel); if (a) { let teclas = ""; for (let i = 0; i < 24; i++) { const m = i % 12; teclas += `<button class="tecla ${PRETA.has(m) ? "preta" : ""}" data-smn="${i}" title="${NOTAS_NOME[m]}${smBase + (i >= 12 ? 1 : 0)}">${PRETA.has(m) ? "" : NOTAS_NOME[m]}</button>`; }
+      tecl = `<div class="dw-smt"><div class="cfg"><b>Teclado de “${esc(a.nome)}”</b><label>A nota original do sample é <select id="dwSmRaiz">${NOTAS_NOME.map((n, k) => `<option value="${k}" ${k === smRaiz ? "selected" : ""}>${n}</option>`).join("")}</select></label><label>Oitava <select id="dwSmBase">${[2, 3, 4, 5].map((o) => `<option ${o === smBase ? "selected" : ""}>${o}</option>`).join("")}</select></label><label class="seg"><input type="checkbox" id="dwSmSeg" ${smSegurar ? "checked" : ""}> Segurar (repete enquanto a tecla estiver apertada)</label><span class="dica">No computador: A S D F G H J K L e W E T Y U O P (pretas).</span></div><div class="teclas">${teclas}</div></div>`; } }
+    { const ed = $("#dwEditor"); if (ed && abaAtiva === "sm") { ed.classList.toggle("alto", !!tecl); ed.classList.toggle("medio", !tecl); } }   // com o teclado aberto o painel cresce um pouco
+    el.innerHTML = `<div class="dw-fx-barra"><button class="dw-btn peq" id="dwSmCriar" ${r && !r.gravando ? "" : "disabled"} title="Transforma a região selecionada num sample reutilizável">Criar sample da região selecionada</button>
+        <label class="dw-sm-fx" title="Aplica na hora os efeitos da faixa (equalizador, reverb etc.) dentro do sample"><input type="checkbox" id="dwSmComFx" ${temFx ? "checked" : ""}> com os efeitos da faixa</label>
+        <button class="dw-btn peq" id="dwSmImportar">Importar áudio como sample</button><span class="dw-dica">${r ? `Região: <b>${esc(r.nome)}</b> (${fmt(r.dur)})` : "Selecione uma região na linha do tempo para criar um sample."}${f ? ` · Inserir em: <b>${esc(f.nome)}</b>` : ""}</span></div>
+      <div class="dw-sm-corpo ${tecl ? "com-tec" : ""}"><div class="dw-sm-lista">${cartoes || '<div class="dw-fx-vazio">Ainda não há samples.<br>Selecione uma região (um solo, um riff, uma batida) e clique em <b>Criar sample da região selecionada</b>. Ele fica guardado neste aparelho para usar em qualquer projeto: dá para inserir na faixa, repetir em sequência ou tocar nas teclas.</div>'}</div>${tecl}</div>`;
+  }
+  function notaTecla(i) { return i + smBase * 12 + 12 - smRaiz - 0; }   // semitons em relação ao som original (a nota original é a raiz da oitava escolhida)
+  const TECLAS_PC = { a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, y: 8, h: 9, u: 10, j: 11, k: 12, o: 13, l: 14, p: 15 };
+  const semisDaTecla = (i) => i - smRaiz + (smBase - 4) * 12;
+  function ligarEventosSm() {
+    const el = $("#dwSm");
+    el.addEventListener("click", async (e) => {
+      const t = e.target; if (t.closest("#dwSmCriar")) { const r = regiaoPorId(S.regiaoSel), c = $("#dwSmComFx"); return void criarAmostra(r, c && c.checked); }
+      if (t.closest("#dwSmImportar")) return void $("#dwArqSample").click();
+      const b = t.closest("[data-sma]"); if (!b) { const c = t.closest(".dw-smc"); if (c && !t.closest("input,button")) { smSel = c.dataset.smid; renderSm(); } return; }
+      const id = b.closest(".dw-smc").dataset.smid, acao = b.dataset.sma; smSel = id;
+      if (acao === "ouvir") { pararAmostras(); tocarAmostra(id, 0, false); renderSm(); } else if (acao === "inserir") inserirAmostra(id, 1);
+      else if (acao === "repetir") inserirAmostra(id, +b.closest(".rep").querySelector("input").value || 4);
+      else if (acao === "teclas") { smTeclado = !(smTeclado && smSel === id); renderSm(); } else if (acao === "excluir") { if (confirm("Excluir este sample da biblioteca?")) excluirAmostra(id); }
+    });
+    el.addEventListener("change", (e) => { const t = e.target; if (t.dataset.smnome) renomearAmostra(t.dataset.smnome, t.value); else if (t.id === "dwSmRaiz") smRaiz = +t.value; else if (t.id === "dwSmBase") { smBase = +t.value; renderSm(); } else if (t.id === "dwSmSeg") smSegurar = t.checked; });
+    const aperta = (e) => { const k = e.target.closest("[data-smn]"); if (!k || !smSel) return; e.preventDefault(); k.classList.add("on"); k.setPointerCapture && k.setPointerCapture(e.pointerId); tocarAmostra(smSel, semisDaTecla(+k.dataset.smn), smSegurar); };
+    const solta = (e) => { const k = e.target.closest("[data-smn]"); if (!k || !smSel) return; k.classList.remove("on"); if (smSegurar) soltarAmostra(smSel, semisDaTecla(+k.dataset.smn)); };
+    el.addEventListener("pointerdown", aperta); el.addEventListener("pointerup", solta); el.addEventListener("pointercancel", solta);
+    $("#dwArqSample").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importarAmostra(f); });
+    const apertadas = new Set();   // teclado do computador (fase de captura: tem prioridade sobre os atalhos do Estúdio, como R e S)
+    document.addEventListener("keydown", (e) => { if (abaAtiva !== "sm" || !smTeclado || !smSel || e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; const i = TECLAS_PC[e.key.toLowerCase()]; if (i === undefined) return; e.preventDefault(); e.stopImmediatePropagation(); if (apertadas.has(i)) return; apertadas.add(i); const k = el.querySelector(`[data-smn="${i}"]`); if (k) k.classList.add("on"); tocarAmostra(smSel, semisDaTecla(i), smSegurar); }, true);
+    document.addEventListener("keyup", (e) => { const i = TECLAS_PC[e.key.toLowerCase()]; if (i === undefined || !apertadas.has(i)) return; apertadas.delete(i); const k = el.querySelector(`[data-smn="${i}"]`); if (k) k.classList.remove("on"); if (smSegurar && smSel) soltarAmostra(smSel, semisDaTecla(i)); }, true);
   }
 
   // ══ SINCRONIA FINA DA REGIÃO ═══
@@ -1199,7 +1286,7 @@
     aoAbrir,
     _teste: {
       pilhaN: () => pilha.length,
-      cadeiaDe: (id) => { const n = nos.get(id); return n && n.cadeia ? { assinatura: n.cadeia.assinatura, itens: [...n.cadeia.itens.keys()], reducao: [...n.cadeia.itens.values()].map((i) => i.reducao) } : null; }, fxOk: () => fxOk, renderFx, moverRegiaoMs, medirAtrasoDeCliques, acaoSinc,
+      sm: { listar: () => amostras.map((a) => ({ id: a.id, nome: a.nome, dur: a.dur, canais: a.canais })), carregar: carregarAmostras, criar: criarAmostra, importar: importarAmostra, inserir: inserirAmostra, tocar: tocarAmostra, excluir: excluirAmostra, renomear: renomearAmostra, renderizarRegiao, taxa: smTaxa, semisDaTecla, sel: () => smSel }, cadeiaDe: (id) => { const n = nos.get(id); return n && n.cadeia ? { assinatura: n.cadeia.assinatura, itens: [...n.cadeia.itens.keys()], reducao: [...n.cadeia.itens.values()].map((i) => i.reducao) } : null; }, fxOk: () => fxOk, renderFx, moverRegiaoMs, medirAtrasoDeCliques, acaoSinc,
       afin: () => afin, aplicarAfinacao, prepararAfinacao, limparRegiao, modoSep, salvarProjeto, listarProjetos, abrirProjeto, S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
       fontes: () => fontes.length, cliques: () => cliquesTotal, cliqueLog: () => cliqueLog.slice(),
       ganhoDe: (id) => { const n = nos.get(id); return n ? n.gain.gain.value : null; },

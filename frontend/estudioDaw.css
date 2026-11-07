@@ -222,8 +222,8 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-editor.alto { height: clamp(300px, 50vh, 520px); } .dw-editor.medio { height: clamp(250px, 38vh, 400px); }
 .dw-editor.ampliado { position: absolute; inset: 0; height: auto !important; z-index: 60; border-top: 0; }
 .dw-editor.redimensionando { transition: none; }
-.dw-ed-redim { position: absolute; left: 0; right: 0; top: -7px; height: 14px; cursor: row-resize; z-index: 8; touch-action: none; }
-.dw-ed-redim::after { content: ""; position: absolute; left: 50%; top: 5px; width: 64px; height: 4px; margin-left: -32px; border-radius: 2px; background: var(--dw-laranja); opacity: .4; transition: opacity .15s; }
+.dw-ed-redim { position: absolute; left: 0; right: 0; top: -12px; height: 12px; cursor: row-resize; z-index: 8; touch-action: none; }
+.dw-ed-redim::after { content: ""; position: absolute; left: 50%; top: 6px; width: 64px; height: 4px; margin-left: -32px; border-radius: 2px; background: var(--dw-laranja); opacity: .4; transition: opacity .15s; }
 .dw-ed-redim:hover::after { opacity: 1; } .dw-editor.fechado .dw-ed-redim, .dw-editor.ampliado .dw-ed-redim { display: none; }
 #dwP-afin.on { display: block; overflow: hidden; } .dw-afin { height: 100%; min-height: 0; }
 
@@ -257,3 +257,26 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-aba.pend::after { content: ""; display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--dw-laranja); box-shadow: 0 0 8px var(--dw-laranja); vertical-align: middle; }
 #afAplicar.pendente { animation: afPulso 1.4s ease-in-out infinite; }
 @keyframes afPulso { 0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, .6); } 50% { box-shadow: 0 0 0 7px rgba(249, 115, 22, 0); } }
+
+/* categorias por instrumento no menu de efeitos */
+#dwMenuFx .cats { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 6px 8px; position: sticky; top: 0; background: #120d08; z-index: 2; border-bottom: 1px solid var(--dw-borda); }
+#dwMenuFx .cats button { width: auto; display: inline-block; padding: 3px 10px; border: 1px solid var(--dw-borda); border-radius: 999px; font-size: 11px; font-weight: 700; color: var(--dw-suave); background: transparent; }
+#dwMenuFx .cats button.on { background: var(--dw-laranja); color: #1a0c02; border-color: var(--dw-laranja); }
+
+/* samples */
+#dwP-sm.on { display: block; overflow: hidden; } .dw-sm { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.dw-sm-fx { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--dw-suave); }
+.dw-sm-lista { flex: 1; min-height: 0; overflow: auto; display: flex; gap: 10px; padding: 12px; align-items: flex-start; flex-wrap: wrap; align-content: flex-start; }
+.dw-smc { flex: 0 0 270px; background: var(--dw-painel2); border: 1px solid var(--dw-borda); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; }
+.dw-smc.sel { border-color: var(--dw-laranja); box-shadow: 0 0 0 1px var(--dw-laranja) inset; } .dw-smc .nome { background: transparent; border: 1px solid transparent; border-radius: 6px; font-weight: 800; color: var(--dw-laranja); padding: 2px 4px; } .dw-smc .nome:hover, .dw-smc .nome:focus { border-color: var(--dw-borda); background: #0a0705; outline: none; }
+.dw-smc .meta { font-size: 11px; color: var(--dw-suave); } .dw-smc .acoes { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; } .dw-smc .rep { display: inline-flex; gap: 4px; align-items: center; } .dw-smc .rep input { width: 44px; background: #0a0705; border: 1px solid var(--dw-borda); border-radius: 6px; padding: 3px 4px; }
+.dw-smc .dw-btn.on { background: var(--dw-laranja); color: #1a0c02; }
+.dw-smt { flex: 0 0 auto; border-top: 1px solid var(--dw-borda); padding: 8px 12px 10px; background: var(--dw-painel2); } .dw-smt .cfg { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--dw-suave); margin-bottom: 8px; } .dw-smt .cfg b { color: var(--dw-texto); } .dw-smt .dica { font-size: 11px; }
+.dw-smt .teclas { display: flex; position: relative; height: 84px; max-width: 760px; } .dw-smt .tecla { flex: 1; background: #efe6dc; border: 1px solid #14100b; border-radius: 0 0 6px 6px; color: #1a0c02; font-size: 10px; font-weight: 800; padding: 0 0 4px; display: flex; align-items: flex-end; justify-content: center; cursor: pointer; }
+.dw-smt .tecla.on { background: var(--dw-laranja); } .dw-smt .tecla.preta { flex: 0 0 0; width: 0; position: relative; z-index: 2; border: 0; padding: 0; background: transparent; } .dw-smt .tecla.preta::after { content: ""; position: absolute; left: -9px; top: 0; width: 18px; height: 52px; background: #1a1410; border: 1px solid #000; border-radius: 0 0 4px 4px; } .dw-smt .tecla.preta.on::after { background: var(--dw-laranja); }
+
+.dw-sm-corpo { flex: 1; min-height: 0; display: flex; overflow: hidden; } .dw-sm-corpo .dw-sm-lista { flex: 1; }
+.dw-sm-corpo.com-tec .dw-sm-lista { flex: 0 0 300px; flex-direction: column; flex-wrap: nowrap; border-right: 1px solid var(--dw-borda); } .dw-sm-corpo.com-tec .dw-smc { flex: 0 0 auto; width: 100%; }
+.dw-sm-corpo.com-tec .dw-smt { flex: 1; min-width: 0; overflow: auto; border-top: 0; } .dw-smt .teclas { max-width: none; height: 96px; }
+@media (max-width: 900px) { .dw-sm-corpo.com-tec { flex-direction: column; overflow: auto; } .dw-sm-corpo.com-tec .dw-sm-lista { flex: 0 0 auto; border-right: 0; } }
+.dw-smt .teclas { height: 84px; } .dw-smt .cfg { margin-bottom: 6px; gap: 10px; }

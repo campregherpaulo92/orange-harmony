@@ -183,6 +183,87 @@
       }
     }
     registerProcessor("oh-phaser", Phaser);
+
+    class Octaver extends AudioWorkletProcessor {   // oitava abaixo "analógica": acompanha o ciclo da nota e gera uma onda quadrada na metade (e num quarto) da frequência
+      static get parameterDescriptors() { return [kr("o1", 1, 0, 1.5), kr("o2", 0, 0, 1.5), kr("seco", 1, 0, 1.5), kr("tom", 700, 150, 3000)]; }
+      constructor() { super(); this.l1 = 0; this.l2 = 0; this.env = 0; this.s = 1; this.ff1 = 1; this.ff2 = 1; this.p1 = 0; this.p2 = 0; }
+      process(inputs, outputs, p) {
+        const inp = inputs[0], out = outputs[0]; if (!inp.length) return true;
+        const nc = out.length, n = out[0].length, sr = sampleRate, o1 = p.o1[0], o2 = p.o2[0], seco = p.seco[0], ct = Math.exp((-2 * Math.PI * p.tom[0]) / sr), cd = Math.exp((-2 * Math.PI * 450) / sr), ca = Math.exp(-1 / (0.004 * sr)), cr = Math.exp(-1 / (0.03 * sr));
+        for (let i = 0; i < n; i++) {
+          let m = 0; for (let c = 0; c < nc; c++) m += (inp[c] || inp[0])[i]; m /= nc;
+          this.l1 = cd * this.l1 + (1 - cd) * m; this.l2 = cd * this.l2 + (1 - cd) * this.l1; const d = this.l2, a = Math.abs(d);
+          this.env = a > this.env ? ca * this.env + (1 - ca) * a : cr * this.env + (1 - cr) * a;
+          const lim = 0.15 * this.env + 1e-4, novo = this.s > 0 ? (d < -lim ? -1 : 1) : (d > lim ? 1 : -1);   // gatilho com histerese: ignora ruído
+          if (novo > 0 && this.s < 0) { this.ff1 = -this.ff1; if (this.ff1 > 0) this.ff2 = -this.ff2; }
+          this.s = novo;
+          const w = o1 * this.ff1 * this.env + o2 * this.ff2 * this.env; this.p1 = ct * this.p1 + (1 - ct) * w; this.p2 = ct * this.p2 + (1 - ct) * this.p1;   // suaviza a quadrada
+          for (let c = 0; c < nc; c++) out[c][i] = (inp[c] || inp[0])[i] * seco + this.p2;
+        }
+        return true;
+      }
+    }
+    registerProcessor("oh-octaver", Octaver);
+
+    class AutoWah extends AudioWorkletProcessor {   // wah que abre com a força do toque (envelope) — filtro passa-faixa de variável de estado
+      static get parameterDescriptors() { return [kr("sens", 0.6, 0, 1), kr("fmin", 350, 100, 2000), kr("fmax", 2600, 500, 5000), kr("q", 3.5, 0.7, 12), kr("ataque", 0.01, 0.001, 0.2), kr("liberacao", 0.2, 0.02, 1.5), kr("mistura", 1, 0, 1), kr("dir", 1, 0, 1)]; }
+      constructor() { super(); this.env = 0; this.low = [0, 0]; this.band = [0, 0]; }
+      process(inputs, outputs, p) {
+        const inp = inputs[0], out = outputs[0]; if (!inp.length) return true;
+        const nc = out.length, n = out[0].length, sr = sampleRate, sens = p.sens[0], fmin = p.fmin[0], fmax = Math.max(p.fmax[0], fmin * 1.2), q1 = 1 / p.q[0], mix = p.mistura[0], sobe = p.dir[0] >= 0.5;
+        const ca = Math.exp(-1 / (Math.max(p.ataque[0], 1e-3) * sr)), cr = Math.exp(-1 / (Math.max(p.liberacao[0], 0.02) * sr));
+        for (let i = 0; i < n; i++) {
+          let pico = 0; for (let c = 0; c < nc; c++) { const v = Math.abs((inp[c] || inp[0])[i]); if (v > pico) pico = v; }
+          this.env = pico > this.env ? ca * this.env + (1 - ca) * pico : cr * this.env + (1 - cr) * pico;
+          let e = Math.min(1, this.env * (1 + 14 * sens) * (0.4 + sens)); if (!sobe) e = 1 - e;
+          const fc = Math.min(fmin * Math.pow(fmax / fmin, e), sr * 0.16), f = 2 * Math.sin((Math.PI * fc) / sr);
+          for (let c = 0; c < nc; c++) {
+            const x = (inp[c] || inp[0])[i]; this.low[c] += f * this.band[c]; const alto = x - this.low[c] - q1 * this.band[c]; this.band[c] += f * alto;
+            out[c][i] = x * (1 - mix) + this.band[c] * q1 * 2 * mix;
+          }
+        }
+        return true;
+      }
+    }
+    registerProcessor("oh-autowah", AutoWah);
+
+    const PADROES = [[0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1], [1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1], [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0], [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0]];
+    class Ritmico extends AudioWorkletProcessor {   // gate rítmico (forma 0) e "pump" de sidechain (forma 1), presos ao andamento: o tempo do PROJETO é currentTime - origem
+      static get parameterDescriptors() { return [kr("bpm", 100, 30, 300), kr("origem", 0, -100000, 100000), kr("passo", 0.5, 0.125, 4), kr("padrao", 0, 0, 5), kr("prof", 1, 0, 1), kr("suav", 0.004, 0.0003, 0.1), kr("forma", 0, 0, 1), kr("rapidez", 6, 1, 30), kr("fase", 0, 0, 15)]; }
+      constructor() { super(); this.g = 1; }
+      process(inputs, outputs, p) {
+        const inp = inputs[0], out = outputs[0]; if (!inp.length) return true;
+        const nc = out.length, n = out[0].length, sr = sampleRate, passo = (p.passo[0] * 60) / p.bpm[0], pat = PADROES[Math.max(0, Math.min(5, Math.round(p.padrao[0])))], prof = p.prof[0], forma = p.forma[0] >= 0.5, k = p.rapidez[0], fase = Math.round(p.fase[0]), cs = 1 - Math.exp(-1 / (p.suav[0] * sr));
+        const t0 = currentTime - p.origem[0];
+        for (let i = 0; i < n; i++) {
+          const pos = (t0 + i / sr) / passo + fase, fl = Math.floor(pos), idx = ((fl % 16) + 16) % 16, fr = pos - fl;
+          const alvo = forma ? (pat[idx] ? 1 - prof * Math.exp(-fr * k) : 1) : pat[idx] ? 1 : 1 - prof;
+          this.g += (alvo - this.g) * cs;
+          for (let c = 0; c < nc; c++) out[c][i] = (inp[c] || inp[0])[i] * this.g;
+        }
+        return true;
+      }
+    }
+    registerProcessor("oh-ritmico", Ritmico);
+
+    class Transiente extends AudioWorkletProcessor {   // realça ou suaviza o ataque e o sustento (bateria, violão, baixo)
+      static get parameterDescriptors() { return [kr("ataque", 0, -1, 1), kr("sust", 0, -1, 1)]; }
+      constructor() { super(); this.rapido = 0; this.lento = 0; this.gdb = 0; }
+      process(inputs, outputs, p) {
+        const inp = inputs[0], out = outputs[0]; if (!inp.length) return true;
+        const nc = out.length, n = out[0].length, sr = sampleRate, A = p.ataque[0] * 12, S = p.sust[0] * 12;
+        const fa = Math.exp(-1 / (0.0005 * sr)), fr = Math.exp(-1 / (0.008 * sr)), la = Math.exp(-1 / (0.025 * sr)), lr = Math.exp(-1 / (0.12 * sr)), cg = Math.exp(-1 / (0.001 * sr));
+        for (let i = 0; i < n; i++) {
+          let pico = 0; for (let c = 0; c < nc; c++) { const v = Math.abs((inp[c] || inp[0])[i]); if (v > pico) pico = v; }
+          this.rapido = pico > this.rapido ? fa * this.rapido + (1 - fa) * pico : fr * this.rapido + (1 - fr) * pico; this.lento = pico > this.lento ? la * this.lento + (1 - la) * pico : lr * this.lento + (1 - lr) * pico;
+          const dif = dB(this.rapido) - dB(this.lento), wa = Math.max(0, Math.min(1, dif / 6)), nivel = Math.max(0, Math.min(1, (dB(this.lento) + 60) / 20));
+          const alvo = A * wa + S * (1 - wa) * nivel; this.gdb = cg * this.gdb + (1 - cg) * alvo; const g = lin(this.gdb);
+          for (let c = 0; c < nc; c++) out[c][i] = (inp[c] || inp[0])[i] * g;
+        }
+        return true;
+      }
+    }
+    registerProcessor("oh-transiente", Transiente);
   }
 
   const carregados = new WeakMap();
@@ -195,6 +276,7 @@
   // ── utilidades de montagem ──
   const NOTAS_SYNC = [["1/1", "Semibreve (1/1)", 4], ["1/2", "Mínima (1/2)", 2], ["1/4", "Semínima (1/4)", 1], ["1/4.", "Semínima pontuada", 1.5], ["1/4t", "Semínima tercina", 2 / 3], ["1/8", "Colcheia (1/8)", 0.5], ["1/8.", "Colcheia pontuada", 0.75], ["1/8t", "Colcheia tercina", 1 / 3], ["1/16", "Semicolcheia (1/16)", 0.25], ["1/16.", "Semicolcheia pontuada", 0.375]];
   const segDeNota = (n, bpm) => (NOTAS_SYNC.find((x) => x[0] === n) || NOTAS_SYNC[2])[2] * 60 / (bpm || 100);
+  const QUANTO = 128;   // cada volta de um laço de realimentação no Web Audio ganha 128 amostras de atraso: o laço desconta isso e a entrada compensa
   const OPC_NOTAS = NOTAS_SYNC.map((x) => [x[0], x[1]]);
   const offline = (ctx) => typeof ctx.length === "number";
   const ajusta = (ctx, ap, v, suave) => { if (suave && !offline(ctx)) ap.setTargetAtTime(v, ctx.currentTime, 0.02); else ap.value = v; };
@@ -228,9 +310,39 @@
     placa: { nome: "Placa (brilhante)", tempo: 1.8, pre: 0, queda: 0.5, refMax: 0, nRef: 0, subida: 0.012 },
     salao: { nome: "Salão", tempo: 2.8, pre: 22, queda: 2.2, refMax: 0.09, nRef: 14, subida: 0.02 },
     catedral: { nome: "Catedral", tempo: 5.5, pre: 40, queda: 3.0, refMax: 0.12, nRef: 18, subida: 0.03 },
+    mola: { nome: "Mola (de amplificador)", tempo: 2.4, pre: 0, queda: 0.8, refMax: 0, nRef: 0, subida: 0.004 },
+    gated: { nome: "Gated (anos 80)", tempo: 0.35, pre: 0, queda: 0.2, refMax: 0, nRef: 0, subida: 0.004 },
+    reverso: { nome: "Reverso (cresce e corta)", tempo: 1.2, pre: 0, queda: 0.5, refMax: 0, nRef: 0, subida: 0.012 },
   };
   function prng(seed) { let a = seed; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function lpIR(d, sr, fc) { const a = 1 - Math.exp((-2 * Math.PI * fc) / sr); let y = 0; for (let i = 0; i < d.length; i++) { y += a * (d[i] - y); d[i] = y; } }
+  function irMola(ctx, o) {   // mola de amplificador: uma série de "pingos" que descem de agudo para grave (dispersão da mola), a cada ~35 ms, mais uma cauda de ruído
+    const sr = ctx.sampleRate, pre = Math.round((o.pre / 1000) * sr), comp = pre + Math.round(Math.min(10, o.tempo * 1.15) * sr) + Math.round(0.03 * sr), buf = ctx.createBuffer(2, comp, sr), Lg = Math.round(0.024 * sr);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c), rnd = prng(900 + c * 31), Ts = 0.034 + 0.003 * c;
+      for (let k = 0; k * Ts < o.tempo * 1.1; k++) {
+        const t0 = k * Ts, amp = Math.exp((-6.908 * t0) / o.tempo) * (k === 0 ? 1 : 0.92), i0 = pre + Math.round(t0 * sr);
+        for (let j = 0; j < Lg && i0 + j < comp; j++) { const u = j / sr, w = 0.5 - 0.5 * Math.cos((2 * Math.PI * (j + 0.5)) / Lg); d[i0 + j] += amp * w * Math.sin(2 * Math.PI * (4200 * u - 0.5 * (3500 / 0.024) * u * u)); }
+      }
+      const g = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+      for (let i = pre; i < comp; i++) { const t = (i - pre) / sr; d[i] += 0.12 * g() * Math.exp((-6.908 * t) / o.tempo) * Math.min(1, t / 0.02); }
+      lpIR(d, sr, Math.max(1500, Math.min(o.amort, 12000)));
+    }
+    return buf;
+  }
+  function irGated(ctx, o) {   // reverb "cortado": energia constante por `tempo` e corte seco (o som de bateria dos anos 80)
+    const sr = ctx.sampleRate, pre = Math.round((o.pre / 1000) * sr), gate = Math.round(o.tempo * sr), fade = Math.round(0.006 * sr), comp = pre + gate + fade, buf = ctx.createBuffer(2, comp, sr);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c), rnd = prng(500 + c * 13), g = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+      for (let i = 0; i < gate + fade; i++) { const subida = Math.min(1, i / (0.004 * sr)), corte = i < gate ? 1 : 1 - (i - gate) / fade; d[pre + i] = g() * subida * corte * (1 - 0.35 * (i / gate)); }
+      lpIR(d, sr, Math.max(1500, Math.min(o.amort, 16000)));
+    }
+    return buf;
+  }
   function gerarIR(ctx, o) {
+    if (o.tipo === "mola") return irMola(ctx, o);
+    if (o.tipo === "gated") return irGated(ctx, o);
+    if (o.tipo === "reverso") { const b = gerarIR(ctx, Object.assign({}, o, { tipo: "placa", pre: 0 })), fade = Math.round(0.004 * ctx.sampleRate); for (let c = 0; c < b.numberOfChannels; c++) { const d = b.getChannelData(c); d.reverse(); for (let i = 0; i < fade; i++) d[i] *= i / fade; } return b; }
     const sr = ctx.sampleRate, pf = PERFIS[o.tipo] || PERFIS.sala, pre = Math.round((o.pre / 1000) * sr), comp = pre + Math.round(Math.min(10, o.tempo * 1.15) * sr), buf = ctx.createBuffer(2, comp, sr);
     for (let c = 0; c < 2; c++) {
       const d = buf.getChannelData(c), rnd = prng(1234 + c * 77), g = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd()); let lp = 0;
@@ -396,11 +508,11 @@
     criar(ctx, p, amb) {
       const entrada = gn(ctx, 1), saida = gn(ctx, 1), wet = gn(ctx, 0);
       entrada.connect(saida); wet.connect(saida);
-      const dN = ctx.createDelay(4), fbN = gn(ctx, 0), lpN = bw(ctx, "lowpass"), sN = gn(ctx, 1); entrada.connect(dN); dN.connect(sN); sN.connect(wet); dN.connect(lpN); lpN.connect(fbN); fbN.connect(dN);
+      const dN = ctx.createDelay(4), fbN = gn(ctx, 0), lpN = bw(ctx, "lowpass"), sN = gn(ctx, 1), dP = ctx.createDelay(0.05); dP.delayTime.value = QUANTO / ctx.sampleRate; entrada.connect(dP); dP.connect(dN); dN.connect(sN); sN.connect(wet); dN.connect(lpN); lpN.connect(fbN); fbN.connect(dN);
       const mono = gn(ctx, 1); mono.channelCount = 1; mono.channelCountMode = "explicit"; const dL = ctx.createDelay(4), dR = ctx.createDelay(4), fb1 = gn(ctx, 0), fb2 = gn(ctx, 0), lpP = bw(ctx, "lowpass"), mg = ctx.createChannelMerger(2), sP = gn(ctx, 0);
-      entrada.connect(mono); mono.connect(dL); dL.connect(lpP); lpP.connect(fb1); fb1.connect(dR); dR.connect(fb2); fb2.connect(dL); dL.connect(mg, 0, 0); dR.connect(mg, 0, 1); mg.connect(sP); sP.connect(wet);
+      entrada.connect(mono); const dP2 = ctx.createDelay(0.05); dP2.delayTime.value = QUANTO / 2 / ctx.sampleRate; mono.connect(dP2); dP2.connect(dL); dL.connect(lpP); lpP.connect(fb1); fb1.connect(dR); dR.connect(fb2); fb2.connect(dL); dL.connect(mg, 0, 0); dR.connect(mg, 0, 1); mg.connect(sP); sP.connect(wet);
       const ap = (p, s, a) => { const bpm = (a || amb || {}).bpm || 100, t = Math.max(0.01, Math.min(3.99, p.sync ? segDeNota(p.nota, bpm) : p.tempo / 1000)), fb = p.realim / 100;
-        [dN, dL, dR].forEach((d) => ajusta(ctx, d.delayTime, t, s)); ajusta(ctx, fbN.gain, fb, s); ajusta(ctx, fb1.gain, fb, s); ajusta(ctx, fb2.gain, fb, s); [lpN, lpP].forEach((f) => { f.type = p.amort >= 20000 ? "allpass" : "lowpass"; ajusta(ctx, f.frequency, Math.min(20000, p.amort), s); });
+        ajusta(ctx, dN.delayTime, Math.max(0, t - QUANTO / ctx.sampleRate), s); [dL, dR].forEach((d) => ajusta(ctx, d.delayTime, Math.max(0, t - QUANTO / 2 / ctx.sampleRate), s)); ajusta(ctx, fbN.gain, fb, s); ajusta(ctx, fb1.gain, fb, s); ajusta(ctx, fb2.gain, fb, s); [lpN, lpP].forEach((f) => { f.type = p.amort >= 20000 ? "allpass" : "lowpass"; ajusta(ctx, f.frequency, Math.min(20000, p.amort), s); });
         ajusta(ctx, sN.gain, p.modo === "normal" ? 1 : 0, s); ajusta(ctx, sP.gain, p.modo === "pingpong" ? 1 : 0, s); ajusta(ctx, wet.gain, p.mistura / 100, s); };
       ap(p, false); return { entrada, saida, atualizar: (q, a) => ap(q, true, a), parar() {} };
     },
@@ -483,8 +595,140 @@
     },
   };
 
-  const GRUPOS = ["Equalização e filtros", "Dinâmica", "Cor e distorção", "Espaço e tempo", "Modulação", "Voz e criativos", "Estéreo e utilidades"];
-  const USA_WORKLET = new Set(["compressor", "multibanda", "limitador", "gate", "deesser", "bitcrusher", "flanger", "phaser", "harmonizador"]);
+
+  // ── Guitarra, violão e baixo ──
+  const curvaPedal = (tipo) => { const n = 4096, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = tipo === "overdrive" ? Math.tanh(x) : tipo === "distorcao" ? Math.max(-0.45, Math.min(0.45, x * 0.9)) / 0.9 * 0.9 : tipo === "fuzz" ? (x >= 0 ? (1 - Math.exp(-4 * x)) / 3.2 : -(1 - Math.exp(-2 * -x)) / 2.4) : Math.tanh(0.8 * x) / 0.8; } return c; };
+  const MODELOS_AMP = {
+    limpo: { hp: 70, g1: [1, 3], hp2: 40, g2: [1, 1.5], c1: "limpo", c2: "limpo", tom: [110, 650, 3200, 5500], post: 0.9, limpoBaixo: 0 },
+    crunch: { hp: 90, g1: [2, 12], hp2: 160, g2: [1.5, 5.5], c1: "tubo", c2: "limpo", tom: [100, 750, 3000, 5000], post: 0.9, limpoBaixo: 0 },
+    lead: { hp: 120, g1: [5, 30], hp2: 250, g2: [3, 11], c1: "tubo", c2: "alto", tom: [120, 900, 3500, 5200], post: 0.8, limpoBaixo: 0 },
+    baixo: { hp: 30, g1: [1, 6], hp2: 35, g2: [1, 1.5], c1: "tubo", c2: "limpo", tom: [80, 500, 2500, 4500], post: 0.9, limpoBaixo: 0.8 },
+  };
+  const curvaAmp = (tipo) => { const n = 4096, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = tipo === "tubo" ? (x >= 0 ? Math.tanh(1.2 * x) / 1.2 : Math.tanh(0.85 * x) / 0.85) : tipo === "alto" ? Math.tanh(2.2 * x) / 2.2 * 1.4 : Math.tanh(x); } return c; };
+  REG.amp = {
+    nome: "Amplificador (guitarra e baixo)", grupo: "Guitarra, violão e baixo", descr: "Pré-amplificador de válvula em dois estágios com controle de tom. Use com a Caixa depois dele: sem a caixa o som fica \"chiado\".",
+    params: [S("modelo", "Modelo", [["limpo", "Limpo (cristalino)"], ["crunch", "Crunch (rock clássico)"], ["lead", "Lead (alto ganho)"], ["baixo", "Baixo (valvulado)"]], "crunch"), N("ganho", "Ganho", "%", 0, 100, 45), N("graves", "Graves", "dB", -12, 12, 0, { passo: 0.5 }), N("medios", "Médios", "dB", -12, 12, 0, { passo: 0.5 }), N("agudos", "Agudos", "dB", -12, 12, 0, { passo: 0.5 }), N("presenca", "Presença", "%", 0, 100, 35), N("volume", "Volume", "dB", -24, 12, -6, { passo: 0.5 })],
+    criar(ctx, p) {
+      const entrada = gn(ctx, 1), hp = bw(ctx, "highpass"), g1 = gn(ctx, 1), w1 = ctx.createWaveShaper(), hp2 = bw(ctx, "highpass"), g2 = gn(ctx, 1), w2 = ctx.createWaveShaper(), gr = bq(ctx, "lowshelf"), me = bq(ctx, "peaking"), ag = bq(ctx, "highshelf"), pr = bq(ctx, "highshelf"), pot = ctx.createWaveShaper(), vol = gn(ctx, 1);
+      const lpC = bw(ctx, "lowpass"), gC = gn(ctx, 0); [w1, w2, pot].forEach((w) => { w.oversample = "4x"; }); pot.curve = curvaAmp("limpo"); lpC.frequency.value = 220;
+      serie([entrada, hp, g1, w1, hp2, g2, w2, gr, me, ag, pr, pot, vol]); entrada.connect(lpC); lpC.connect(gC); gC.connect(gr); me.Q.value = 0.8; let modAtual = null;
+      const ap = (p, s) => { const m = MODELOS_AMP[p.modelo] || MODELOS_AMP.crunch, d = p.ganho / 100; if (p.modelo !== modAtual) { w1.curve = curvaAmp(m.c1); w2.curve = curvaAmp(m.c2); modAtual = p.modelo; }
+        ajusta(ctx, hp.frequency, m.hp, s); ajusta(ctx, hp2.frequency, m.hp2, s); ajusta(ctx, g1.gain, m.g1[0] + d * (m.g1[1] - m.g1[0]), s); ajusta(ctx, g2.gain, (m.g2[0] + d * (m.g2[1] - m.g2[0])) * 0.5, s); ajusta(ctx, gC.gain, m.limpoBaixo, s);
+        ajusta(ctx, gr.frequency, m.tom[0], s); ajusta(ctx, gr.gain, p.graves, s); ajusta(ctx, me.frequency, m.tom[1], s); ajusta(ctx, me.gain, p.medios, s); ajusta(ctx, ag.frequency, m.tom[2], s); ajusta(ctx, ag.gain, p.agudos, s); ajusta(ctx, pr.frequency, m.tom[3], s); ajusta(ctx, pr.gain, (p.presenca / 100) * 8 - 2, s); ajusta(ctx, vol.gain, lin(p.volume) * m.post, s); };
+      ap(p, false); return { entrada, saida: vol, atualizar: (q) => ap(q, true), parar() {} };
+    },
+  };
+
+  const CAIXAS = {
+    "4x12": { nome: "4×12 fechada (rock)", hpf: 80, p: [[115, 4, 1.4], [380, -2.5, 1], [2600, 5, 1.1], [4300, -3, 3]], lpf: 5500 },
+    "2x12": { nome: "2×12 aberta (brilhante)", hpf: 100, p: [[180, 3, 1], [1800, 4, 1], [3500, 3, 1.2], [260, -1.5, 1]], lpf: 6500 },
+    "1x12": { nome: "1×12 vintage (combo)", hpf: 90, p: [[140, 3, 1.2], [1200, 3, 0.9], [3000, 2.5, 1.2], [450, -2, 1]], lpf: 5000 },
+    "1x15": { nome: "1×15 de baixo", hpf: 40, p: [[90, 3.5, 1.1], [420, -3, 1], [1800, 2, 1], [3000, 1, 1]], lpf: 4800 },
+    corpo: { nome: "Violão: corpo de madeira", hpf: 70, p: [[110, 3.5, 1.3], [260, -3, 1.2], [3000, 2, 1], [9500, 2.5, 0.8]], lpf: 20000 },
+  };
+  REG.caixa = {
+    nome: "Caixa (alto-falante e microfone)", grupo: "Guitarra, violão e baixo", descr: "Simula o gabinete e o microfone: tira o \"chiado\" da distorção e dá o corpo de uma guitarra de verdade. O modelo de violão devolve o corpo da madeira ao som de captador.",
+    params: [S("tipo", "Caixa", Object.keys(CAIXAS).map((k) => [k, CAIXAS[k].nome]), "4x12"), N("microfone", "Microfone: centro → borda", "%", 0, 100, 25), N("nivel", "Nível", "dB", -18, 12, 0, { passo: 0.5 }), N("mistura", "Mistura", "%", 0, 100, 100)],
+    criar(ctx, p) {
+      const entrada = gn(ctx, 1), saida = gn(ctx, 1), dry = gn(ctx, 0), wet = gn(ctx, 1), hp = bw(ctx, "highpass"), hp2 = bw(ctx, "highpass"), ps = [0, 1, 2, 3].map(() => bq(ctx, "peaking")), l1 = bw(ctx, "lowpass"), l2 = bw(ctx, "lowpass"), nv = gn(ctx, 1);   // o gabinete corta o grave a 24 dB/oitava
+      entrada.connect(dry).connect(saida); serie([entrada, hp, hp2, ...ps, l1, l2, nv]); nv.connect(wet).connect(saida);
+      const ap = (p, s) => { const c = CAIXAS[p.tipo] || CAIXAS["4x12"], m = p.microfone / 100; ajusta(ctx, hp.frequency, c.hpf, s); ajusta(ctx, hp2.frequency, c.hpf, s);
+        c.p.forEach(([f, g, q], i) => { ajusta(ctx, ps[i].frequency, f, s); ajusta(ctx, ps[i].gain, i === 2 ? g - 4 * m : g, s); ajusta(ctx, ps[i].Q, q, s); });
+        const sem = c.lpf >= 20000; l1.type = sem ? "allpass" : "lowpass"; l2.type = sem ? "allpass" : "lowpass"; const f = Math.min(20000, c.lpf * (1 - 0.4 * m)); ajusta(ctx, l1.frequency, f, s); ajusta(ctx, l2.frequency, f, s);
+        ajusta(ctx, nv.gain, lin(p.nivel), s); ajusta(ctx, dry.gain, 1 - p.mistura / 100, s); ajusta(ctx, wet.gain, p.mistura / 100, s); };
+      ap(p, false); return { entrada, saida, atualizar: (q) => ap(q, true), parar() {} };
+    },
+  };
+
+  REG.pedal = {
+    nome: "Pedal (overdrive, distorção, fuzz, boost)", grupo: "Guitarra, violão e baixo", descr: "O pedal que fica na frente do amplificador: Overdrive (médios, graves preservados), Distorção (corte duro), Fuzz (rasgado, assimétrico) e Boost (só empurra o sinal).",
+    params: [S("tipo", "Pedal", [["overdrive", "Overdrive"], ["distorcao", "Distorção"], ["fuzz", "Fuzz"], ["boost", "Boost limpo"]], "overdrive"), N("ganho", "Ganho", "%", 0, 100, 40), N("tom", "Tom", "%", 0, 100, 55), N("nivel", "Nível", "dB", -24, 12, -4, { passo: 0.5 })],
+    criar(ctx, p) {
+      const entrada = gn(ctx, 1), saida = gn(ctx, 1), hp = bw(ctx, "highpass"), pre = gn(ctx, 1), ws = ctx.createWaveShaper(), lp = bw(ctx, "lowpass"), post = gn(ctx, 1), lpL = bw(ctx, "lowpass"), gL = gn(ctx, 0); ws.oversample = "4x"; lpL.frequency.value = 260;
+      serie([entrada, hp, pre, ws, lp, post, saida]); entrada.connect(lpL); lpL.connect(gL); gL.connect(saida); let tipoAtual = null;
+      const ap = (p, s) => { const d = p.ganho / 100, t = p.tipo; if (t !== tipoAtual) { ws.curve = curvaPedal(t); tipoAtual = t; }
+        const cfg = t === "overdrive" ? { hp: 500, g: 1 + d * 30, lowB: 0.5, comp: -4 } : t === "distorcao" ? { hp: 120, g: 4 + d * 60, lowB: 0, comp: -5 } : t === "fuzz" ? { hp: 70, g: 6 + d * 80, lowB: 0, comp: -9 } : { hp: 20, g: lin(d * 24), lowB: 0, comp: 0 };
+        hp.type = t === "boost" ? "allpass" : "highpass"; ajusta(ctx, hp.frequency, cfg.hp, s); ajusta(ctx, pre.gain, cfg.g, s); ajusta(ctx, lp.frequency, 1500 + (p.tom / 100) * 7500, s); ajusta(ctx, post.gain, lin(p.nivel + cfg.comp), s); ajusta(ctx, gL.gain, cfg.lowB, s); };
+      ap(p, false); return { entrada, saida, atualizar: (q) => ap(q, true), parar() {} };
+    },
+  };
+
+  REG.octaver = {
+    nome: "Octaver (oitava abaixo)", grupo: "Guitarra, violão e baixo", descr: "Acrescenta uma nota uma ou duas oitavas abaixo, no estilo dos pedais analógicos. Funciona melhor tocando uma nota de cada vez.",
+    params: [N("o1", "Uma oitava abaixo", "%", 0, 150, 90), N("o2", "Duas oitavas abaixo", "%", 0, 150, 0), N("seco", "Som original", "%", 0, 150, 100), N("tom", "Suavizar (corte)", "Hz", 150, 3000, 700, { log: true })],
+    criar(ctx, p) { const no = wk(ctx, "oh-octaver"); const ap = (p, s) => { wpar(ctx, no, "o1", p.o1 / 100, s); wpar(ctx, no, "o2", p.o2 / 100, s); wpar(ctx, no, "seco", p.seco / 100, s); wpar(ctx, no, "tom", p.tom, s); }; ap(p, false); return { entrada: no, saida: no, atualizar: (q) => ap(q, true), parar() {} }; },
+  };
+
+  REG.autowah = {
+    nome: "Wah de toque (auto-wah)", grupo: "Guitarra, violão e baixo", descr: "O wah que abre sozinho conforme a força com que você toca: forte abre, fraco fecha. Clássico do funk, em guitarra e baixo.",
+    params: [N("sens", "Sensibilidade", "%", 0, 100, 60), N("fmin", "Fechado em", "Hz", 100, 2000, 350, { log: true }), N("fmax", "Aberto em", "Hz", 500, 5000, 2600, { log: true }), N("q", "Ressonância (Q)", "", 0.7, 12, 3.5, { passo: 0.1 }), N("ataque", "Rapidez p/ abrir", "ms", 1, 200, 10, { log: true }), N("liberacao", "Rapidez p/ fechar", "ms", 20, 1500, 200, { log: true }), S("dir", "Direção", [["1", "Abre ao tocar forte"], ["0", "Fecha ao tocar forte"]], "1"), N("mistura", "Mistura", "%", 0, 100, 100)],
+    criar(ctx, p) { const no = wk(ctx, "oh-autowah"); const ap = (p, s) => { wpar(ctx, no, "sens", p.sens / 100, s); wpar(ctx, no, "fmin", p.fmin, s); wpar(ctx, no, "fmax", p.fmax, s); wpar(ctx, no, "q", p.q, s); wpar(ctx, no, "ataque", p.ataque / 1000, s); wpar(ctx, no, "liberacao", p.liberacao / 1000, s); wpar(ctx, no, "dir", +p.dir, s); wpar(ctx, no, "mistura", p.mistura / 100, s); }; ap(p, false); return { entrada: no, saida: no, atualizar: (q) => ap(q, true), parar() {} }; },
+  };
+
+  // ── Bateria e dinâmica ──
+  REG.transiente = {
+    nome: "Transientes (ataque e sustento)", grupo: "Dinâmica", descr: "Realça ou suaviza o ATAQUE da pancada e o SUSTENTO que vem depois, sem mexer no volume geral: dá punch na bateria e define o violão.",
+    params: [N("ataque", "Ataque", "%", -100, 100, 40), N("sust", "Sustento", "%", -100, 100, 0)],
+    criar(ctx, p) { const no = wk(ctx, "oh-transiente"); const ap = (p, s) => { wpar(ctx, no, "ataque", p.ataque / 100, s); wpar(ctx, no, "sust", p.sust / 100, s); }; ap(p, false); return { entrada: no, saida: no, atualizar: (q) => ap(q, true), parar() {} }; },
+  };
+
+  // ── Eletrônicos e criativos ──
+  const PASSOS = [["0.25", "1/16"], ["0.5", "1/8"], ["1", "1/4"], ["2", "1/2"]];
+  REG.ritmico = {
+    nome: "Gate rítmico (trance gate)", grupo: "Eletrônicos e criativos", descr: "Pica o som num padrão rítmico preso ao andamento do projeto: o efeito de pulsos de música eletrônica.",
+    params: [S("passo", "Divisão", PASSOS, "0.5"), S("padrao", "Padrão", [["0", "Contratempo"], ["1", "Quebrado"], ["2", "Sincopado"], ["3", "Pulsos curtos (1 em 4)"], ["5", "Meio-tempo"]], "1"), N("prof", "Profundidade", "%", 0, 100, 100), N("suav", "Suavidade", "ms", 0.5, 60, 4, { log: true, passo: 0.1 }), N("fase", "Deslocar", "passos", 0, 15, 0, { passo: 1 })], usaBpm: true,
+    criar(ctx, p, amb) { const no = wk(ctx, "oh-ritmico"); const ap = (p, s, a) => { const am = a || amb || {}; wpar(ctx, no, "bpm", am.bpm || 100, s); wpar(ctx, no, "origem", am.origem || 0, false); wpar(ctx, no, "passo", +p.passo, s); wpar(ctx, no, "padrao", +p.padrao, s); wpar(ctx, no, "prof", p.prof / 100, s); wpar(ctx, no, "suav", p.suav / 1000, s); wpar(ctx, no, "forma", 0, s); wpar(ctx, no, "fase", p.fase, s); }; ap(p, false); return { entrada: no, saida: no, atualizar: (q, a) => ap(q, true, a), parar() {} }; },
+  };
+  REG.pump = {
+    nome: "Pump (sidechain no ritmo)", grupo: "Eletrônicos e criativos", descr: "O \"respirar\" da música eletrônica: o volume cai a cada batida e volta suavemente, como se um bumbo estivesse comprimindo o som.",
+    params: [S("passo", "A cada", [["0.5", "1/8"], ["1", "1/4 (cada tempo)"], ["2", "1/2"], ["4", "1 compasso"]], "1"), N("prof", "Profundidade", "%", 0, 100, 70), N("rapidez", "Rapidez da volta", "", 1, 30, 6, { passo: 0.5 }), N("suav", "Suavidade", "ms", 0.5, 30, 2, { log: true, passo: 0.1 })], usaBpm: true,
+    criar(ctx, p, amb) { const no = wk(ctx, "oh-ritmico"); const ap = (p, s, a) => { const am = a || amb || {}; wpar(ctx, no, "bpm", am.bpm || 100, s); wpar(ctx, no, "origem", am.origem || 0, false); wpar(ctx, no, "passo", +p.passo, s); wpar(ctx, no, "padrao", 4, s); wpar(ctx, no, "prof", p.prof / 100, s); wpar(ctx, no, "suav", p.suav / 1000, s); wpar(ctx, no, "forma", 1, s); wpar(ctx, no, "rapidez", p.rapidez, s); wpar(ctx, no, "fase", 0, s); }; ap(p, false); return { entrada: no, saida: no, atualizar: (q, a) => ap(q, true, a), parar() {} }; },
+  };
+
+  REG.ecofita = {
+    nome: "Eco de fita (space echo)", grupo: "Espaço e tempo", descr: "Eco de máquina de fita: cada repetição fica mais escura, mais suja e levemente ondulada (wow e flutter). Ótimo para solos e para deixar o violão \"jogado\".",
+    params: [B("sync", "Seguir o andamento", false), S("nota", "Valor da nota", OPC_NOTAS, "1/8.", { mostrarSe: "sync" }), N("tempo", "Tempo", "ms", 30, 1500, 380, { log: true, mostrarSe: "!sync" }), N("realim", "Repetições", "%", 0, 95, 40), N("escurecer", "Escurece os ecos", "Hz", 1000, 12000, 4500, { log: true }), N("graves", "Tira graves dos ecos", "Hz", 40, 600, 140, { log: true }), N("saturacao", "Sujeira da fita", "%", 0, 100, 30), N("wow", "Ondulação lenta (wow)", "%", 0, 100, 25), N("flutter", "Tremida rápida (flutter)", "%", 0, 100, 15), N("mistura", "Mistura", "%", 0, 100, 30)], usaBpm: true,
+    criar(ctx, p, amb) {
+      const entrada = gn(ctx, 1), saida = gn(ctx, 1), wet = gn(ctx, 0), d = ctx.createDelay(4), hp = bw(ctx, "highpass"), pre = gn(ctx, 1), ws = ctx.createWaveShaper(), post = gn(ctx, 1), lp = bw(ctx, "lowpass"), fb = gn(ctx, 0), o1 = osc(ctx, "sine", 0.6), o2 = osc(ctx, "sine", 7.3), g1 = gn(ctx, 0), g2 = gn(ctx, 0);
+      const cv = new Float32Array(2048); for (let i = 0; i < 2048; i++) cv[i] = Math.tanh((i / 1023.5 - 1) * 1.6) / 1.6; ws.curve = cv; ws.oversample = "none";   // sem oversampling: ele tem latência e, dentro do laço do eco, atrasaria cada repetição
+      const dP = ctx.createDelay(0.05); dP.delayTime.value = QUANTO / ctx.sampleRate; entrada.connect(saida); entrada.connect(dP); dP.connect(d); serie([d, hp, pre, ws, post, lp]); lp.connect(wet); wet.connect(saida); lp.connect(fb); fb.connect(d); o1.connect(g1); g1.connect(d.delayTime); o2.connect(g2); g2.connect(d.delayTime);
+      const ap = (p, s, a) => { const bpm = (a || amb || {}).bpm || 100, t = Math.max(0.03, Math.min(3.9, p.sync ? segDeNota(p.nota, bpm) : p.tempo / 1000)), sat = p.saturacao / 100;
+        ajusta(ctx, d.delayTime, Math.max(0, t - QUANTO / ctx.sampleRate), s); ajusta(ctx, hp.frequency, p.graves, s); ajusta(ctx, pre.gain, 1 + sat * 5, s); ajusta(ctx, post.gain, 1 / (1 + sat * 2.2), s); ajusta(ctx, lp.frequency, p.escurecer, s); ajusta(ctx, fb.gain, p.realim / 100, s); ajusta(ctx, g1.gain, (p.wow / 100) * 0.0025, s); ajusta(ctx, g2.gain, (p.flutter / 100) * 0.0004, s); ajusta(ctx, wet.gain, p.mistura / 100, s); };
+      ap(p, false); return { entrada, saida, atualizar: (q, a) => ap(q, true, a), parar: para([o1, o2]) };
+    },
+  };
+
+  REG.ambiente = {
+    nome: "Ambiente (shimmer)", grupo: "Espaço e tempo", descr: "Reverb enorme com um \"brilho celestial\": uma cópia mais aguda (oitava ou quinta) se perde dentro do reverb. O efeito \"jogadão\" para violão, guitarra e voz.",
+    params: [N("tempo", "Tamanho", "s", 1.5, 10, 5, { passo: 0.1 }), N("shimmer", "Brilho celestial", "%", 0, 100, 40), S("semi", "Cópia aguda em", [["12", "Oitava acima"], ["7", "Quinta acima"], ["19", "Oitava e quinta"], ["-12", "Oitava abaixo (profundo)"]], "12"), N("amort", "Brilho do ambiente", "Hz", 1500, 20000, 8000, { log: true }), N("pre", "Pré-atraso", "ms", 0, 200, 30), N("graves", "Corta graves do efeito", "Hz", 20, 800, 150, { log: true }), N("mistura", "Mistura", "%", 0, 100, 40)],
+    criar(ctx, p) {
+      const entrada = gn(ctx, 1), saida = gn(ctx, 1), pit = wk(ctx, "oh-pitch"), c1 = ctx.createConvolver(), c2 = ctx.createConvolver(), sh = gn(ctx, 0), wet = gn(ctx, 0), hp = bw(ctx, "highpass"); c1.normalize = true; c2.normalize = true; let sig = "", timer = null;
+      entrada.connect(saida); entrada.connect(c1); entrada.connect(pit); pit.connect(sh); sh.connect(c2); c1.connect(wet); c2.connect(wet); wet.connect(hp); hp.connect(saida);
+      const novoIR = (p) => { const sg = [p.tempo, p.amort, p.pre].join("|"); if (sg === sig) return; sig = sg; const ir = gerarIR(ctx, { tipo: "salao", tempo: p.tempo, pre: p.pre, amort: p.amort, largura: 1 }); c1.buffer = ir; c2.buffer = ir; };
+      const ap = (p, s) => { wpar(ctx, pit, "semi1", +p.semi, s); wpar(ctx, pit, "v1", 1, s); wpar(ctx, pit, "v2", 0, s); wpar(ctx, pit, "janela", 0.08, s); wpar(ctx, pit, "mistura", 1, s); ajusta(ctx, sh.gain, p.shimmer / 100, s); ajusta(ctx, wet.gain, p.mistura / 100, s); ajusta(ctx, hp.frequency, p.graves, s); if (!s) novoIR(p); else { clearTimeout(timer); timer = setTimeout(() => novoIR(p), 150); } };
+      ap(p, false); return { entrada, saida, atualizar: (q) => ap(q, true), parar() { clearTimeout(timer); } };
+    },
+  };
+
+  REG.vinil = {
+    nome: "Vinil e fita velha (lo-fi)", grupo: "Eletrônicos e criativos", descr: "Estalos de disco, chiado, ondulação de toca-discos e agudos abafados: dá cara de gravação antiga a qualquer faixa.",
+    params: [N("ruido", "Chiado", "%", 0, 100, 25), N("estalos", "Estalos de vinil", "%", 0, 100, 35), N("ondulacao", "Ondulação (wow/flutter)", "%", 0, 100, 30), N("brilho", "Agudos (corte)", "Hz", 3000, 16000, 9000, { log: true }), N("graves", "Graves (corte)", "Hz", 20, 200, 40, { log: true })],
+    criar(ctx, p) {
+      const entrada = gn(ctx, 1), saida = gn(ctx, 1), d = ctx.createDelay(0.1), o1 = osc(ctx, "sine", 0.55), o2 = osc(ctx, "sine", 6.8), g1 = gn(ctx, 0), g2 = gn(ctx, 0), lp = bw(ctx, "lowpass"), hp = bw(ctx, "highpass"), sr = ctx.sampleRate, n = sr * 4, rnd = prng(77);
+      const bc = ctx.createBuffer(1, n, sr), dc = bc.getChannelData(0); for (let i = 0; i < n; i++) if (rnd() < 22 / sr) { const a = (0.3 + 0.7 * rnd()) ** 2 * 1.6 * (rnd() < 0.5 ? -1 : 1), L = Math.round(0.0015 * sr * (1 + 2 * rnd())); for (let j = 0; j < L && i + j < n; j++) dc[i + j] += a * Math.exp((-4 * j) / L); }
+      const bh = ctx.createBuffer(1, n, sr), dh = bh.getChannelData(0), r2 = prng(91); for (let i = 0; i < n; i++) dh[i] = (r2() - 0.5) * 2;
+      const sc = ctx.createBufferSource(), sh = ctx.createBufferSource(), gc = gn(ctx, 0), gh = gn(ctx, 0), hpn = bw(ctx, "highpass"); sc.buffer = bc; sc.loop = true; sh.buffer = bh; sh.loop = true; hpn.frequency.value = 900; sc.start(); sh.start();
+      entrada.connect(d); d.connect(hp); hp.connect(lp); lp.connect(saida); o1.connect(g1); g1.connect(d.delayTime); o2.connect(g2); g2.connect(d.delayTime); sc.connect(gc); gc.connect(saida); sh.connect(hpn); hpn.connect(gh); gh.connect(saida);
+      const ap = (p, s) => { const w = p.ondulacao / 100; ajusta(ctx, d.delayTime, 0.006, s); ajusta(ctx, g1.gain, w * 0.0035, s); ajusta(ctx, g2.gain, w * 0.0004, s); ajusta(ctx, lp.frequency, p.brilho, s); ajusta(ctx, hp.frequency, p.graves, s); ajusta(ctx, gc.gain, (p.estalos / 100) * 0.45, s); ajusta(ctx, gh.gain, (p.ruido / 100) * 0.06, s); };
+      ap(p, false); return { entrada, saida, atualizar: (q) => ap(q, true), parar: para([o1, o2, sc, sh]) };
+    },
+  };
+
+  const GRUPOS = ["Equalização e filtros", "Dinâmica", "Cor e distorção", "Guitarra, violão e baixo", "Espaço e tempo", "Modulação", "Voz e criativos", "Eletrônicos e criativos", "Estéreo e utilidades"];
+  const CATEGORIAS = [["voz", "Voz"], ["violao", "Violão"], ["guitarra", "Guitarra"], ["baixo", "Baixo"], ["bateria", "Bateria"], ["eletronica", "Eletrônicos"], ["geral", "Geral"]];
+  const INST = { eq: ["voz", "violao", "guitarra", "baixo", "bateria", "eletronica", "geral"], filtro: ["guitarra", "baixo", "eletronica", "geral"], exciter: ["voz", "violao", "geral"], compressor: ["voz", "violao", "guitarra", "baixo", "bateria", "eletronica", "geral"], multibanda: ["baixo", "bateria", "geral"], limitador: ["geral", "baixo", "bateria"], gate: ["voz", "guitarra", "bateria"], deesser: ["voz"], transiente: ["bateria", "violao", "baixo"], saturacao: ["voz", "guitarra", "baixo", "bateria", "eletronica"], bitcrusher: ["eletronica", "bateria"], robo: ["voz", "eletronica"], reverb: ["voz", "violao", "guitarra", "bateria", "geral"], delay: ["voz", "violao", "guitarra", "eletronica"], chorus: ["voz", "violao", "guitarra", "baixo"], flanger: ["guitarra", "baixo", "eletronica"], phaser: ["guitarra", "baixo", "eletronica"], tremolo: ["guitarra", "eletronica"], vibrato: ["voz", "guitarra"], autopan: ["guitarra", "eletronica", "geral"], harmonizador: ["voz", "violao", "guitarra"], largura: ["geral", "violao", "eletronica"], utilitario: ["geral"], amp: ["guitarra", "baixo"], caixa: ["guitarra", "baixo", "violao"], pedal: ["guitarra", "baixo", "eletronica"], octaver: ["guitarra", "baixo"], autowah: ["guitarra", "baixo", "eletronica"], ritmico: ["eletronica", "guitarra", "geral"], pump: ["eletronica", "geral"], ecofita: ["guitarra", "violao", "voz", "eletronica"], ambiente: ["guitarra", "violao", "voz", "eletronica"], vinil: ["eletronica", "violao", "geral"] };
+  Object.keys(INST).forEach((k) => { if (REG[k]) REG[k].inst = INST[k]; });
+  const USA_WORKLET = new Set(["compressor", "multibanda", "limitador", "gate", "deesser", "bitcrusher", "flanger", "phaser", "harmonizador", "octaver", "autowah", "ritmico", "pump", "transiente", "ambiente"]);
   let seq = 1;
   const padroes = (tipo) => { const o = {}; REG[tipo].params.forEach((q) => { o[q.id] = q.padrao; }); return o; };
   const novo = (tipo, ov) => ({ id: "fx" + Date.now().toString(36) + (seq++), tipo, ligado: true, p: Object.assign(padroes(tipo), ov || {}) });
@@ -505,6 +749,8 @@
     let t = 0.05; for (const f of lista || []) { if (!f.ligado) continue; const p = f.p || {};
       if (f.tipo === "reverb") t += Math.min(10, (p.pre || 0) / 1000 + (p.tempo || 1) * 1.1) * ((p.mistura || 0) > 0 ? 1 : 0);
       else if (f.tipo === "delay") { const fb = (p.realim || 0) / 100, tt = Math.min(4, (p.tempo || 350) / 1000 + 0.05); t += fb > 0 && (p.mistura || 0) > 0 ? Math.min(8, tt * (1 + Math.log(0.001) / Math.log(Math.max(0.05, fb)))) : tt; }
+      else if (f.tipo === "ambiente") t += Math.min(10, (p.pre || 0) / 1000 + (p.tempo || 5) * 1.1) * ((p.mistura || 0) > 0 ? 1 : 0);
+      else if (f.tipo === "ecofita") { const fb = (p.realim || 0) / 100, tt = Math.min(4, p.sync ? 0.5 : (p.tempo || 380) / 1000); t += fb > 0 && (p.mistura || 0) > 0 ? Math.min(8, tt * (1 + Math.log(0.001) / Math.log(Math.max(0.05, fb)))) : tt; }
       else if (f.tipo === "harmonizador") t += 0.2; else if (f.tipo === "chorus" || f.tipo === "flanger") t += 0.05; }
     return Math.min(14, t);
   }
@@ -543,9 +789,44 @@
     ["bateria-pesada", "Bateria / graves firmes", "Compressão paralela e saturação para dar peso.", [["compressor", { limiar: -26, razao: 6, ataque: 20, mistura: 55, ganho: 4 }], ["saturacao", { tipo: "tubo", drive: 8, mistura: 40 }], ["limitador", { teto: -1 }]]],
     ["master", "Acabamento geral", "Multibanda suave e limitador, para o fim da cadeia.", [["multibanda", {}], ["eq", { hpf: 25, b5g: 1.5 }], ["limitador", { teto: -0.8 }]]],
   ];
-  const PREDEFINICOES = PRE.map(([id, nome, descr, fx]) => ({ id, nome, descr, fx: fx.map(([tipo, p]) => ({ tipo, p })) }));
+  const INST_PRE = { "voz-limpa": "voz", "voz-pop": "voz", locutor: "voz", radio: "voz", telefone: "voz", coro: "voz", dobrada: "voz", harmonia: "voz", robo: "voz", catedral: "geral", palco: "geral", master: "geral", slapback: "guitarra", sonhador: "eletronica", lofi: "eletronica", submarino: "eletronica", "bateria-pesada": "bateria" };
+  const E = (tipo, p) => [tipo, p || {}];
+  const NOVAS = [
+    ["violao-corpo", "Violão com corpo", "Realça o corpo da madeira e nivela a dinâmica, com um espaço curto.", [E("eq", { hpf: 70, b1g: 2, b1f: 120, b2g: -2.5, b2f: 280, b4g: 2, b4f: 4500, b5g: 1.5 }), E("compressor", { limiar: -22, razao: 2.5, ataque: 20, liberacao: 150, ganho: 2 }), E("reverb", { tipo: "quarto", mistura: 8 })], "violao"],
+    ["violao-estudio", "Violão brilhante de estúdio", "Brilho e presença de gravação profissional.", [E("eq", { hpf: 80, b2g: -2, b2f: 250, b3g: 1.5, b3f: 2500, b5g: 3, b5f: 9000 }), E("compressor", { limiar: -24, razao: 3, ataque: 12, ganho: 3 }), E("exciter", { mistura: 15 }), E("reverb", { tipo: "placa", tempo: 1.5, mistura: 12 })], "violao"],
+    ["violao-jogadao", "Violão jogadão (ambiente)", "Eco de fita e reverb gigante com brilho celestial: o violão flutuando.", [E("eq", { hpf: 90 }), E("ecofita", { sync: true, nota: "1/8.", realim: 45, escurecer: 5000, mistura: 30 }), E("ambiente", { tempo: 5.5, shimmer: 35, mistura: 42 })], "violao"],
+    ["violao-12", "Violão de 12 cordas", "Dobra de oitava e um chorus leve, como as cordas duplas de um violão de 12.", [E("harmonizador", { semi1: 12, v1: 100, v2: 0, mistura: 35, janela: 40 }), E("chorus", { vozes: 2, prof: 3, mistura: 25 }), E("eq", { b5g: 2 })], "violao"],
+    ["violao-lofi", "Violão lo-fi empoeirado", "Estalos de vinil, ondulação e agudos abafados.", [E("eq", { hpf: 100, lpf: 6500 }), E("vinil", { ruido: 20, estalos: 40, ondulacao: 35, brilho: 7000 }), E("reverb", { tipo: "quarto", mistura: 10 })], "violao"],
+    ["violao-eco", "Violão com eco de fita", "Eco quente de fita e um espaço de câmara.", [E("ecofita", { tempo: 340, realim: 38, mistura: 28 }), E("reverb", { tipo: "camara", mistura: 12 })], "violao"],
+    ["violao-transiente", "Violão definido (mais ataque)", "Realça o ataque da palhetada para o violão aparecer na mixagem.", [E("transiente", { ataque: 45, sust: -10 }), E("eq", { hpf: 80, b2g: -2, b2f: 300 }), E("compressor", { limiar: -22, razao: 2.5, ganho: 2 })], "violao"],
+    ["guit-limpa", "Guitarra limpa cristalina", "Compressor, amplificador limpo, caixa aberta, chorus suave e mola.", [E("compressor", { limiar: -20, razao: 3, ataque: 25, ganho: 2 }), E("amp", { modelo: "limpo", ganho: 20, agudos: 2, presenca: 45, volume: -4 }), E("caixa", { tipo: "2x12" }), E("chorus", { vozes: 2, prof: 3, mistura: 25 }), E("reverb", { tipo: "mola", tempo: 2, mistura: 18 })], "guitarra"],
+    ["guit-crunch", "Crunch (rock clássico)", "Overdrive na frente de um amplificador crunch e caixa 4×12.", [E("pedal", { tipo: "overdrive", ganho: 30, tom: 55, nivel: -3 }), E("amp", { modelo: "crunch", ganho: 45 }), E("caixa", { tipo: "4x12" }), E("reverb", { tipo: "sala", mistura: 10 })], "guitarra"],
+    ["guit-solo", "Solo com sustain", "Compressão para sustentar, overdrive e amplificador de lead, eco de fita e placa.", [E("compressor", { limiar: -28, razao: 6, ataque: 8, liberacao: 300, ganho: 5 }), E("pedal", { tipo: "overdrive", ganho: 55, tom: 60 }), E("amp", { modelo: "lead", ganho: 55, medios: 3 }), E("caixa", { tipo: "4x12" }), E("ecofita", { sync: true, nota: "1/8.", realim: 32, mistura: 22 }), E("reverb", { tipo: "placa", tempo: 1.8, mistura: 16 })], "guitarra"],
+    ["guit-hard", "Hard rock / alto ganho", "Porta de ruído para a distorção não chiar, e amplificador lead pesado.", [E("gate", { limiar: -48 }), E("pedal", { tipo: "overdrive", ganho: 25, tom: 50 }), E("amp", { modelo: "lead", ganho: 75, graves: 2, medios: -1 }), E("caixa", { tipo: "4x12" })], "guitarra"],
+    ["guit-fuzz", "Fuzz setentista", "Fuzz rasgado e mola de amplificador.", [E("pedal", { tipo: "fuzz", ganho: 70, tom: 50, nivel: -8 }), E("amp", { modelo: "crunch", ganho: 30 }), E("caixa", { tipo: "2x12" }), E("reverb", { tipo: "mola", tempo: 2, mistura: 15 })], "guitarra"],
+    ["guit-wah", "Funk com wah de toque", "O wah abre com a força da palhetada.", [E("compressor", { limiar: -22, razao: 3, ganho: 2 }), E("autowah", { sens: 70, q: 4 }), E("amp", { modelo: "limpo", ganho: 25 }), E("caixa", { tipo: "1x12" })], "guitarra"],
+    ["guit-ambiente", "Guitarra jogadona (ambiente)", "Eco de fita e shimmer: a guitarra flutuando no espaço.", [E("amp", { modelo: "limpo", ganho: 22, volume: -5 }), E("caixa", { tipo: "2x12" }), E("ecofita", { sync: true, nota: "1/4.", realim: 50, mistura: 32 }), E("ambiente", { tempo: 6.5, shimmer: 45, mistura: 50 })], "guitarra"],
+    ["guit-surf", "Surf (mola e trêmolo)", "Trêmolo, mola e amplificador limpo.", [E("tremolo", { taxa: 6, prof: 55 }), E("amp", { modelo: "limpo", ganho: 25 }), E("caixa", { tipo: "1x12" }), E("reverb", { tipo: "mola", tempo: 3, mistura: 40 })], "guitarra"],
+    ["baixo-estudio", "Baixo de estúdio", "Compressão firme, graves definidos e limitador.", [E("compressor", { limiar: -24, razao: 4, ataque: 30, liberacao: 120, ganho: 3 }), E("eq", { hpf: 35, b1g: 2, b1f: 90, b3g: 1.5, b3f: 900 }), E("amp", { modelo: "baixo", ganho: 20 }), E("limitador", { teto: -1.5 })], "baixo"],
+    ["baixo-sujo", "Baixo sujo (overdrive)", "Overdrive com os graves preservados, amplificador e caixa de baixo.", [E("pedal", { tipo: "overdrive", ganho: 45, tom: 40 }), E("amp", { modelo: "baixo", ganho: 35 }), E("caixa", { tipo: "1x15" }), E("compressor", { limiar: -22, razao: 4, ganho: 2 })], "baixo"],
+    ["baixo-octaver", "Baixo grosso (oitava abaixo)", "Uma oitava abaixo para um baixo enorme.", [E("octaver", { o1: 80, o2: 0, seco: 100, tom: 400 }), E("compressor", { limiar: -24, razao: 4, ganho: 3 }), E("amp", { modelo: "baixo", ganho: 15 })], "baixo"],
+    ["baixo-funk", "Baixo funk (wah de toque)", "Wah de envelope no baixo.", [E("autowah", { fmin: 250, fmax: 1800, q: 3, sens: 70 }), E("compressor", { limiar: -22, razao: 4, ganho: 3 }), E("amp", { modelo: "baixo", ganho: 15 })], "baixo"],
+    ["bat-punch", "Bateria com punch", "Mais ataque, compressão e um corte nos médios que embolam.", [E("transiente", { ataque: 60, sust: -10 }), E("compressor", { limiar: -22, razao: 4, ataque: 15, liberacao: 90, ganho: 2 }), E("eq", { b2g: -2, b2f: 350, b4g: 2, b4f: 5000 })], "bateria"],
+    ["bat-esmagada", "Bateria esmagada (paralelo)", "Compressão paralela pesada e saturação de fita.", [E("compressor", { limiar: -34, razao: 10, ataque: 3, liberacao: 80, mistura: 55, ganho: 6 }), E("saturacao", { tipo: "fita", drive: 8, mistura: 40 }), E("limitador", { teto: -1 })], "bateria"],
+    ["bat-gated", "Reverb gated anos 80", "O estrondo cortado seco da bateria dos anos 80.", [E("transiente", { ataque: 40, sust: -30 }), E("reverb", { tipo: "gated", tempo: 0.35, mistura: 45, graves: 100 })], "bateria"],
+    ["bat-lofi", "Bateria lo-fi", "Bitcrusher, agudos abafados e fita.", [E("bitcrusher", { bits: 10, reduz: 3, mistura: 50 }), E("filtro", { tipo: "lowpass", freq: 7000, q: 0.8 }), E("saturacao", { tipo: "fita", drive: 8 })], "bateria"],
+    ["bat-seca", "Bateria seca e firme", "Corta o sustento e o ambiente: bateria direta e controlada.", [E("gate", { limiar: -40 }), E("transiente", { ataque: 30, sust: -50 }), E("eq", { b2g: -2, b2f: 400 })], "bateria"],
+    ["ele-trance", "Trance gate (1/16)", "Pulsos picados no andamento do projeto.", [E("ritmico", { passo: "0.25", padrao: "1", prof: 100, suav: 3 })], "eletronica"],
+    ["ele-pump", "Pump (sidechain no ritmo)", "O som \"respira\" a cada batida, como na música eletrônica.", [E("pump", { passo: "1", prof: 75, rapidez: 6 })], "eletronica"],
+    ["ele-vinil", "Vinil antigo", "Estalos, chiado e ondulação de disco velho.", [E("vinil", { ruido: 25, estalos: 45, ondulacao: 30, brilho: 8000 })], "eletronica"],
+    ["ele-fita", "Fita gasta (wobble)", "Ondulação forte, saturação de fita e agudos caídos.", [E("vinil", { ruido: 15, estalos: 0, ondulacao: 65, brilho: 6500 }), E("saturacao", { tipo: "fita", drive: 8, mistura: 60 })], "eletronica"],
+    ["ele-jogado", "Tudo jogado (ambient)", "Eco de fita e shimmer gigante: som que flutua.", [E("ecofita", { sync: true, nota: "1/4.", realim: 55, mistura: 40 }), E("ambiente", { tempo: 8, shimmer: 55, mistura: 60 })], "eletronica"],
+    ["ele-digital", "Digital sujo", "Bitcrusher picado no ritmo.", [E("bitcrusher", { bits: 6, reduz: 8, mistura: 45 }), E("ritmico", { passo: "0.5", padrao: "2", prof: 80, suav: 3 })], "eletronica"],
+  ];
+  PRE.push(...NOVAS);
+  const PREDEFINICOES = PRE.map(([id, nome, descr, fx, inst]) => ({ id, nome, descr, inst: inst || INST_PRE[id] || "geral", fx: fx.map(([tipo, p]) => ({ tipo, p })) }));
   const daPredefinicao = (pre) => pre.fx.map((f) => novo(f.tipo, f.p));
 
-  const api = { REGISTRO: REG, GRUPOS, PERFIS, NOTAS_SYNC, OPC_NOTAS, PREDEFINICOES, novo, padroes, daPredefinicao, assinatura, precisaWorklet, carregarWorklet, criarCadeia, cauda, renderizar, curvaEq, segDeNota, gerarIR };
+  const api = { REGISTRO: REG, GRUPOS, CATEGORIAS, PERFIS, NOTAS_SYNC, OPC_NOTAS, PREDEFINICOES, novo, padroes, daPredefinicao, assinatura, precisaWorklet, carregarWorklet, criarCadeia, cauda, renderizar, curvaEq, segDeNota, gerarIR };
   raiz.EstudioFx = api;
 })(typeof window !== "undefined" ? window : globalThis);
