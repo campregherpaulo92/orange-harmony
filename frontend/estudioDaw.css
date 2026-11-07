@@ -219,3 +219,28 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-editor.alto { height: clamp(340px, 62vh, 620px); }
 .dw-editor.ampliado { position: absolute; inset: 0; height: auto; z-index: 60; border-top: 0; }
 #dwP-afin.on { display: block; overflow: hidden; } .dw-afin { height: 100%; min-height: 0; }
+
+/* efeitos por faixa */
+#dwP-fx.on { display: block; overflow: hidden; } .dw-fx { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.dw-fx-barra { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--dw-borda); flex-wrap: wrap; flex: 0 0 auto; }
+.dw-fx-barra .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.dw-chip { background: #1d160e; border: 1px solid var(--dw-borda); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-weight: 700; font-size: 12px; color: var(--dw-suave); display: inline-flex; gap: 6px; align-items: center; }
+.dw-chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; } .dw-chip small { background: var(--dw-laranja); color: #1a0c02; border-radius: 999px; padding: 0 6px; font-weight: 800; }
+.dw-chip.on { color: #1a0c02; background: var(--dw-laranja); border-color: var(--dw-laranja); } .dw-chip.on small { background: #1a0c02; color: var(--dw-laranja); }
+.dw-fx-cadeia { flex: 1; min-height: 0; overflow: auto; display: flex; gap: 10px; padding: 12px; align-items: flex-start; scrollbar-color: rgba(249,115,22,.5) var(--dw-fundo); }
+.dw-fxc { flex: 0 0 262px; background: var(--dw-painel2); border: 1px solid var(--dw-borda); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.dw-fxc.desl { opacity: .5; } .dw-fxc .cab { display: flex; align-items: center; gap: 4px; font-weight: 800; } .dw-fxc .cab .t { flex: 1; color: var(--dw-laranja); }
+.dw-fxc .mini { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--dw-borda); background: #1d160e; color: var(--dw-suave); cursor: pointer; padding: 0; font-size: 11px; line-height: 1; }
+.dw-fxc .mini:hover { color: var(--dw-texto); border-color: var(--dw-laranja); } .dw-fxc .mini:disabled { opacity: .3; cursor: not-allowed; }
+.dw-fxc .chave { position: relative; width: 34px; height: 18px; display: inline-block; } .dw-fxc .chave input { opacity: 0; position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+.dw-fxc .chave i { position: absolute; inset: 0; background: #3a2f23; border-radius: 999px; transition: .15s; } .dw-fxc .chave i::after { content: ""; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: .15s; }
+.dw-fxc .chave input:checked + i { background: var(--dw-turq); } .dw-fxc .chave input:checked + i::after { left: 18px; }
+.dw-fxc .desc { font-size: 11px; color: var(--dw-suave); line-height: 1.35; }
+.dw-fxc h5 { margin: 6px 0 0; font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--dw-laranja); }
+.dw-fxc .par { display: grid; grid-template-columns: 104px 1fr 64px; gap: 6px; align-items: center; font-size: 11px; color: var(--dw-suave); } .dw-fxc .par b { color: var(--dw-texto); text-align: right; font-variant-numeric: tabular-nums; font-size: 11px; }
+.dw-fxc .par input[type=range] { width: 100%; accent-color: var(--dw-laranja); } .dw-fxc .par.sel { grid-template-columns: 104px 1fr; } .dw-fxc .par.sel select { width: 100%; } .dw-fxc .par.bool { grid-template-columns: auto 1fr; }
+.dw-fxc svg.curva { width: 100%; height: 64px; background: #0a0705; border: 1px solid var(--dw-borda); border-radius: 8px; }
+.dw-fxc .gr { height: 6px; background: #0a0705; border-radius: 3px; overflow: hidden; } .dw-fxc .gr i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #14b8a6, #eab308, #ef4444); }
+.dw-fx-vazio { padding: 34px; color: var(--dw-suave); text-align: center; width: 100%; line-height: 1.6; }
+#dwMenuFx { width: 320px; max-height: min(70vh, 520px); overflow-y: auto; } #dwMenuFx .grp { padding: 8px 10px 2px; font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--dw-laranja); font-weight: 800; }
+.dw-sinc { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; } .dw-sinc input { width: 74px; background: #0a0705; border: 1px solid var(--dw-borda); border-radius: 8px; padding: 4px 6px; }

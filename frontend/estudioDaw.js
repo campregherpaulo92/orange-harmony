@@ -86,31 +86,45 @@
       ctx = new A(); mestre = ctx.createGain(); mestre.gain.value = S.mestreVol;
       limitador = criarLimitador(ctx); anMestre = ctx.createAnalyser(); anMestre.fftSize = 512;
       mestre.connect(limitador); limitador.connect(ctx.destination); limitador.connect(anMestre);
+      if (window.EstudioFx && ctx.audioWorklet) EstudioFx.carregarWorklet(ctx).then(() => { fxOk = true; S.faixas.forEach((f) => { const n = nos.get(f.id); if (n) montarCadeia(f, n); }); }).catch((e) => { fxErro = e; });
     }
     if (ctx.state === "suspended") ctx.resume();
     return true;
   }
   function criarLimitador(c) { const l = c.createDynamicsCompressor(); l.threshold.value = -2; l.knee.value = 0; l.ratio.value = 20; l.attack.value = 0.003; l.release.value = 0.12; return l; }
+  let fxOk = false, fxErro = null;
+  const ambFx = () => ({ bpm: S.bpm });
+  // Cadeia de efeitos da faixa. Só reconstrói quando a LISTA muda (adicionar, remover, ordem, ligar/desligar); mexer num parâmetro só atualiza.
+  function montarCadeia(f, n) {
+    if (!window.EstudioFx) return;
+    const lista = f.fx || [], efetiva = fxOk ? lista : lista.filter((x) => !EstudioFx.precisaWorklet([x])), sig = EstudioFx.assinatura(efetiva);
+    if (n.cadeia && n.cadeia.assinatura === sig) { n.cadeia.atualizar(efetiva, ambFx()); return; }
+    const nova = EstudioFx.criarCadeia(ctx, efetiva, ambFx());
+    try { n.entrada.disconnect(); } catch (e) { /* solto */ }
+    if (n.cadeia) { try { n.cadeia.saida.disconnect(); } catch (e) { /* solto */ } n.cadeia.parar(); }
+    n.entrada.connect(nova.entrada); nova.saida.connect(n.gain); n.cadeia = nova;
+  }
+  function descartarNos() { nos.forEach((n) => { try { n.entrada.disconnect(); n.gain.disconnect(); n.pan.disconnect(); if (n.cadeia) { n.cadeia.saida.disconnect(); n.cadeia.parar(); } } catch (e) { /* solto */ } }); nos.clear(); }
   function noDe(f) {
     let n = nos.get(f.id);
     if (!n) {
-      const gain = ctx.createGain(), pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain(), an = ctx.createAnalyser();
-      an.fftSize = 512; gain.connect(pan); pan.connect(an); pan.connect(mestre);
+      const entrada = ctx.createGain(), gain = ctx.createGain(), pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain(), an = ctx.createAnalyser();
+      an.fftSize = 512; entrada.connect(gain); gain.connect(pan); pan.connect(an); pan.connect(mestre);
       gain.gain.value = audivel(f.id) ? f.vol : 0; if (pan.pan) pan.pan.value = f.pan;
-      n = { gain, pan, an }; nos.set(f.id, n);
+      n = { entrada, gain, pan, an, cadeia: null }; nos.set(f.id, n); montarCadeia(f, n);
     }
     return n;
   }
   function atualizarNos() {
     if (!ctx) return;
-    S.faixas.forEach((f) => { const n = noDe(f); n.gain.gain.setTargetAtTime(audivel(f.id) ? f.vol : 0, ctx.currentTime, 0.01); if (n.pan.pan) n.pan.pan.setTargetAtTime(f.pan, ctx.currentTime, 0.01); });
+    S.faixas.forEach((f) => { const n = noDe(f); montarCadeia(f, n); n.gain.gain.setTargetAtTime(audivel(f.id) ? f.vol : 0, ctx.currentTime, 0.01); if (n.pan.pan) n.pan.pan.setTargetAtTime(f.pan, ctx.currentTime, 0.01); });
   }
   // Programa UMA região num contexto (ao vivo ou na exportação). t0 = ponto do projeto onde a reprodução começa.
   function programarRegiao(c, r, destino, t0, base) {
     const buf = bufs.get(r.buf); if (!buf || r.ini + r.dur <= t0) return null;
     const dentro = Math.max(0, t0 - r.ini), quando = base + Math.max(0, r.ini - t0), dur = r.dur - dentro;
     if (dur <= 0.004) return null;
-    const src = c.createBufferSource(), g = c.createGain(), vol = Math.pow(10, r.ganho / 20); src.buffer = buf;
+    const src = c.createBufferSource(), g = c.createGain(), vol = Math.pow(10, r.ganho / 20) * (buf.numberOfChannels === 1 ? Math.SQRT1_2 : 1); src.buffer = buf;   // áudio mono: −3 dB no centro (como a lei de panorâmica faz), já aqui, para o volume não depender de haver efeitos
     const pts = [[0, 1]];                                       // [segundos desde o início agendado, fator de volume]
     if (r.fi > 0 && dentro < r.fi) { pts[0] = [0, dentro / r.fi]; pts.push([r.fi - dentro, 1]); }
     if (r.fo > 0) { const inicioFo = (r.dur - r.fo) - dentro; if (inicioFo <= 0) { pts.length = 0; pts.push([0, Math.min(1, Math.max(0, (r.dur - dentro) / r.fo))]); pts.push([dur, 0]); } else { pts.push([inicioFo, 1]); pts.push([dur, 0]); } }
@@ -122,7 +136,7 @@
   function pararFontes() { fontes.forEach((s) => { try { s.stop(); } catch (e) { /* já terminou */ } }); fontes = []; }
   function agendarRegioes(t0) {
     pararFontes();
-    S.regioes.forEach((r) => { const f = faixaPorId(r.f); if (!f) return; const s = programarRegiao(ctx, r, noDe(f).gain, t0, ctx.currentTime); if (s) fontes.push(s); });
+    S.regioes.forEach((r) => { const f = faixaPorId(r.f); if (!f) return; const s = programarRegiao(ctx, r, noDe(f).entrada, t0, ctx.currentTime); if (s) fontes.push(s); });
     proxBeat = Math.ceil(t0 / beatDur() - 1e-6);
   }
   let reagendando = null;
@@ -215,6 +229,7 @@
         <select id="dwMetro" title="Metrônomo: desligado, ligado ou só ao gravar"><option value="off">Desligado</option><option value="on">Ligado</option><option value="rec">Só ao gravar</option></select>
         <label>Contagem <select id="dwContagem" title="Pré-contagem antes de gravar"><option value="0">Nenhuma</option><option value="1" selected>1 compasso</option><option value="2">2 compassos</option></select></label>
         <label title="Se a voz gravada ficar atrasada em relação à música, aumente. Ex.: 80">Atraso <input type="number" id="dwLat" value="0" min="0" max="500" step="10"> ms</label>
+          <button class="dw-btn peq" id="dwCalibrar" title="Mede o atraso do seu equipamento: toca cliques e vê quanto eles demoram a aparecer na gravação">Calibrar</button>
           <label title="Como você ouve a música enquanto grava. Com fone de ouvido a voz sai limpa. Com caixa de som o navegador tenta cancelar o eco, mas parte da música pode vazar no microfone.">Ouço com <select id="dwMonitor"><option value="caixa">Caixa de som</option><option value="fone">Fone de ouvido</option></select></label>
         </div>
       </div>
@@ -234,13 +249,13 @@
       <section class="dw-editor" id="dwEditor">
         <div class="dw-abas">
           <button class="dw-aba on" data-aba="mix">Mixer</button><button class="dw-aba" data-aba="reg">Região</button>
-          <button class="dw-aba" data-aba="afin">Afinação</button><button class="dw-aba" data-aba="fx">Efeitos <small>EM BREVE</small></button>
+          <button class="dw-aba" data-aba="afin">Afinação</button><button class="dw-aba" data-aba="fx">Efeitos</button>
           <span class="esp"></span><button class="dw-btn peq" id="dwRecolher">${ic("seta")} Recolher</button>
         </div>
         <div class="dw-painel-aba on" id="dwP-mix"><div class="dw-mix" id="dwMix"></div></div>
         <div class="dw-painel-aba" id="dwP-reg"><div class="dw-regp" id="dwRegp"></div></div>
         <div class="dw-painel-aba" id="dwP-afin"><div class="dw-afin" id="dwAfin"></div></div>
-        <div class="dw-painel-aba" id="dwP-fx"><div class="dw-breve"><b>Efeitos por faixa</b><br>Na etapa seguinte entram equalizador, compressor, reverb e delay em cada faixa, com predefinições como "Voz limpa" e "Voz de rádio".</div></div>
+        <div class="dw-painel-aba" id="dwP-fx"><div class="dw-fx" id="dwFx"></div></div>
       </section>
       <div class="dw-status"><span class="e" id="dwStatus">Pronto.</span><span id="dwStatusSel"></span><span id="dwSalvo"></span><span>Espaço toca/pausa · R grava · V seleciona · C divide · S divide no cursor · Ctrl+Z desfaz</span></div>
       <div class="dw-contagem" id="dwContagemOv" hidden></div>
@@ -270,6 +285,14 @@
           <div class="dw-dica">Os projetos ficam guardados no navegador deste aparelho (não vão para a nuvem). Exporte a mixagem para ter um arquivo seguro.</div>
         </div>
       </div>
+      <div class="dw-modal" id="dwModalCal" hidden>
+        <div class="dw-modal-cartao">
+          <div class="dw-modal-topo"><b>Calibrar o atraso da gravação</b><button id="dwCalFechar" aria-label="Fechar">×</button></div>
+          <div class="dw-dica">Mede quanto tempo o som leva, no SEU equipamento, entre o app tocar e a gravação “ouvir”. Assim as próximas gravações já nascem alinhadas com a música.<br><br><b>1.</b> Use o mesmo fone e microfone com que você grava.<br><b>2.</b> Aproxime o microfone do fone (ou da caixa de som) e suba um pouco o volume.<br><b>3.</b> Fique em silêncio: o app toca 6 cliques e mede quando eles aparecem.</div>
+          <div class="dw-dica" id="dwCalRes"></div>
+          <div class="dw-acoes"><button class="dw-btn" id="dwCalFechar2">Fechar</button><button class="dw-btn cheio" id="dwCalIniciar">Começar a medir</button></div>
+        </div>
+      </div>
       <input type="file" id="dwArqAudio" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.webm" hidden>
     </div>
     <div class="dw-menu" id="dwMenuArquivo" hidden>
@@ -280,6 +303,7 @@
       <button data-a="novo"><b>Novo projeto</b><small>o atual fica salvo; começa um em branco</small></button>
       <button data-a="classico"><b>Abrir o Estúdio clássico</b><small>a versão antiga, enquanto você valida esta</small></button>
     </div>
+    <div class="dw-menu" id="dwMenuFx" hidden></div>
     <div class="dw-menu" id="dwMenuFaixa" hidden>
       <button data-n="voz"><b>Nova faixa de voz</b><small>cria a faixa já armada, pronta para gravar</small></button>
       <button data-n="audio"><b>Importar áudio</b><small>traz um arquivo do aparelho para uma faixa nova</small></button>
@@ -296,7 +320,7 @@
         <div class="l1"><input class="nome" value="${esc(f.nome)}" data-nome="${f.id}">
           <button class="dw-mini m ${f.mudo ? "on" : ""}" data-m="${f.id}" title="Mudo">M</button><button class="dw-mini s ${f.solo ? "on" : ""}" data-s="${f.id}" title="Solo">S</button><button class="dw-mini r ${f.arm ? "on" : ""}" data-r="${f.id}" title="Armar para gravar">R</button></div>
         <div class="l2"><span>Vol</span><input type="range" min="0" max="1.5" step="0.01" value="${f.vol}" data-vol="${f.id}"><span>Pan</span><input type="range" min="-1" max="1" step="0.1" value="${f.pan}" data-pan="${f.id}" style="max-width:46px"></div>
-        <div class="l3"><div class="medidor"><i data-vu="${f.id}"></i></div><button class="excl" data-del="${f.id}" title="Excluir a faixa e as regiões dela">Excluir</button></div>
+        <div class="l3"><div class="medidor"><i data-vu="${f.id}"></i></div><button class="excl" data-fxabrir="${f.id}" title="Efeitos desta faixa">FX${(f.fx || []).filter((x) => x.ligado).length ? " " + (f.fx || []).filter((x) => x.ligado).length : ""}</button><button class="excl" data-del="${f.id}" title="Excluir a faixa e as regiões dela">Excluir</button></div>
       </div>`).join("");
   }
   function renderLinhas() {
@@ -337,6 +361,11 @@
         <div class="dw-param"><span>Ganho</span><input type="range" min="-24" max="12" step="0.5" value="${r.ganho}" data-rg="ganho"><b>${r.ganho} dB</b></div>
         <div class="dw-param"><span>Fade in</span><input type="range" min="0" max="5" step="0.05" value="${r.fi}" data-rg="fi"><b>${r.fi.toFixed(2)}s</b></div>
         <div class="dw-param"><span>Fade out</span><input type="range" min="0" max="5" step="0.05" value="${r.fo}" data-rg="fo"><b>${r.fo.toFixed(2)}s</b></div></div>
+      <div class="dw-bloco"><h4>Sincronia (posição fina)</h4>
+        <div class="dw-dica">Começa em <b>${r.ini.toFixed(3)} s</b> (compasso ${(r.ini / BAR() + 1).toFixed(2)}). Se a voz gravada ficou atrasada em relação à música, empurre a região para a esquerda (valores negativos). Atalho: Alt + ← / → move 1 ms (com Shift, 10 ms).</div>
+        <div class="dw-sinc"><button class="dw-btn peq" data-rs="-10">−10 ms</button><button class="dw-btn peq" data-rs="-1">−1 ms</button><input type="number" id="dwSincMs" value="0" step="1" title="Quantos milissegundos mover (negativo = para a esquerda)"><button class="dw-btn peq" data-rs="aplicar">Mover</button><button class="dw-btn peq" data-rs="1">+1 ms</button><button class="dw-btn peq" data-rs="10">+10 ms</button></div>
+        <div class="dw-sinc"><button class="dw-btn peq" data-rs="cursor">Alinhar ao cursor</button><button class="dw-btn peq" data-rs="batida">Alinhar à batida mais próxima</button></div>
+      </div>
       <div class="dw-bloco"><h4>Limpeza de ruído</h4>
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
           <select id="dwLimpaInt" title="Quanto o ruído é atenuado">${[["0.6", "Leve"], ["0.8", "Média"], ["0.95", "Forte"]].map(([v, n]) => `<option value="${v}" ${+v === limpaInt ? "selected" : ""}>${n}</option>`).join("")}</select>
@@ -349,7 +378,7 @@
   }
   function renderTudo() {
     renderCab(); renderLinhas(); renderMixer(); renderRegiao();
-    selStatus(); atualizarUndo();
+    selStatus(); atualizarUndo(); if (abaAtiva === "fx") renderFx();
   }
   function selStatus() { const r = regiaoPorId(S.regiaoSel), e = $("#dwStatusSel"); if (e) e.textContent = r ? `Região: ${r.nome}` : ""; if (abaAtiva === "afin") prepararAfinacao(); }
   function posicionar() {
@@ -370,7 +399,7 @@
     if (!S.gravando && S.tAtual > fimProjeto() + 0.3) { pausar(); S.tAtual = Math.max(0, fimProjeto()); posicionar(); return; }
     posicionar(); agendarMetro(); if (S.gravando) atualizarGravacao();
     if (S.seguir) { const sc = $("#dwTlScroll"), x = px(S.tAtual); if (x > sc.scrollLeft + sc.clientWidth * 0.88 || x < sc.scrollLeft) sc.scrollLeft = Math.max(0, x - sc.clientWidth * 0.15); }
-    medidores(true); requestAnimationFrame(tick);
+    medidores(true); medidoresFx(); requestAnimationFrame(tick);
   }
   function tocar() {
     if (S.tocando) return; if (!garantirAudio()) return dica("Este navegador não toca áudio aqui.");
@@ -428,7 +457,7 @@
       const tipo = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
       g.rec = new MediaRecorder(g.stream, tipo ? { mimeType: tipo } : undefined); g.rec.ondataavailable = (ev) => { if (ev.data.size) g.chunks.push(ev.data); }; g.rec.start();
     }
-    renderTudo(); tocar(); dica("Gravando… aperte o botão vermelho (ou a barra de espaço) para parar." + (g.aviso || ""));
+    tocar(); renderTudo(); dica("Gravando… aperte o botão vermelho (ou a barra de espaço) para parar." + (g.aviso || ""));
   }
   function atualizarGravacao() {
     const g = gravacao; if (!g || !g.regiao) return; const r = g.regiao; r.dur = Math.max(0.05, S.tAtual - r.ini);
@@ -630,13 +659,16 @@
   async function renderizarMixagem() {
     if (!S.regioes.some((r) => bufs.has(r.buf))) throw new Error("Não há áudio para exportar.");
     garantirAudio();
-    const sr = ctx.sampleRate, fim = fimProjeto() + 0.3, OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const audiveis = S.faixas.filter((f) => audivel(f.id)), temFx = (f) => (f.fx || []).some((x) => x.ligado);
+    const cauda = window.EstudioFx ? Math.max(0, ...audiveis.filter(temFx).map((f) => EstudioFx.cauda(f.fx))) : 0;   // o reverb e o eco continuam soando depois do fim da música
+    const sr = ctx.sampleRate, fim = fimProjeto() + 0.3 + cauda, OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     const off = new OC(2, Math.ceil(fim * sr), sr), m = off.createGain(); m.gain.value = S.mestreVol;
     const lim = criarLimitador(off); m.connect(lim); lim.connect(off.destination);
-    S.faixas.forEach((f) => {
-      if (!audivel(f.id)) return;
+    if (window.EstudioFx && audiveis.some((f) => EstudioFx.precisaWorklet(f.fx))) await EstudioFx.carregarWorklet(off);
+    audiveis.forEach((f) => {
       const g = off.createGain(); g.gain.value = f.vol; if (off.createStereoPanner) { const p = off.createStereoPanner(); p.pan.value = f.pan; g.connect(p); p.connect(m); } else g.connect(m);
-      S.regioes.filter((r) => r.f === f.id).forEach((r) => programarRegiao(off, r, g, 0, 0));
+      const cad = window.EstudioFx ? EstudioFx.criarCadeia(off, f.fx || [], ambFx()) : null, alvo = cad ? cad.entrada : g; if (cad) cad.saida.connect(g);
+      S.regioes.filter((r) => r.f === f.id).forEach((r) => programarRegiao(off, r, alvo, 0, 0));
     });
     return off.startRendering();
   }
@@ -688,7 +720,7 @@
 
   // ══ EVENTOS ═══════════════════════════════════════════════════════════
   function menu(id, ancora, alinharDireita) {
-    const m = $(id), r = ancora.getBoundingClientRect(), outros = ["#dwMenuArquivo", "#dwMenuFaixa"].filter((x) => x !== id); outros.forEach((x) => { $(x).hidden = true; });
+    const m = $(id), r = ancora.getBoundingClientRect(), outros = ["#dwMenuArquivo", "#dwMenuFaixa", "#dwMenuFx"].filter((x) => x !== id); outros.forEach((x) => { $(x).hidden = true; });
     m.style.top = r.bottom + 6 + "px"; m.style.left = (alinharDireita ? Math.max(8, r.right - 290) : r.left) + "px"; m.hidden = !m.hidden;
   }
   function ligarEventos() {
@@ -696,7 +728,7 @@
     $("#dwPlay").addEventListener("click", () => { if (S.gravando || S.contando) pararGravacao(); else S.tocando ? pausar() : tocar(); });
     $("#dwStop").addEventListener("click", () => { if (S.gravando || S.contando) pararGravacao(); parar(); });
     $("#dwRec").addEventListener("click", iniciarGravacao);
-    $("#dwBpm").addEventListener("change", (e) => { const novo = Math.max(40, Math.min(220, +e.target.value || 100)); e.target.value = novo; mudar(() => { S.bpm = novo; }); dica(`Andamento: ${novo} BPM. A grade e o metrônomo acompanham (o áudio não muda).`); });
+    $("#dwBpm").addEventListener("change", (e) => { const novo = Math.max(40, Math.min(220, +e.target.value || 100)); e.target.value = novo; mudar(() => { S.bpm = novo; }); atualizarNos(); dica(`Andamento: ${novo} BPM. A grade e o metrônomo acompanham (o áudio não muda).`); });
     $("#dwComp").addEventListener("change", (e) => { mudar(() => { S.compasso = e.target.value; }); dica("Compasso: " + e.target.value); });
     $("#dwNome").addEventListener("change", (e) => { S.nome = e.target.value.trim() || "Meu projeto"; agendarSalvar(); });
     $("#dwFerr").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (b) usarFerramenta(b.dataset.f); });
@@ -719,7 +751,8 @@
     $("#dwCabLista").addEventListener("scroll", () => { if (sync) return; sync = true; $("#dwTlScroll").scrollTop = $("#dwCabLista").scrollTop; sync = false; });
     function aoClicarFaixaUI(e) {
       const t = e.target, a = (k) => t.closest(`[data-${k}]`) && t.closest(`[data-${k}]`).dataset[k];
-      const m = a("m"), s = a("s"), r = a("r"), del = a("del");
+      const m = a("m"), s = a("s"), r = a("r"), del = a("del"), fxa = a("fxabrir");
+      if (fxa) { S.faixaSel = fxa; abrirAba("fx"); renderTudo(); return; }
       if (m) { const f = faixaPorId(m); mudar(() => { f.mudo = !f.mudo; }); atualizarNos(); return; }
       if (s) { const f = faixaPorId(s); mudar(() => { f.solo = !f.solo; }); atualizarNos(); return; }
       if (r) { const f = faixaPorId(r); mudar(() => { const novo = !f.arm; S.faixas.forEach((x) => { x.arm = false; }); f.arm = novo; }); dica(f.arm ? `Faixa "${f.nome}" armada: o botão vermelho grava nela.` : "Faixa desarmada."); return; }
@@ -737,7 +770,7 @@
       if (t.dataset.rg) { const r = regiaoPorId(S.regiaoSel); r[t.dataset.rg] = +t.value; const b = t.parentElement.querySelector("b"); b.textContent = t.dataset.rg === "ganho" ? t.value + " dB" : (+t.value).toFixed(2) + "s"; if (t.dataset.rg !== "ganho") renderLinhas(); agendarSalvar(); if (S.tocando) reagendar(); }
       if (t.hasAttribute("data-rnome")) { const r = regiaoPorId(S.regiaoSel); r.nome = t.value; const rot = $(`.dw-regiao[data-r="${r.id}"] .rot`); if (rot) rot.textContent = t.value; agendarSalvar(); }
     });
-    $("#dwRegp").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); const r = regiaoPorId(S.regiaoSel); if (!b || !r) return; const acao = b.dataset.ra;
+    $("#dwRegp").addEventListener("click", (e) => { const rs = e.target.closest("[data-rs]"); if (rs) { const r0 = regiaoPorId(S.regiaoSel); if (r0) acaoSinc(r0, rs.dataset.rs); return; } const b = e.target.closest("[data-ra]"); const r = regiaoPorId(S.regiaoSel); if (!b || !r) return; const acao = b.dataset.ra;
       if (acao === "excluir") excluirRegiao(r.id); else if (acao === "duplicar") duplicarRegiao(r); else if (acao === "dividir") dividirRegiao(r, S.tAtual);
       else if (acao === "limpar") limparRegiao(r); else if (acao === "cancelar") limpezaCancelada = true;
       else if (acao === "alternar") alternarLimpeza(r); else if (acao === "manter") manterVersao(r); });
@@ -750,7 +783,7 @@
     // arquivo e faixa
     $("#dwArquivo").addEventListener("click", (e) => { menu("#dwMenuArquivo", e.currentTarget, true); e.stopPropagation(); });
     $("#dwAddFaixa").addEventListener("click", (e) => { menu("#dwMenuFaixa", e.currentTarget, false); e.stopPropagation(); });
-    document.addEventListener("click", (e) => { if (!e.target.closest(".dw-menu") && !e.target.closest("#dwArquivo") && !e.target.closest("#dwAddFaixa")) { $("#dwMenuArquivo").hidden = true; $("#dwMenuFaixa").hidden = true; } });
+    document.addEventListener("click", (e) => { if (!e.target.closest(".dw-menu") && !e.target.closest("#dwArquivo") && !e.target.closest("#dwAddFaixa") && !e.target.closest("#dwFxAdd")) { $("#dwMenuArquivo").hidden = true; $("#dwMenuFaixa").hidden = true; $("#dwMenuFx").hidden = true; } });
     $("#dwMenuArquivo").addEventListener("click", (e) => {
       const b = e.target.closest("[data-a]"); if (!b) return; $("#dwMenuArquivo").hidden = true;
       if (b.dataset.a === "importar") $("#dwArqAudio").click();
@@ -773,6 +806,9 @@
     $("#dwSepBib").addEventListener("click", (e) => { if (window.escolherDaBiblioteca) window.escolherDaBiblioteca($("#dwSepArq"), e.currentTarget); else $("#dwSepStatus").textContent = "A biblioteca não está disponível agora."; });
     $("#dwSepArq").addEventListener("change", (e) => { sepArquivo = e.target.files[0] || null; $("#dwSepNome").textContent = sepArquivo ? `Escolhido: ${sepArquivo.name}` : "Nenhum áudio escolhido."; atualizarBotaoSep(); });
     $("#dwSepIniciar").addEventListener("click", iniciarSeparacao);
+    ligarEventosFx();
+    $("#dwCalibrar").addEventListener("click", () => { $("#dwCalRes").textContent = ""; $("#dwModalCal").hidden = false; });
+    $("#dwCalFechar").addEventListener("click", () => { $("#dwModalCal").hidden = true; }); $("#dwCalFechar2").addEventListener("click", () => { $("#dwModalCal").hidden = true; }); $("#dwCalIniciar").addEventListener("click", calibrarAtraso);
     $("#dwModos").addEventListener("change", () => { try { localStorage.setItem("oh-dw-modosep", modoSep()); } catch (e) { /* sem armazenamento */ } atualizarAvisoModo(); });
     $("#dwProjFechar").addEventListener("click", () => { $("#dwModalProj").hidden = true; });
     $("#dwProjLista").addEventListener("click", async (e) => {
@@ -783,8 +819,8 @@
     // teclado
     document.addEventListener("keydown", (e) => {
       const pag = $("#page-estudio"); if (!pag || !pag.classList.contains("oh-page-ativa")) return;
-      if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
-      if (!$("#dwModalSep").hidden || !$("#dwModalProj").hidden) return;
+      if ((/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !(e.target.tagName === "INPUT" && e.target.type === "range" && (e.ctrlKey || e.metaKey))) || e.target.isContentEditable) return;
+      if (!$("#dwModalSep").hidden || !$("#dwModalProj").hidden || !$("#dwModalCal").hidden) return;
       if (abaAtiva === "afin") {
         if (afin && afin.tecla(e)) return;
         if (e.code === "Space") { if (!/^(BUTTON|A)$/.test(e.target.tagName)) { e.preventDefault(); const p = document.getElementById("afPlay"); if (p) p.click(); } return; }
@@ -792,6 +828,7 @@
       }
       const meta = e.ctrlKey || e.metaKey, k = e.key.toLowerCase(), r = regiaoPorId(S.regiaoSel);
       if (e.key === " " || e.code === "Space") { if (/^(BUTTON|A|SUMMARY)$/.test(e.target.tagName)) return; e.preventDefault(); if (S.gravando || S.contando) pararGravacao(); else S.tocando ? pausar() : tocar(); }
+      else if (e.altKey && !meta && (e.key === "ArrowLeft" || e.key === "ArrowRight") && r) { e.preventDefault(); moverRegiaoMs(r, (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 10 : 1)); }
       else if (meta && k === "z" && !e.shiftKey) { e.preventDefault(); desfazer(); }
       else if (meta && (k === "y" || (k === "z" && e.shiftKey))) { e.preventDefault(); refazer(); }
       else if (meta && k === "c") { if (r) { areaCopia = { ...r }; dica("Região copiada. Ctrl+V cola no cursor."); } }
@@ -811,12 +848,13 @@
   }
   function abrirAba(n) {
     abaAtiva = n; $$(".dw-aba").forEach((a) => a.classList.toggle("on", a.dataset.aba === n)); $$(".dw-painel-aba").forEach((p) => p.classList.toggle("on", p.id === "dwP-" + n));
-    const ed = $("#dwEditor"); ed.classList.remove("fechado"); ed.classList.toggle("alto", n === "afin"); $("#dwRecolher").innerHTML = ic("seta") + " Recolher";
-    if (n !== "afin") { ed.classList.remove("ampliado"); if (afin) { afin.parar(); afin.definirModoAmpliado(false); } } else prepararAfinacao();
+    const ed = $("#dwEditor"); ed.classList.remove("fechado"); ed.classList.toggle("alto", n === "afin" || n === "fx"); $("#dwRecolher").innerHTML = ic("seta") + " Recolher";
+    if (n !== "afin") { ed.classList.remove("ampliado"); if (afin) { afin.parar(); afin.definirModoAmpliado(false); } }
+    if (n === "afin") prepararAfinacao(); else if (n === "fx") renderFx();
   }
   function novoProjeto() {
     salvarProjeto();                                   // o projeto atual fica guardado (Arquivo → Abrir projeto)
-    if (S.tocando) pausar(); pararFontes(); nos.forEach((n) => { try { n.gain.disconnect(); n.pan.disconnect(); } catch (e) { /* solto */ } }); nos.clear();
+    if (S.tocando) pausar(); pararFontes(); descartarNos();
     S.id = "p" + Date.now().toString(36); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0; S.nome = "Meu projeto"; S.tom = ""; S.bpm = 100; S.sujo = false;
     bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); pilha.length = 0; refaz.length = 0;
     try { localStorage.removeItem("oh-dw-ultimo"); } catch (e) { /* sem armazenamento */ }
@@ -885,7 +923,7 @@
     const chaves = await idb(db.transaction("audios").objectStore("audios").getAllKeys(IDBKeyRange.bound(id + ":", id + ":\uffff"))), usados = new Set(ids.map((b) => id + ":" + b)), sobra = chaves.filter((k) => !usados.has(k));
     if (sobra.length) await new Promise((ok) => { const t = db.transaction("audios", "readwrite"); sobra.forEach((k) => t.objectStore("audios").delete(k)); t.oncomplete = ok; t.onerror = ok; });
     db.close();
-    if (S.tocando) pausar(); pararFontes(); nos.forEach((n) => { try { n.gain.disconnect(); n.pan.disconnect(); } catch (e) { /* solto */ } }); nos.clear();
+    if (S.tocando) pausar(); pararFontes(); descartarNos();
     bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); novosBufs.forEach((v, k) => { bufs.set(k, v); picos.set(k, novosPicos.get(k)); blobs.set(k, novosBlobs.get(k)); noBanco.add(k); });
     const faltaram = proj.regioes.filter((r) => !bufs.has(r.buf)).length;
     S.id = proj.id; S.nome = proj.nome; S.faixas = proj.faixas; S.regioes = proj.regioes.filter((r) => bufs.has(r.buf)); S.regioes.forEach((r) => { if (r.alt && !bufs.has(r.alt.buf)) { r.alt = null; } }); S.bpm = proj.bpm; S.compasso = proj.compasso; S.tom = proj.tom || ""; S.mestreVol = proj.mestreVol == null ? 0.9 : proj.mestreVol;
@@ -991,6 +1029,145 @@
     } catch (e) { dica("Não consegui aplicar a afinação: " + ((e && e.message) || "erro inesperado") + "."); }
   }
 
+  // ══ EFEITOS POR FAIXA (aba Efeitos: os cartões são gerados a partir do registro de efeitos) ═══
+  let arrastandoFx = null;
+  const faixaFx = () => faixaPorId(S.faixaSel) || S.faixas[0] || null;
+  const minhasPre = () => { try { return JSON.parse(localStorage.getItem("oh-dw-presets") || "[]"); } catch (e) { return []; } };
+  const casasFx = (q) => (q.passo != null ? (String(q.passo).split(".")[1] || "").length : q.max - q.min >= 100 ? 0 : q.max - q.min >= 10 ? 1 : 2);
+  const fmtFx = (q, v) => `${(+v).toFixed(casasFx(q))}${q.un ? " " + q.un : ""}`;
+  const posFx = (q, v) => (q.log ? (Math.log(v / q.min) / Math.log(q.max / q.min)) * 1000 : ((v - q.min) / (q.max - q.min)) * 1000);
+  const valFx = (q, pos) => { const v = q.log ? q.min * Math.pow(q.max / q.min, pos / 1000) : q.min + (pos / 1000) * (q.max - q.min), c = casasFx(q), passo = q.passo || Math.pow(10, -c); return Math.min(q.max, Math.max(q.min, +(Math.round(v / passo) * passo).toFixed(Math.max(c, 2)))); };
+  function curvaEqSvg(p) {
+    const c = EstudioFx.curvaEq(p, 80), W = 230, H = 64, y = (db) => H / 2 - (Math.max(-20, Math.min(20, db)) / 20) * (H / 2 - 4); let d = "";
+    for (let i = 0; i < c.db.length; i++) d += (i ? "L" : "M") + ((i / (c.db.length - 1)) * W).toFixed(1) + " " + y(c.db[i]).toFixed(1);
+    return `<svg class="curva" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line x1="0" x2="${W}" y1="${H / 2}" y2="${H / 2}" stroke="rgba(255,255,255,.18)"/>${[100, 1000, 10000].map((f) => { const x = (Math.log(f / 20) / Math.log(1000)) * W; return `<line x1="${x}" x2="${x}" y1="0" y2="${H}" stroke="rgba(255,255,255,.08)"/>`; }).join("")}<path d="${d}" fill="none" stroke="#ff8a2a" stroke-width="2"/></svg>`;
+  }
+  function cartaoFx(fx, i, total) {
+    const R = EstudioFx.REGISTRO[fx.tipo]; if (!R) return ""; const p = Object.assign(EstudioFx.padroes(fx.tipo), fx.p); let ult = null, h = "";
+    for (const q of R.params) {
+      if (q.mostrarSe && !(q.mostrarSe[0] === "!" ? !p[q.mostrarSe.slice(1)] : !!p[q.mostrarSe])) continue;
+      if (q.grupo && q.grupo !== ult) { h += `<h5>${esc(q.grupo)}</h5>`; ult = q.grupo; }
+      if (q.tipo === "num") h += `<label class="par"><span>${esc(q.rotulo)}</span><input type="range" min="0" max="1000" step="1" value="${Math.round(posFx(q, p[q.id]))}" data-fxi="${fx.id}" data-fxp="${q.id}"><b data-fxv="${fx.id}:${q.id}">${fmtFx(q, p[q.id])}</b></label>`;
+      else if (q.tipo === "sel") h += `<label class="par sel"><span>${esc(q.rotulo)}</span><select data-fxi="${fx.id}" data-fxp="${q.id}">${q.opcoes.map(([v, nome]) => `<option value="${v}" ${String(v) === String(p[q.id]) ? "selected" : ""}>${esc(nome)}</option>`).join("")}</select></label>`;
+      else h += `<label class="par bool"><input type="checkbox" data-fxi="${fx.id}" data-fxp="${q.id}" ${p[q.id] ? "checked" : ""}><span>${esc(q.rotulo)}</span></label>`;
+    }
+    return `<div class="dw-fxc ${fx.ligado ? "" : "desl"}" data-fxc="${fx.id}">
+      <div class="cab"><button class="mini" data-fxm="esq" ${i === 0 ? "disabled" : ""} title="Mover para antes (o som passa primeiro por quem está à esquerda)">◀</button><span class="t" title="${esc(R.descr)}">${esc(R.nome)}</span><button class="mini" data-fxm="dir" ${i === total - 1 ? "disabled" : ""} title="Mover para depois">▶</button>
+        <label class="chave" title="Liga e desliga este efeito"><input type="checkbox" data-fxon="${fx.id}" ${fx.ligado ? "checked" : ""}><i></i></label><button class="mini" data-fxdel="${fx.id}" title="Remover este efeito">×</button></div>
+      <div class="desc">${esc(R.descr)}</div>${fx.tipo === "eq" ? curvaEqSvg(p) : ""}${R.medidor ? `<div class="gr" title="Quanto o efeito está reduzindo o volume agora"><i data-fxgr="${fx.id}"></i></div>` : ""}
+      <div class="params">${h}</div><button class="dw-btn peq" data-fxreset="${fx.id}">Valores padrão</button></div>`;
+  }
+  function renderFx() {
+    const el = $("#dwFx"); if (!el) return; if (!window.EstudioFx) { el.innerHTML = '<div class="dw-fx-vazio">O motor de efeitos não carregou. Atualize a página.</div>'; return; }
+    const f = faixaFx(); if (!f) { el.innerHTML = '<div class="dw-fx-vazio">Ainda não há faixas. Importe, grave ou separe uma música.</div>'; return; }
+    const lista = f.fx || [], mine = minhasPre();
+    const top = el.querySelector(".dw-fx-cadeia"), rolagem = top ? top.scrollLeft : 0;
+    el.innerHTML = `<div class="dw-fx-barra">
+        <div class="chips">${S.faixas.map((x) => `<button class="dw-chip ${x.id === f.id ? "on" : ""}" data-fxfaixa="${x.id}"><i style="background:${x.cor}"></i>${esc(x.nome)}${(x.fx || []).filter((y) => y.ligado).length ? ` <small>${(x.fx || []).filter((y) => y.ligado).length}</small>` : ""}</button>`).join("")}</div>
+        <select id="dwFxPre" title="Troca a cadeia desta faixa por uma pronta (dá para desfazer)"><option value="">Predefinição…</option><optgroup label="Prontas">${EstudioFx.PREDEFINICOES.map((p) => `<option value="p:${p.id}" title="${esc(p.descr)}">${esc(p.nome)}</option>`).join("")}</optgroup>${mine.length ? `<optgroup label="Minhas">${mine.map((m, k) => `<option value="m:${k}">${esc(m.nome)}</option>`).join("")}</optgroup>` : ""}</select>
+        <button class="dw-btn peq" id="dwFxAdd">${ic("mais")} Adicionar efeito</button><button class="dw-btn peq" id="dwFxSalvar" title="Guarda a cadeia desta faixa para usar em outros projetos">Salvar como minha predefinição</button>
+        <button class="dw-btn peq" id="dwFxTodos" title="Liga ou desliga todos os efeitos desta faixa (para comparar com e sem)">${lista.length && lista.every((x) => !x.ligado) ? "Ligar todos" : "Desligar todos"}</button><button class="dw-btn peq" id="dwFxLimpar">Limpar cadeia</button>
+        ${fxErro ? '<span class="dw-dica" style="color:#ef4444">Este navegador não tem AudioWorklet: compressor, limitador, porta de ruído, de-esser, bitcrusher, flanger, phaser e harmonizador ficam mudos.</span>' : ""}</div>
+      <div class="dw-fx-cadeia">${lista.length ? lista.map((x, i) => cartaoFx(x, i, lista.length)).join("") : `<div class="dw-fx-vazio"><b>${esc(f.nome)}</b> ainda não tem efeitos.<br>Escolha uma <b>predefinição</b> (por exemplo "Voz limpa") ou clique em <b>Adicionar efeito</b>: são ${Object.keys(EstudioFx.REGISTRO).length} à escolha, de equalizador e compressor a reverb, delay, chorus, phaser e até “robô”.</div>`}</div>`;
+    const novo = el.querySelector(".dw-fx-cadeia"); if (novo) novo.scrollLeft = rolagem;
+  }
+  function mudarFx(fn) { const antes = foto(); fn(); empilhar(antes); renderTudo(); atualizarNos(); }
+  function aplicarFxVivo(f, fx) { const n = nos.get(f.id); if (n && n.cadeia) n.cadeia.atualizar([fx], ambFx()); }
+  function medidoresFx() {
+    if (abaAtiva !== "fx") return; const f = faixaFx(), n = f && nos.get(f.id); if (!n || !n.cadeia) return;
+    $$("[data-fxgr]").forEach((b) => { const inst = n.cadeia.itens.get(b.dataset.fxgr), v = inst && inst.reducao ? inst.reducao : 0; b.style.width = Math.min(100, Math.abs(v) * 5) + "%"; });
+  }
+  function ligarEventosFx() {
+    const el = $("#dwFx");
+    el.addEventListener("input", (e) => {
+      const t = e.target, fid = t.dataset.fxi; if (!fid || t.type !== "range") return;
+      const f = faixaFx(), fx = (f.fx || []).find((x) => x.id === fid); if (!fx) return; const q = EstudioFx.REGISTRO[fx.tipo].params.find((z) => z.id === t.dataset.fxp);
+      if (arrastandoFx === null) arrastandoFx = foto();
+      const v = valFx(q, +t.value); fx.p[q.id] = v; const lab = el.querySelector(`[data-fxv="${fid}:${q.id}"]`); if (lab) lab.textContent = fmtFx(q, v);
+      aplicarFxVivo(f, fx); if (fx.tipo === "eq") { const sv = el.querySelector(`[data-fxc="${fid}"] svg.curva`); if (sv) sv.outerHTML = curvaEqSvg(Object.assign(EstudioFx.padroes("eq"), fx.p)); } agendarSalvar();
+    });
+    el.addEventListener("change", (e) => {
+      const t = e.target, f = faixaFx(); if (!f) return;
+      if (t.type === "range") { if (arrastandoFx !== null) { empilhar(arrastandoFx); arrastandoFx = null; } return; }
+      if (t.id === "dwFxPre") {
+        const v = t.value; t.value = ""; if (!v) return; let lista = null, nome = "";
+        if (v.startsWith("p:")) { const pr = EstudioFx.PREDEFINICOES.find((x) => x.id === v.slice(2)); if (pr) { lista = EstudioFx.daPredefinicao(pr); nome = pr.nome; } } else { const m = minhasPre()[+v.slice(2)]; if (m) { lista = m.fx.map((x) => EstudioFx.novo(x.tipo, x.p)); nome = m.nome; } }
+        if (lista) { mudarFx(() => { f.fx = lista; }); dica(`Predefinição “${nome}” aplicada em ${f.nome}. Ctrl+Z desfaz.`); } return;
+      }
+      if (t.dataset.fxon) { mudarFx(() => { const fx = f.fx.find((x) => x.id === t.dataset.fxon); if (fx) fx.ligado = t.checked; }); return; }
+      if (t.dataset.fxi) { mudarFx(() => { const fx = f.fx.find((x) => x.id === t.dataset.fxi); if (!fx) return; fx.p[t.dataset.fxp] = t.type === "checkbox" ? t.checked : t.value; const R = EstudioFx.REGISTRO[fx.tipo]; if (R.aoMudar) R.aoMudar(fx.p, t.dataset.fxp); }); }
+    });
+    el.addEventListener("click", (e) => {
+      const t = e.target, f = faixaFx(); if (!f) return; f.fx = f.fx || [];
+      const chip = t.closest("[data-fxfaixa]"); if (chip) { S.faixaSel = chip.dataset.fxfaixa; renderTudo(); return; }
+      const mv = t.closest("[data-fxm]"); if (mv) { const id = mv.closest("[data-fxc]").dataset.fxc, i = f.fx.findIndex((x) => x.id === id), j = i + (mv.dataset.fxm === "esq" ? -1 : 1); if (j >= 0 && j < f.fx.length) mudarFx(() => { const [x] = f.fx.splice(i, 1); f.fx.splice(j, 0, x); }); return; }
+      const del = t.closest("[data-fxdel]"); if (del) { mudarFx(() => { f.fx = f.fx.filter((x) => x.id !== del.dataset.fxdel); }); dica("Efeito removido. Ctrl+Z traz de volta."); return; }
+      const rs = t.closest("[data-fxreset]"); if (rs) { mudarFx(() => { const fx = f.fx.find((x) => x.id === rs.dataset.fxreset); if (fx) fx.p = EstudioFx.padroes(fx.tipo); }); return; }
+      if (t.closest("#dwFxAdd")) {
+        const m = $("#dwMenuFx"), r = t.closest("#dwFxAdd").getBoundingClientRect(); const R = EstudioFx.REGISTRO;
+        m.innerHTML = EstudioFx.GRUPOS.map((g) => `<div class="grp">${esc(g)}</div>` + Object.keys(R).filter((k) => R[k].grupo === g).map((k) => `<button data-fxnovo="${k}"><b>${esc(R[k].nome)}</b><small>${esc(R[k].descr)}</small></button>`).join("")).join("");
+        const altura = Math.min(520, innerHeight - 16); m.style.maxHeight = altura + "px"; m.style.top = Math.max(8, Math.min(r.bottom + 6, innerHeight - altura - 8)) + "px"; m.style.left = Math.max(8, Math.min(r.left, innerWidth - 330)) + "px"; $("#dwMenuArquivo").hidden = true; $("#dwMenuFaixa").hidden = true; m.hidden = !m.hidden; e.stopPropagation(); return;
+      }
+      if (t.closest("#dwFxSalvar")) { if (!f.fx.length) return dica("Esta faixa não tem efeitos para guardar."); const nome = (prompt("Nome da sua predefinição:", f.nome + " — minha cadeia") || "").trim(); if (!nome) return; const lista = minhasPre(); lista.push({ nome, fx: f.fx.map((x) => ({ tipo: x.tipo, p: JSON.parse(JSON.stringify(x.p)) })) }); try { localStorage.setItem("oh-dw-presets", JSON.stringify(lista)); dica(`Predefinição “${nome}” guardada neste aparelho (aparece em “Minhas”).`); } catch (err) { dica("Não consegui guardar a predefinição."); } renderFx(); return; }
+      if (t.closest("#dwFxTodos")) { const todosOff = f.fx.length && f.fx.every((x) => !x.ligado); mudarFx(() => { f.fx.forEach((x) => { x.ligado = todosOff; }); }); dica(todosOff ? "Todos os efeitos ligados." : "Todos os efeitos desligados: ouça a faixa sem eles."); return; }
+      if (t.closest("#dwFxLimpar")) { if (f.fx.length) { mudarFx(() => { f.fx = []; }); dica("Cadeia limpa. Ctrl+Z desfaz."); } }
+    });
+    $("#dwMenuFx").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-fxnovo]"); if (!b) return; const f = faixaFx(); if (!f) return; $("#dwMenuFx").hidden = true; let novoId = null;
+      mudarFx(() => { f.fx = f.fx || []; const fx = EstudioFx.novo(b.dataset.fxnovo); f.fx.push(fx); novoId = fx.id; }); dica(`${EstudioFx.REGISTRO[b.dataset.fxnovo].nome} adicionado a ${f.nome}.`);
+      const c = $(`[data-fxc="${novoId}"]`); if (c) c.scrollIntoView({ inline: "end", block: "nearest" });
+    });
+  }
+
+  // ══ SINCRONIA FINA DA REGIÃO ═══
+  function moverRegiaoMs(r, ms) {
+    const d = ms / 1000; let consumiu = 0;
+    mudar(() => { let novo = r.ini + d; if (novo < 0) { const c = -novo; if (c < r.dur - 0.05) { r.off += c; if (r.alt) r.alt.off += c; r.dur -= c; consumiu = c; } novo = 0; } r.ini = Math.round(novo * 1000) / 1000; });
+    dica(`Região em ${r.ini.toFixed(3)} s (${ms > 0 ? "+" : ""}${ms} ms)${consumiu ? ` — passou do começo do projeto, então cortei ${(consumiu * 1000).toFixed(0)} ms do início do áudio` : ""}.`);
+  }
+  function acaoSinc(r, a) {
+    if (a === "aplicar") { const v = +($("#dwSincMs") || { value: 0 }).value || 0; if (v) moverRegiaoMs(r, v); }
+    else if (a === "cursor") { mudar(() => { r.ini = Math.round(S.tAtual * 1000) / 1000; }); dica(`Região alinhada ao cursor (${r.ini.toFixed(3)} s).`); }
+    else if (a === "batida") { mudar(() => { r.ini = Math.round((Math.round(r.ini / beatDur()) * beatDur()) * 1000) / 1000; }); dica(`Região encaixada na batida mais próxima (${r.ini.toFixed(3)} s).`); }
+    else moverRegiaoMs(r, +a);
+  }
+
+  // ══ CALIBRAR O ATRASO DO EQUIPAMENTO ═══
+  // Toca cliques e procura cada um na gravação (correlação com o formato do clique). Devolve o atraso de cada um e se a medida é confiável.
+  function medirAtrasoDeCliques(x, sr, tempos) {
+    const L = Math.round(0.012 * sr), tpl = new Float32Array(L); for (let i = 0; i < L; i++) tpl[i] = Math.sin((2 * Math.PI * 2500 * i) / sr) * (0.5 - 0.5 * Math.cos((2 * Math.PI * (i + 0.5)) / L));
+    const atrasos = [];
+    for (const te of tempos) {
+      const ini = Math.max(0, Math.floor((te - 0.03) * sr)), fim = Math.min(x.length - L, Math.floor((te + 0.5) * sr)); if (fim <= ini) continue;   // procura até 500 ms depois (os cliques estão a 600 ms um do outro)
+      const c = new Float32Array(fim - ini); let melhor = 0, soma = 0;
+      for (let k = ini; k < fim; k++) { let v = 0; for (let i = 0; i < L; i++) v += x[k + i] * tpl[i]; v = Math.abs(v); c[k - ini] = v; soma += v; if (v > melhor) melhor = v; }
+      if (melhor < 6 * (soma / c.length) || melhor < 1e-4) continue;   // sem um pico claro: este clique não foi ouvido direito
+      let k = 0; while (c[k] < 0.6 * melhor) k++;                      // a PRIMEIRA chegada forte (num ambiente com eco, um reflexo pode ser mais forte que o som direto)...
+      let topo = k; for (let j = k; j < Math.min(c.length, k + (L >> 1)); j++) if (c[j] > c[topo]) topo = j;   // ...e o ponto mais alto dela
+      atrasos.push((ini + topo) / sr - te);
+    }
+    const o = atrasos.slice().sort((a, b) => a - b), mediana = o.length ? o[o.length >> 1] : null, desvio = o.length ? o[o.length - 1] - o[0] : null;
+    return { atrasos, mediana, desvio, ok: o.length >= 4 && desvio < 0.02 };
+  }
+  async function calibrarAtraso() {
+    const res = $("#dwCalRes"), btn = $("#dwCalIniciar"); if (S.gravando || S.contando) { res.textContent = "Pare a gravação antes de calibrar."; return; }
+    if (!garantirAudio()) { res.textContent = "Este navegador não toca áudio aqui."; return; } if (S.tocando) pausar();
+    let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }); } catch (e) { res.textContent = "Não consegui usar o microfone. Libere o acesso ao microfone neste site e tente de novo."; return; }
+    btn.disabled = true; res.textContent = "Tocando 6 cliques e ouvindo… fique em silêncio."; const tempos = [0.9, 1.5, 2.1, 2.7, 3.3, 3.9], partes = [];
+    try {
+      const tipo = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)), rec = new MediaRecorder(stream, tipo ? { mimeType: tipo } : undefined);
+      rec.ondataavailable = (ev) => { if (ev.data.size) partes.push(ev.data); }; rec.start(); const t0 = ctx.currentTime;   // a gravação e o toque começam juntos, como numa gravação de verdade
+      tempos.forEach((t) => { const o = ctx.createOscillator(), g = ctx.createGain(), q = t0 + t; o.frequency.value = 2500; g.gain.setValueAtTime(0.0001, q); g.gain.linearRampToValueAtTime(0.9, q + 0.0015); g.gain.exponentialRampToValueAtTime(0.0001, q + 0.012); o.connect(g); g.connect(ctx.destination); o.start(q); o.stop(q + 0.02); });
+      await new Promise((ok) => setTimeout(ok, (tempos[tempos.length - 1] + 1.1) * 1000));
+      const fim = new Promise((ok) => { rec.onstop = ok; }); rec.stop(); await fim; stream.getTracks().forEach((tr) => tr.stop());
+      const buf = await decodificar(await new Blob(partes).arrayBuffer()), x = new Float32Array(buf.length); for (let c = 0; c < buf.numberOfChannels; c++) { const d = buf.getChannelData(c); for (let i = 0; i < x.length; i++) x[i] += d[i] / buf.numberOfChannels; }
+      const m = medirAtrasoDeCliques(x, buf.sampleRate, tempos);
+      if (m.ok) { const ms = Math.max(0, Math.min(500, Math.round(m.mediana * 1000))); S.latencia = ms; $("#dwLat").value = ms; try { localStorage.setItem("oh-dw-lat", ms); } catch (e) { /* sem armazenamento */ } res.innerHTML = `<b>Atraso medido: ${ms} ms</b> (os 6 cliques variaram só ${(m.desvio * 1000).toFixed(1)} ms). Já coloquei no campo “Atraso”: as próximas gravações nascem alinhadas com a música.`; dica(`Atraso do equipamento: ${ms} ms, já aplicado nas próximas gravações.`); }
+      else res.textContent = `Não consegui medir com segurança (ouvi ${m.atrasos.length} de 6 cliques${m.desvio != null ? `, variando ${(m.desvio * 1000).toFixed(0)} ms` : ""}). Aproxime o microfone do fone ou da caixa de som, suba o volume, fique em silêncio e tente de novo.`;
+    } catch (e) { res.textContent = "A calibração falhou: " + ((e && e.message) || "erro inesperado") + "."; try { stream.getTracks().forEach((tr) => tr.stop()); } catch (e2) { /* já parou */ } }
+    finally { btn.disabled = false; }
+  }
+
   // ══ INÍCIO ════════════════════════════════════════════════════════════
   let restauradoUmaVez = false;
   function aoAbrir() {
@@ -1008,6 +1185,8 @@
   window.EstudioDaw = {
     aoAbrir,
     _teste: {
+      pilhaN: () => pilha.length,
+      cadeiaDe: (id) => { const n = nos.get(id); return n && n.cadeia ? { assinatura: n.cadeia.assinatura, itens: [...n.cadeia.itens.keys()], reducao: [...n.cadeia.itens.values()].map((i) => i.reducao) } : null; }, fxOk: () => fxOk, renderFx, moverRegiaoMs, medirAtrasoDeCliques, acaoSinc,
       afin: () => afin, aplicarAfinacao, prepararAfinacao, limparRegiao, modoSep, salvarProjeto, listarProjetos, abrirProjeto, S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
       fontes: () => fontes.length, cliques: () => cliquesTotal, cliqueLog: () => cliqueLog.slice(),
       ganhoDe: (id) => { const n = nos.get(id); return n ? n.gain.gain.value : null; },
