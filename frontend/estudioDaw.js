@@ -726,7 +726,7 @@
   }
   function ligarEventos() {
     $("#dwRew").addEventListener("click", () => { ir(0); $("#dwTlScroll").scrollLeft = 0; });
-    $("#dwPlay").addEventListener("click", () => { if (S.gravando || S.contando) pararGravacao(); else S.tocando ? pausar() : tocar(); });
+    $("#dwPlay").addEventListener("click", () => { if (S.gravando || S.contando) pararGravacao(); else if (S.tocando) pausar(); else { tocar(); if (afin && afin.pendente && afin.pendente()) dica("Atenção: há ajustes de afinação ainda NÃO aplicados, então este play toca o áudio original. Na aba Afinação, clique em “Aplicar na região”."); } });
     $("#dwStop").addEventListener("click", () => { if (S.gravando || S.contando) pararGravacao(); parar(); });
     $("#dwRec").addEventListener("click", iniciarGravacao);
     $("#dwBpm").addEventListener("change", (e) => { const novo = Math.max(40, Math.min(220, +e.target.value || 100)); e.target.value = novo; mudar(() => { S.bpm = novo; }); atualizarNos(); dica(`Andamento: ${novo} BPM. A grade e o metrônomo acompanham (o áudio não muda).`); });
@@ -1005,7 +1005,7 @@
   }
   function criarAfin() {
     if (afin || !window.EstudioAfinacaoUI || !window.EstudioAfinacao) return afin;
-    afin = EstudioAfinacaoUI.criar($("#dwAfin"), { modo: "estudio", aoAplicar: aplicarAfinacao, aoAmpliar: ampliarAfin, aoTocar: () => { if (S.tocando) pausar(); } });
+    afin = EstudioAfinacaoUI.criar($("#dwAfin"), { modo: "estudio", aoAplicar: aplicarAfinacao, aoPendente: (p) => { const t = $('.dw-aba[data-aba="afin"]'); if (t) t.classList.toggle("pend", p); }, aoAmpliar: ampliarAfin, aoTocar: () => { if (S.tocando) pausar(); } });
     return afin;
   }
   function prepararAfinacao() {

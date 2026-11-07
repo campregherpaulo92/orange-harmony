@@ -103,7 +103,7 @@
       <div class="af-tut" id="afTutModal"><div class="cartao"><div class="passo" id="afTutPasso"></div><h2 id="afTutTitulo"></h2><div id="afTutSvg"></div><p id="afTutTexto"></p>
         <div class="nav"><button id="afTutVoltar">Voltar</button><div class="pontos" id="afTutPontos"></div><button id="afTutProx" class="cheio">Próximo</button></div></div></div>
     </div>`;
-    const $ = (id) => host.querySelector("#" + id), vp = $("afVp"), cv = $("afCv"), status = (t) => { $("afStatus").textContent = t; };
+    const $ = (id) => host.querySelector("#" + id), vp = $("afVp"), cv = $("afCv"), status = (t) => { $("afStatus").textContent = t + (opc.modo !== "prototipo" && E && E.det && E.cents && E.aplicado && Array.from(E.cents).some((v, q) => Math.abs(v - (q < E.aplicado.length ? E.aplicado[q] : 0)) > 0.05) ? "  ·  Ainda não aplicado: o play do Estúdio toca o original até você clicar em “Aplicar na região”." : ""); };
     const E = { sr: 44100, mono: null, dur: 0, det: null, midi: null, cents: null, trans: null, nts: null, sel: null, pps: 110, ph: 22, minM: 48, maxM: 72, tom: "cromatica", bpm: 100, beat: 0.6, porComp: 4, origem: 0, alcance: 0.2, encaixe: "semitom", nomes: true, undo: [], redo: [], sujo: true, afinado: null, urlO: null, urlA: null, tocando: false, ocupado: false, pos: 0, ouvir: "original", vel: 1, loop: false, voltas: 0, nTocadas: 0, hover: -1, drag: null, nome: "voz", chave: null, carregado: false };
     $("afTom").innerHTML = TONS.map(([v, n]) => `<option value="${v}">${n}</option>`).join("");
 
@@ -227,7 +227,11 @@
     function suavizar() { const c = E.cents, d = E.det, o = Float32Array.from(c); for (let q = 0; q < d.n; q++) { if (!d.voz[q]) continue; let s = 0, w = 0; for (let k = -2; k <= 2; k++) { const i = q + k; if (i < 0 || i >= d.n || !d.voz[i]) continue; const p = 3 - Math.abs(k); s += c[i] * p; w += p; } o[q] = s / w; } c.set(o); }
 
     // ── edição ──
-    function mudou() { E.sujo = true; if (opc.aoMudar) opc.aoMudar(); }
+    // "pendente" = a curva de ajuste é diferente da que já está gravada no áudio da região (só o botão "Aplicar na região" grava)
+    const pendente = () => { if (!E.cents) return false; const ap = E.aplicado; for (let q = 0; q < E.cents.length; q++) if (Math.abs(E.cents[q] - (ap && q < ap.length ? ap[q] : 0)) > 0.05) return true; return false; };
+    function marcarPendente() { const p = !!E.det && pendente(), b = $("afAplicar"); if (b) b.classList.toggle("pendente", p); if (opc.aoPendente) opc.aoPendente(p); return p; }
+    function ouvirAfinado() { if (E.ouvir === "afinado") return; E.ouvir = "afinado"; $("afAfin").classList.add("on"); $("afOrig").classList.remove("on"); trocarFonte(); }
+    function mudou() { E.sujo = true; if (E.cents && E.cents.some((v) => Math.abs(v) > 0.5)) ouvirAfinado(); /* depois de editar, o "Tocar" já toca o AFINADO */ marcarPendente(); if (opc.aoMudar) opc.aoMudar(); }
     function empilhar(antes) { E.undo.push(antes); if (E.undo.length > 60) E.undo.shift(); E.redo.length = 0; botoes(); mudou(); }
     function botoes() { $("afDesfazer").disabled = !E.undo.length; $("afRefazer").disabled = !E.redo.length; $("afCorrigirSel").disabled = !E.sel; }
     function corrigir(F, V, so) {
@@ -319,7 +323,7 @@
         const lo = Math.floor(Math.max(mn, p01 - 3)), hi = Math.ceil(Math.min(mx, p99 + 3));
         E.minM = lo - 4; E.maxM = hi + 4; while (E.maxM - E.minM < 24) { E.minM--; E.maxM++; }
         const visH = vp.clientHeight - TOP; if (visH > 60) { E.ph = Math.max(12, Math.min(22, Math.floor(visH / (hi - lo + 3)))); const zv = $("afZoomV"); if (zv) zv.value = E.ph; }   // ajusta o zoom para a voz caber na tela (sem deixar as notas ilegíveis)
-        E.cents = new Float32Array(E.det.n); if (d.cents && d.cents.length) for (let q = 0; q < E.det.n && q < d.cents.length; q++) E.cents[q] = d.cents[q];
+        E.cents = new Float32Array(E.det.n); if (d.cents && d.cents.length) for (let q = 0; q < E.det.n && q < d.cents.length; q++) E.cents[q] = d.cents[q]; E.aplicado = Float32Array.from(E.cents);
         E.nts = notas(); E.trans = new Uint8Array(E.det.n); for (const n of E.nts) if (n.curta) for (let q = n.q0; q <= n.q1; q++) E.trans[q] = 1;
         E.undo = []; E.redo = []; E.sel = null; E.pos = 0; E.sujo = true; E.afinado = null; E.carregado = true; vp.scrollLeft = 0;
         dimensionar();
@@ -366,7 +370,7 @@
     }
     const __p = { E, au, notas, rotulos, corrigir, renderizar, desenhar, X, Y, tq, mcorr, acharPonto, notaMaisPerto, alvoDeEncaixe, abrirTut, definirPos, notasNaSelecao };
     limpar();
-    const ctrl = { zerarHistorico: () => { E.undo = []; E.redo = []; botoes(); }, E, carregar, limpar, parar, dimensionar, tecla, abrirTut, __p,
+    const ctrl = { pendente: () => marcarPendente(), fonte: () => ({ ouvir: E.ouvir, src: au.currentSrc, urlA: E.urlA }), zerarHistorico: () => { E.undo = []; E.redo = []; E.aplicado = Float32Array.from(E.cents || []); botoes(); marcarPendente(); }, E, carregar, limpar, parar, dimensionar, tecla, abrirTut, __p,
       ponto: (q) => ({ x: X(tq(q)), y: Y(mcorr(q)) }), vista: () => ({ topo: TOP, esq: LEFT, altura: vp.clientHeight, largura: vp.clientWidth, minM: E.minM, maxM: E.maxM, ph: E.ph }), canvas: () => cv,
       obterCents: () => Float32Array.from(E.cents || []), obterDet: () => E.det, temEdicao: () => !!(E.cents && E.cents.some((v) => Math.abs(v) > 0.5)), tocando: () => E.tocando, definirModoAmpliado: (on) => { const b = $("afAmpliar"); if (b) b.textContent = on ? "Reduzir ⤡" : "Ampliar ⤢"; dimensionar(); }, definirTutorialAuto: () => { let visto = false; try { visto = localStorage.getItem("oh-afin-tut") === "1"; } catch (e) { /* sem armazenamento */ } if (!visto) abrirTut(); }, status };
     return ctrl;

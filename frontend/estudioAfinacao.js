@@ -28,6 +28,7 @@
   // Devolve { hop, t0, n, f0 (Hz; 0 = sem altura), voz (0/1), conf }. O quadro q está no instante t0 + q·hop (segundos).
   async function detectarAltura(x, sr, opc, progresso) {
     opc = opc || {}; progresso = progresso || function () {};
+    x = altoPassa(x, sr, 55);   // rumble, DC e batidas no microfone (abaixo de ~55 Hz) enganam o método de medir a altura: saem antes
     const fmin = opc.fmin || 70, fmax = opc.fmax || 1000, limiar = opc.limiar || 0.15;
     const fator = Math.max(1, Math.round(sr / 11025)), srd = sr / fator, xd = decimar(x, fator);
     const W = Math.round(0.025 * srd), tauMax = Math.round(srd / fmin), tauMin = Math.max(2, Math.floor(srd / fmax));
@@ -48,7 +49,9 @@
       dn[0] = 1; let corre = 0; for (let tau = 1; tau <= tauMax; tau++) { corre += d[tau]; dn[tau] = corre > 0 ? (d[tau] * tau) / corre : 1; }
       const lista = [];
       for (let t = tauMin; t < tauMax; t++) if (dn[t] < 0.5 && dn[t] <= dn[t - 1] && dn[t] < dn[t + 1]) lista.push(t);
-      const custo = (t) => dn[t] + OCT * Math.log2(t / tauMin);          // leve preferência pelo período mais curto (evita "cair uma oitava")
+      // sub-harmônico: se existe um período à METADE (ou a um terço) quase tão bom quanto o longo, o longo é o ciclo "dobrado" de uma voz áspera: perde
+      const dobrado = (t) => { for (const u of lista) if (u < t && dn[u] <= dn[t] + 0.1 && (Math.abs(t / u - 2) < 0.16 || Math.abs(t / u - 3) < 0.24)) return 0.35; return 0; };
+      const custo = (t) => dn[t] + OCT * Math.log2(t / tauMin) + dobrado(t);   // + leve preferência pelo período mais curto (evita "cair uma oitava")
       lista.sort((p1, p2) => custo(p1) - custo(p2));
       const n = Math.min(K, lista.length); candN[q] = n;
       for (let k = 0; k < n; k++) {
@@ -103,9 +106,27 @@
     return { hop, t0, n: nq, f0, voz, conf, sr };
   }
 
+  // Passa-altas de fase zero (4ª ordem, ida e volta): separa o que está abaixo de ~55 Hz (rumble, DC, batida no microfone), que NÃO é voz
+  function altoPassa(x, sr, fc) {
+    const n = x.length, pad = Math.min(Math.round(0.15 * sr), n - 1), e = new Float32Array(n + 2 * pad);
+    for (let i = 0; i < pad; i++) { e[pad - 1 - i] = 2 * x[0] - x[Math.min(n - 1, i + 1)]; e[pad + n + i] = 2 * x[n - 1] - x[Math.max(0, n - 2 - i)]; }   // reflexão ímpar: sem solavanco nas pontas
+    e.set(x, pad);
+    for (const Q of [0.5412, 1.3066]) {
+      const w0 = (2 * Math.PI * fc) / sr, cs = Math.cos(w0), al = Math.sin(w0) / (2 * Q), a0 = 1 + al, b0 = (1 + cs) / 2 / a0, b1 = -(1 + cs) / a0, a1 = (-2 * cs) / a0, a2 = (1 - al) / a0;
+      for (let passe = 0; passe < 2; passe++) {
+        let x1 = 0, x2 = 0, y1 = 0, y2 = 0; const m = e.length;
+        if (passe === 0) for (let i = 0; i < m; i++) { const v = b0 * e[i] + b1 * x1 + b0 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = e[i]; y2 = y1; y1 = v; e[i] = v; }
+        else for (let i = m - 1; i >= 0; i--) { const v = b0 * e[i] + b1 * x1 + b0 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = e[i]; y2 = y1; y1 = v; e[i] = v; }
+      }
+    }
+    return e.slice(pad, pad + n);
+  }
+
   // Aplica a curva de correção (cents por quadro, mesmo tamanho de det.f0) com PSOLA. Devolve um novo Float32Array.
+  // Cuidados que evitam o "rosnado": (1) só a parte acima de ~55 Hz passa pelo PSOLA (o rumble volta intacto, sem ser repetido em pedaços);
+  // (2) cada ciclo é marcado por SEMELHANÇA DE FORMA com o ciclo anterior, e não pelo maior pico (que alterna quando o ciclo tem dois picos parecidos).
   function corrigirAltura(x, sr, det, cents) {
-    const n = x.length, y = Float32Array.from(x), nq = det.n;
+    const n = x.length, y = Float32Array.from(x), nq = det.n, hf = altoPassa(x, sr, 55);
     const interp = (arr, t, voz) => { let p = (t - det.t0) / det.hop; p = Math.max(0, Math.min(nq - 1, p)); const i = Math.floor(p), j = Math.min(nq - 1, i + 1), fr = p - i; let a = arr[i], b = arr[j]; if (voz) { if (!a) a = b; if (!b) b = a; } return a * (1 - fr) + b * fr; };
     const f0em = (t) => interp(det.f0, t, true), cem = (t) => interp(cents, t, false);
     const F = Math.round(0.015 * sr);
@@ -116,13 +137,15 @@
       if (!mexe) continue;
       const s0 = Math.max(0, Math.round((det.t0 + q0 * det.hop - det.hop / 2) * sr)), s1 = Math.min(n, Math.round((det.t0 + q1 * det.hop + det.hop / 2) * sr));
       if (s1 - s0 < 4 * F) continue;
-      // marcas de análise: um pico por ciclo da voz original
-      const A = []; let m = s0 + Math.round(sr / f0em(s0 / sr) / 2);
-      while (m < s1) {
-        const P = sr / f0em(m / sr), a = Math.max(0, Math.round(m - 0.35 * P)), b = Math.min(n - 1, Math.round(m + 0.35 * P));
-        let best = a, bv = -Infinity; for (let i = a; i <= b; i++) if (x[i] > bv) { bv = x[i]; best = i; }
-        if (A.length && best <= A[A.length - 1] + 0.5 * P) best = Math.round(A[A.length - 1] + P);
-        A.push(best); m = best + P;
+      // marcas de análise: a 1ª no maior pico; as seguintes onde o ciclo seguinte mais se PARECE com o atual
+      const A = []; { const P0 = sr / f0em(s0 / sr), fimBusca = Math.min(s1 - 1, Math.round(s0 + 1.2 * P0)); let b0 = s0, bv = -Infinity; for (let i = s0; i <= fimBusca; i++) if (hf[i] > bv) { bv = hf[i]; b0 = i; } A.push(b0); }
+      for (;;) {
+        const m = A[A.length - 1], P = sr / f0em(m / sr), prox = m + P; if (prox >= s1 - 2) break;
+        const W = Math.max(8, Math.round(P)), meio = W >> 1, lo = Math.round(prox - 0.25 * P), hi = Math.round(prox + 0.25 * P), ia = m - meio; if (ia < 0) break;
+        let melhor = Math.round(prox), bv = -2, ea = 0; for (let j = 0; j < W; j++) ea += hf[ia + j] * hf[ia + j];
+        for (let c = lo; c <= hi; c++) { const ib = c - meio; if (ib < 0 || ib + W >= n) continue; let sab = 0, eb = 0; for (let j = 0; j < W; j++) { const bb = hf[ib + j]; sab += hf[ia + j] * bb; eb += bb * bb; } const r = sab / Math.sqrt(ea * eb + 1e-20); if (r > bv) { bv = r; melhor = c; } }
+        if (melhor <= m + 0.5 * P) melhor = Math.round(m + P);
+        A.push(melhor);
       }
       if (A.length < 3) continue;
       // marcas de síntese: um ciclo por período NOVO (período original ÷ fator de correção)
@@ -134,18 +157,18 @@
         const Pa = sr / f0em(A[j] / sr), L = Math.round(2 * Pa), meio = L >> 1;
         for (let i = 0; i < L; i++) {
           const dst = Math.round(t) - meio + i - s0, src = A[j] - meio + i; if (dst < 0 || dst >= s1 - s0 || src < 0 || src >= n) continue;
-          const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * (i + 0.5)) / L); acc[dst] += x[src] * w; peso[dst] += w;
+          const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * (i + 0.5)) / L); acc[dst] += hf[src] * w; peso[dst] += w;
         }
       }
       for (let i = s0; i < s1; i++) {
-        const p = peso[i - s0], novo = p > 1e-3 ? acc[i - s0] / p : x[i], fi = Math.min(1, (i - s0) / F, (s1 - 1 - i) / F), cob = Math.min(1, p);
+        const p = peso[i - s0], novo = p > 1e-3 ? acc[i - s0] / p + (x[i] - hf[i]) : x[i], fi = Math.min(1, (i - s0) / F, (s1 - 1 - i) / F), cob = Math.min(1, p);   // + parte grave original (rumble) devolvida intacta
         y[i] = x[i] * (1 - fi * cob) + novo * fi * cob;
       }
     }
     return y;
   }
 
-  const api = { detectarAltura, corrigirAltura, hzParaMidi, midiParaHz };
+  const api = { detectarAltura, corrigirAltura, altoPassa, hzParaMidi, midiParaHz };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   raiz.EstudioAfinacao = api;
 })(typeof window !== "undefined" ? window : globalThis);

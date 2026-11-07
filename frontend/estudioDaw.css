@@ -252,3 +252,8 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-fx-vazio { padding: 34px; color: var(--dw-suave); text-align: center; width: 100%; line-height: 1.6; }
 #dwMenuFx { width: 320px; max-height: min(70vh, 520px); overflow-y: auto; } #dwMenuFx .grp { padding: 8px 10px 2px; font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--dw-laranja); font-weight: 800; }
 .dw-sinc { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; } .dw-sinc input { width: 74px; background: #0a0705; border: 1px solid var(--dw-borda); border-radius: 8px; padding: 4px 6px; }
+
+/* ajustes de afinação ainda não aplicados */
+.dw-aba.pend::after { content: ""; display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--dw-laranja); box-shadow: 0 0 8px var(--dw-laranja); vertical-align: middle; }
+#afAplicar.pendente { animation: afPulso 1.4s ease-in-out infinite; }
+@keyframes afPulso { 0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, .6); } 50% { box-shadow: 0 0 0 7px rgba(249, 115, 22, 0); } }
