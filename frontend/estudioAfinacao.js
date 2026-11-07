@@ -37,18 +37,50 @@
     for (let q = 0; q < nq; q++) { const ini = q * hopS; let s = 0; for (let j = 0; j < W + tauMax; j++) { const v = xd[ini + j]; s += v * v; } rmsQ[q] = Math.sqrt(s / (W + tauMax)); }
     const porta = 0.03 * percentil(rmsQ, 0.95);
     const d = new Float64Array(tauMax + 1), dn = new Float64Array(tauMax + 1);
+    // 1) candidatos de altura de cada quadro: os mínimos locais da diferença normalizada (YIN), sem decidir ainda
+    const K = 5, NV = K, NS = K + 1, OCT = 0.03, custoNV = opc.custoNaoVozeado || 0.3;
+    const candTf = new Float32Array(nq * K), candCusto = new Float32Array(nq * K), candN = new Uint8Array(nq);
     for (let q = 0; q < nq; q++) {
-      if (q % 200 === 0) { progresso(q / nq); await tick(); }
+      if (q % 200 === 0) { progresso((q / nq) * 0.8); await tick(); }
       if (rmsQ[q] < porta || rmsQ[q] < 1e-5) continue;
       const ini = q * hopS;
       for (let tau = 1; tau <= tauMax; tau++) { let s = 0; for (let j = 0; j < W; j++) { const df = xd[ini + j] - xd[ini + j + tau]; s += df * df; } d[tau] = s; }
       dn[0] = 1; let corre = 0; for (let tau = 1; tau <= tauMax; tau++) { corre += d[tau]; dn[tau] = corre > 0 ? (d[tau] * tau) / corre : 1; }
-      let tau = -1;
-      for (let t = tauMin; t < tauMax; t++) { if (dn[t] < limiar) { while (t + 1 < tauMax && dn[t + 1] < dn[t]) t++; tau = t; break; } }
-      if (tau < 0) { let mn = 1e9, ti = -1; for (let t = tauMin; t < tauMax; t++) if (dn[t] < mn) { mn = dn[t]; ti = t; } if (mn < 0.3) tau = ti; }
-      if (tau < 0) continue;
-      let tf = tau; if (tau > 1 && tau < tauMax) { const a = dn[tau - 1], b = dn[tau], c = dn[tau + 1], den = a - 2 * b + c; if (Math.abs(den) > 1e-12) tf = tau + (0.5 * (a - c)) / den; }
-      // refinamento na taxa original: janela SIMÉTRICA em torno do instante do quadro (alinha a linha com o áudio)
+      const lista = [];
+      for (let t = tauMin; t < tauMax; t++) if (dn[t] < 0.5 && dn[t] <= dn[t - 1] && dn[t] < dn[t + 1]) lista.push(t);
+      const custo = (t) => dn[t] + OCT * Math.log2(t / tauMin);          // leve preferência pelo período mais curto (evita "cair uma oitava")
+      lista.sort((p1, p2) => custo(p1) - custo(p2));
+      const n = Math.min(K, lista.length); candN[q] = n;
+      for (let k = 0; k < n; k++) {
+        const t = lista[k]; let tf = t; const a1 = dn[t - 1], b1 = dn[t], c1 = dn[t + 1], den = a1 - 2 * b1 + c1; if (Math.abs(den) > 1e-12) tf = t + (0.5 * (a1 - c1)) / den;
+        candTf[q * K + k] = tf; candCusto[q * K + k] = custo(t);
+      }
+    }
+    // 2) o MELHOR CAMINHO no tempo todo (Viterbi): cada quadro é "voz" num dos candidatos ou "sem altura".
+    //    Saltos de altura custam caro (uma oitava custa mais que simplesmente largar o trecho), então o erro de oitava vira pausa, nunca um espeto,
+    //    e quadros fracos entre dois quadros bons são aproveitados em vez de virarem buraco.
+    const TROCA = 0.2, volta = new Uint8Array(nq * NS);
+    let ant = new Float64Array(NS).fill(Infinity), cur = new Float64Array(NS); ant[NV] = 0;
+    const passo = (tp, tc) => { const dd = Math.abs(12 * Math.log2(tp / tc)); return 0.03 * dd + 0.02 * dd * dd; };
+    for (let q = 0; q < nq; q++) {
+      const n = candN[q], np = q > 0 ? candN[q - 1] : 0;
+      for (let s = 0; s < NS; s++) cur[s] = Infinity;
+      // sem altura
+      { let melhor = Infinity, de = NV; for (let j = 0; j <= NV; j++) { if (!isFinite(ant[j])) continue; const c = ant[j] + (j === NV ? 0 : TROCA); if (c < melhor) { melhor = c; de = j; } } cur[NV] = melhor + (n ? custoNV : 0); volta[q * NS + NV] = de; }
+      for (let k = 0; k < n; k++) {
+        const tc = candTf[q * K + k]; let melhor = Infinity, de = NV;
+        for (let j = 0; j <= NV; j++) { if (!isFinite(ant[j])) continue; const c = ant[j] + (j === NV ? TROCA : j < np ? passo(candTf[(q - 1) * K + j], tc) : Infinity); if (c < melhor) { melhor = c; de = j; } }
+        cur[k] = melhor + candCusto[q * K + k]; volta[q * NS + k] = de;
+      }
+      const t = ant; ant = cur; cur = t;
+    }
+    let estado = NV, melhorFim = Infinity; for (let s = 0; s <= NV; s++) if (ant[s] < melhorFim) { melhorFim = ant[s]; estado = s; }
+    const escolha = new Int8Array(nq); for (let q = nq - 1; q >= 0; q--) { escolha[q] = estado === NV ? -1 : estado; estado = volta[q * NS + estado]; }
+    // 3) refinamento na taxa original, só nos quadros escolhidos
+    for (let q = 0; q < nq; q++) {
+      if (q % 300 === 0) { progresso(0.8 + 0.2 * (q / nq)); await tick(); }
+      if (escolha[q] < 0) continue;
+      const tf = candTf[q * K + escolha[q]], ini = q * hopS, tauR = Math.round(tf);
       // refinamento na taxa original: janela SIMÉTRICA em torno do instante do quadro (alinha a linha com o áudio),
       // comparando com o ciclo seguinte em atrasos INTEIROS e interpolando o pico (precisão bem abaixo de 1 amostra)
       let per = tf * fator; const c0 = Math.round(((ini + (W + tauMax) / 2)) * fator), Wf = Math.max(128, Math.min(2048, Math.round(2.5 * per)));
@@ -58,14 +90,15 @@
       if (bv > 0 && ik > 0 && ik < rs.length - 1 && rs[ik - 1] !== null && rs[ik + 1] !== null) {
         const a = rs[ik - 1], b = rs[ik], c = rs[ik + 1], den = a - 2 * b + c; per = L0 + (ik - (fator + 1)) + (Math.abs(den) > 1e-12 ? (0.5 * (a - c)) / den : 0);
       } else if (bv > 0) per = L0 + (ik - (fator + 1));
-      f0[q] = sr / per; conf[q] = 1 - dn[tau]; voz[q] = 1;
+      f0[q] = sr / per; conf[q] = 1 - Math.min(1, candCusto[q * K + escolha[q]]); voz[q] = 1; void tauR;
     }
     // limpeza: mediana de 5 quadros (em semitons), remove trechos curtos e saltos de oitava isolados
     const st = new Float64Array(nq); for (let q = 0; q < nq; q++) st[q] = voz[q] ? hzParaMidi(f0[q]) : 0;
     const med = new Float64Array(nq);
     for (let q = 0; q < nq; q++) { if (!voz[q]) continue; const v = []; for (let k = -2; k <= 2; k++) { const i = q + k; if (i >= 0 && i < nq && voz[i]) v.push(st[i]); } v.sort((a, b) => a - b); med[q] = v[v.length >> 1]; }
     for (let q = 0; q < nq; q++) if (voz[q]) f0[q] = midiParaHz(med[q]);
-    for (let q = 0; q < nq;) { if (!voz[q]) { q++; continue; } let q1 = q; while (q1 < nq && voz[q1]) q1++; if (q1 - q < 4) for (let k = q; k < q1; k++) { voz[k] = 0; f0[k] = 0; } q = q1; }
+    // trechos curtos (menos de 60 ms) ou curtos e pouco confiáveis (menos de 250 ms com periodicidade fraca) são ruído (respiração, estalo), não voz
+    for (let q = 0; q < nq;) { if (!voz[q]) { q++; continue; } let q1 = q, somaConf = 0; while (q1 < nq && voz[q1]) { somaConf += conf[q1]; q1++; } const len = q1 - q; if (len < 6 || (len < 25 && somaConf / len < 0.5)) for (let k = q; k < q1; k++) { voz[k] = 0; f0[k] = 0; } q = q1; }
     progresso(1);
     return { hop, t0, n: nq, f0, voz, conf, sr };
   }

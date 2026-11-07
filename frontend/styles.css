@@ -43,14 +43,17 @@ body {
 }
 .oh-sidebar-colapsada { margin-left: -240px; }
 .oh-sidebar-resize {
-  position: absolute;
+  position: fixed;
   top: 0;
-  right: 0;
-  width: 6px;
-  height: 100%;
+  left: 235px;
+  width: 10px;
+  height: 100vh;
   cursor: col-resize;
-  z-index: 5;
+  z-index: 140;
+  touch-action: none;
 }
+.oh-sidebar-resize.oculta { display: none; }
+.oh-sidebar.oh-sidebar-arrastando { transition: none !important; }
 .oh-sidebar-resize:hover, .oh-sidebar-resize.oh-resize-ativo { background: rgba(249,115,22,0.35); }
 .oh-sidebar-toggle {
   position: fixed;

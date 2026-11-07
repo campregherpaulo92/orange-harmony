@@ -906,42 +906,69 @@ function inicializarFabs() {
 }
 
 // ── Sidebar ajustável: redimensionar arrastando + ocultar/mostrar, com estado salvo ──
+// A barrinha de arrastar fica FORA da coluna do menu (que tem rolagem): antes ela rolava junto com o conteúdo e sumia.
 function inicializarSidebarAjustavel() {
   const sidebar = document.getElementById("sidebarPrincipal");
   const handle = document.getElementById("sidebarResize");
   const btnToggle = document.getElementById("btnToggleSidebar");
   if (!sidebar || !handle || !btnToggle) return;
+  document.body.appendChild(handle);
 
-  const larguraSalva = localStorage.getItem("oh_sidebar_largura");
-  if (larguraSalva) sidebar.style.width = `${larguraSalva}px`;
-  if (localStorage.getItem("oh_sidebar_colapsada") === "1") {
-    sidebar.classList.add("oh-sidebar-colapsada");
+  const MIN = 160, maxL = () => Math.min(480, Math.round(window.innerWidth * 0.5));
+  const limitar = (v) => Math.min(maxL(), Math.max(MIN, v));
+  const colapsada = () => sidebar.classList.contains("oh-sidebar-colapsada");
+  const celular = () => window.innerWidth <= 800;
+  function posicionar() {
+    const oculto = colapsada() || celular();
+    handle.classList.toggle("oculta", oculto);
+    if (oculto) return;
+    handle.style.left = (sidebar.getBoundingClientRect().right - 5) + "px";
   }
+
+  const larguraSalva = parseInt(localStorage.getItem("oh_sidebar_largura"), 10);
+  if (larguraSalva) sidebar.style.width = `${limitar(larguraSalva)}px`;
+  if (localStorage.getItem("oh_sidebar_colapsada") === "1") sidebar.classList.add("oh-sidebar-colapsada");
 
   btnToggle.addEventListener("click", () => {
     sidebar.classList.toggle("oh-sidebar-colapsada");
-    localStorage.setItem("oh_sidebar_colapsada", sidebar.classList.contains("oh-sidebar-colapsada") ? "1" : "0");
+    localStorage.setItem("oh_sidebar_colapsada", colapsada() ? "1" : "0");
+    posicionar();
   });
+
+  if (window.ResizeObserver) new ResizeObserver(posicionar).observe(sidebar);
+  sidebar.addEventListener("transitionend", posicionar);
+  window.addEventListener("resize", () => { if (sidebar.style.width) sidebar.style.width = `${limitar(parseInt(sidebar.style.width, 10))}px`; posicionar(); });
 
   let arrastando = false;
   handle.addEventListener("pointerdown", (e) => {
+    if (e.button != null && e.button !== 0) return;
+    e.preventDefault();
     arrastando = true;
+    sidebar.classList.add("oh-sidebar-arrastando");     // sem a animação de 0,2 s: a largura acompanha o dedo/mouse na hora
+    document.body.style.userSelect = "none";
     handle.classList.add("oh-resize-ativo");
     handle.setPointerCapture(e.pointerId);
   });
   handle.addEventListener("pointermove", (e) => {
     if (!arrastando) return;
-    const novaLargura = Math.min(480, Math.max(160, e.clientX));
-    sidebar.style.width = `${novaLargura}px`;
+    sidebar.style.width = `${limitar(e.clientX - sidebar.getBoundingClientRect().left)}px`;
+    posicionar();
   });
   function pararArraste() {
     if (!arrastando) return;
     arrastando = false;
+    sidebar.classList.remove("oh-sidebar-arrastando");
+    document.body.style.userSelect = "";
     handle.classList.remove("oh-resize-ativo");
     localStorage.setItem("oh_sidebar_largura", parseInt(sidebar.style.width, 10));
+    posicionar();
   }
   handle.addEventListener("pointerup", pararArraste);
   handle.addEventListener("pointercancel", pararArraste);
+  handle.addEventListener("lostpointercapture", pararArraste);
+  handle.addEventListener("dblclick", () => { sidebar.style.width = ""; localStorage.removeItem("oh_sidebar_largura"); posicionar(); });
+  handle.title = "Arraste para mudar a largura do menu (duplo clique volta ao padrão)";
+  posicionar();
 }
 
 document.addEventListener("DOMContentLoaded", () => {

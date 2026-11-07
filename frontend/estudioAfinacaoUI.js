@@ -162,11 +162,16 @@
       const dt = E.beat;                                                     // referências VERTICAIS: tempos (fracos) e compassos (fortes), alinhados com a régua do projeto
       for (let b = Math.floor((E.origem + tIni) / dt); b * dt - E.origem <= tFim; b++) { const x = X(b * dt - E.origem), compasso = b % E.porComp === 0; if (x < LEFT) continue; g.strokeStyle = compasso ? "rgba(249,115,22,.32)" : "rgba(255,255,255,.055)"; g.lineWidth = 1; g.beginPath(); g.moveTo(Math.round(x) + .5, TOP); g.lineTo(Math.round(x) + .5, H); g.stroke(); }
       if (E.det) {
-        const q0 = Math.max(0, Math.floor((tIni - E.det.t0) / E.det.hop) - 1), q1 = Math.min(E.det.n - 1, Math.ceil((tFim - E.det.t0) / E.det.hop) + 1);
+        const q0 = Math.max(0, Math.floor((tIni - E.det.t0) / E.det.hop) - 60), q1 = Math.min(E.det.n - 1, Math.ceil((tFim - E.det.t0) / E.det.hop) + 60);
         g.lineCap = "round"; g.lineJoin = "round";
         const trechos = [];                                                  // trechos contínuos de voz
         for (let q = q0; q <= q1;) { if (!E.det.voz[q]) { q++; continue; } const a = q; while (q <= q1 && E.det.voz[q]) q++; trechos.push([a, q - 1]); }
         const caminho = (a, b, corrigida) => { g.beginPath(); for (let q = a; q <= b; q++) { const x = X(tq(q)), y = Y(corrigida ? mcorr(q) : E.midi[q]); q === a ? g.moveTo(x, y) : g.lineTo(x, y); } };
+        for (let i = 0; i + 1 < trechos.length; i++) {                       // pausas curtas (consoante, respiro): a linha continua, pontilhada
+          const b = trechos[i][1], a2 = trechos[i + 1][0]; if (a2 - b - 1 > 55 || Math.abs(mcorr(a2) - mcorr(b)) > 12) continue;
+          const xa = X(tq(b)), ya = Y(mcorr(b)), xb = X(tq(a2)), yb = Y(mcorr(a2)), xm = (xa + xb) / 2;   // curva em "S": sai e chega na horizontal, sem diagonal íngreme
+          g.save(); g.setLineDash([2, 7]); g.strokeStyle = "rgba(255,138,42,.55)"; g.lineWidth = 3; g.beginPath(); g.moveTo(xa, ya); g.bezierCurveTo(xm, ya, xm, yb, xb, yb); g.stroke(); g.restore();
+        }
         for (const [a, b] of trechos) {                                      // a voz como era antes (só aparece onde você mexeu)
           let mexido = false; for (let q = a; q <= b; q++) if (Math.abs(E.cents[q]) > 0.5) { mexido = true; break; }
           if (mexido) { caminho(a, b, false); g.strokeStyle = "rgba(255,255,255,.35)"; g.lineWidth = 2; g.stroke(); }
@@ -309,11 +314,17 @@
         E.det = await AF.detectarAltura(d.mono, d.sr, {}, (p) => { $("afCarregandoTxt").textContent = `Analisando a voz… ${Math.round(p * 100)}%`; });
         E.midi = new Float32Array(E.det.n); let mn = 1e9, mx = -1e9; for (let q = 0; q < E.det.n; q++) if (E.det.voz[q]) { E.midi[q] = AF.hzParaMidi(E.det.f0[q]); mn = Math.min(mn, E.midi[q]); mx = Math.max(mx, E.midi[q]); }
         if (mn > mx) { E.det = null; vazio("Não encontrei voz cantada ou falada nesta região. Selecione uma região com voz."); status("Sem voz nesta região."); return false; }
-        E.minM = Math.floor(mn) - 4; E.maxM = Math.ceil(mx) + 4; while (E.maxM - E.minM < 24) { E.minM--; E.maxM++; }
+        const vals = []; for (let q = 0; q < E.det.n; q++) if (E.det.voz[q]) vals.push(E.midi[q]); vals.sort((p, r) => p - r);
+        const p01 = vals[Math.floor(0.01 * (vals.length - 1))], p99 = vals[Math.floor(0.99 * (vals.length - 1))], mediana = vals[vals.length >> 1];   // valores soltos (1% de cada ponta) não esticam mais a tela
+        const lo = Math.floor(Math.max(mn, p01 - 3)), hi = Math.ceil(Math.min(mx, p99 + 3));
+        E.minM = lo - 4; E.maxM = hi + 4; while (E.maxM - E.minM < 24) { E.minM--; E.maxM++; }
+        const visH = vp.clientHeight - TOP; if (visH > 60) { E.ph = Math.max(12, Math.min(22, Math.floor(visH / (hi - lo + 3)))); const zv = $("afZoomV"); if (zv) zv.value = E.ph; }   // ajusta o zoom para a voz caber na tela (sem deixar as notas ilegíveis)
         E.cents = new Float32Array(E.det.n); if (d.cents && d.cents.length) for (let q = 0; q < E.det.n && q < d.cents.length; q++) E.cents[q] = d.cents[q];
         E.nts = notas(); E.trans = new Uint8Array(E.det.n); for (const n of E.nts) if (n.curta) for (let q = n.q0; q <= n.q1; q++) E.trans[q] = 1;
-        E.undo = []; E.redo = []; E.sel = null; E.pos = 0; E.sujo = true; E.afinado = null; E.carregado = true; vp.scrollLeft = 0; vp.scrollTop = Math.max(0, TOP + (E.maxM + 0.5 - (mx + 3)) * E.ph - 10);
-        dimensionar(); botoes(); atualizarInfo(); $("afTempo").textContent = fmt(0); status(`Voz analisada (${fmt(E.dur)}). Arraste um ponto da linha para puxá-la, ou use “Corrigir tudo”.`); return true;
+        E.undo = []; E.redo = []; E.sel = null; E.pos = 0; E.sujo = true; E.afinado = null; E.carregado = true; vp.scrollLeft = 0;
+        dimensionar();
+        const centrar = () => { const vis = (vp.clientHeight - TOP) / E.ph; vp.scrollTop = vis > 4 ? Math.max(0, (E.maxM + 0.5 - (mediana + vis / 2)) * E.ph) : Math.max(0, TOP + (E.maxM + 0.5 - (p99 + 3)) * E.ph - 10); }; centrar(); requestAnimationFrame(centrar); botoes(); atualizarInfo(); $("afTempo").textContent = fmt(0); const confs = []; for (let q = 0; q < E.det.n; q++) if (E.det.voz[q]) confs.push(E.det.conf[q]); confs.sort((p, r) => p - r); const confMediana = confs.length ? confs[confs.length >> 1] : 1;
+        status(`Voz analisada (${fmt(E.dur)}). Arraste um ponto da linha para puxá-la, ou use “Corrigir tudo”.` + (confMediana < 0.8 ? " Atenção: a detecção ficou incerta, talvez haja música ou ruído junto com a voz. Para uma linha limpa, grave com fone de ouvido." : "")); return true;
       } finally { $("afCarregando").classList.remove("on"); }
     }
 
@@ -356,6 +367,7 @@
     const __p = { E, au, notas, rotulos, corrigir, renderizar, desenhar, X, Y, tq, mcorr, acharPonto, notaMaisPerto, alvoDeEncaixe, abrirTut, definirPos, notasNaSelecao };
     limpar();
     const ctrl = { zerarHistorico: () => { E.undo = []; E.redo = []; botoes(); }, E, carregar, limpar, parar, dimensionar, tecla, abrirTut, __p,
+      ponto: (q) => ({ x: X(tq(q)), y: Y(mcorr(q)) }), vista: () => ({ topo: TOP, esq: LEFT, altura: vp.clientHeight, largura: vp.clientWidth, minM: E.minM, maxM: E.maxM, ph: E.ph }), canvas: () => cv,
       obterCents: () => Float32Array.from(E.cents || []), obterDet: () => E.det, temEdicao: () => !!(E.cents && E.cents.some((v) => Math.abs(v) > 0.5)), tocando: () => E.tocando, definirModoAmpliado: (on) => { const b = $("afAmpliar"); if (b) b.textContent = on ? "Reduzir ⤡" : "Ampliar ⤢"; dimensionar(); }, definirTutorialAuto: () => { let visto = false; try { visto = localStorage.getItem("oh-afin-tut") === "1"; } catch (e) { /* sem armazenamento */ } if (!visto) abrirTut(); }, status };
     return ctrl;
   }
