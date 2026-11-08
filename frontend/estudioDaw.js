@@ -1572,8 +1572,12 @@
     $("#dwMetro").value = S.metro; $("#dwMetroBtn").classList.toggle("on", S.metro !== "off"); $("#dwContagem").value = String(S.contagem); $("#dwLat").value = S.latencia; $("#dwMonitor").value = S.monitor;
     usarFerramenta("sel"); ajustarModoInicial(); renderTudo();
   }
+  // usado pelos cartões dos ambientes (Orange Studio e Orange Library): abre uma aba ou executa uma ação já dentro do Estúdio
+  function acaoExterna(nome) {
+    if (nome === "separar") abrirSeparar(); else if (nome === "projetos") abrirListaProjetos(); else if (nome === "gravar") $("#dwOpGravar").click();
+  }
   window.EstudioDaw = {
-    aoAbrir,
+    aoAbrir, abrirAba: (n) => { montar(); abrirAba(n); }, acao: (n) => { montar(); acaoExterna(n); },
     _teste: {
       pilhaN: () => pilha.length,
       sm: { listar: () => amostras.map((a) => ({ id: a.id, nome: a.nome, dur: a.dur, canais: a.canais })), carregar: carregarAmostras, criar: criarAmostra, importar: importarAmostra, inserir: inserirAmostra, tocar: tocarAmostra, excluir: excluirAmostra, renomear: renomearAmostra, renderizarRegiao, taxa: smTaxa, semisDaTecla, sel: () => smSel }, bufs, renderVoz, aplicarEdicaoVoz, interpretarLocal, renderProd, gerarProducao, zip: { criar: criarZip, ler: lerZip, crc: crc32 }, mp3: audioBufferParaMp3Blob, exportarProjetoArquivo, abrirProjetoArquivo, definirLoop, alternarLoop, desenharLoop, exportarAgora, cadeiaDe: (id) => { const n = nos.get(id); return n && n.cadeia ? { assinatura: n.cadeia.assinatura, itens: [...n.cadeia.itens.keys()], reducao: [...n.cadeia.itens.values()].map((i) => i.reducao) } : null; }, fxOk: () => fxOk, renderFx, moverRegiaoMs, medirAtrasoDeCliques, acaoSinc,

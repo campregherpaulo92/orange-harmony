@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="styles.css?v=13">
 <link rel="stylesheet" href="identidade.css?v=12">
 <link rel="stylesheet" href="estudioDaw.css?v=21">
+<link rel="stylesheet" href="ambientes.css?v=1">
 <link rel="stylesheet" href="abcjs-audio.css?v=12">
 </head>
 <body>
@@ -22,9 +23,10 @@
   <aside class="oh-sidebar" id="sidebarPrincipal">
     <img src="logo_orange_harmony.png" alt="Orange Harmony" class="oh-sidebar-logo">
 
-    <nav class="oh-nav">
+    <nav class="oh-nav oh-nav-ambientes" id="ohNavAmbientes" aria-label="Ambientes do Orange Harmony"></nav>
+    <nav class="oh-nav oh-nav-legado" aria-hidden="true" hidden>
       <button class="oh-nav-item" data-page="avaliacao"><i class="oh-ic" data-ic="prancheta"></i> <span>Avaliação</span></button>
-      <button class="oh-nav-item oh-nav-active" data-page="estudo"><i class="oh-ic" data-ic="livros"></i> <span>Estudo</span></button>
+      <button class="oh-nav-item" data-page="estudo"><i class="oh-ic" data-ic="livros"></i> <span>Estudo</span></button>
       <button class="oh-nav-item" data-page="afinador"><i class="oh-ic" data-ic="diapasao"></i> <span>Afinador</span></button>
       <button class="oh-nav-item" data-page="acordes"><i class="oh-ic" data-ic="acorde"></i> <span>Acordes</span></button>
       <button class="oh-nav-item" data-page="gravador"><i class="oh-ic" data-ic="mic"></i> <span>Biblioteca</span></button>
@@ -50,8 +52,18 @@
       <p class="oh-subtitle">Coaching · Vocal · Ritmo · Produção · Criação</p>
     </header>
 
+    <div class="amb-barra" id="ambBarra" hidden></div>
+
+    <!-- ── NOVA HOME E OS 5 AMBIENTES (montados por ambientes.js) ── -->
+    <section class="oh-page oh-page-ativa" id="page-home" aria-label="Início"></section>
+    <section class="oh-page" id="page-amb-academy"></section>
+    <section class="oh-page" id="page-amb-create"></section>
+    <section class="oh-page" id="page-amb-studio"></section>
+    <section class="oh-page" id="page-amb-library"></section>
+    <section class="oh-page" id="page-amb-explore"></section>
+
     <!-- ── PÁGINA: ESTUDO (Análise Vocal) ── -->
-    <section class="oh-page oh-page-ativa" id="page-estudo">
+    <section class="oh-page" id="page-estudo">
       <div class="oh-card">
         <div class="oh-section-title"><span><i class="oh-ic" data-ic="estrela"></i></span> Tom de Referência<i class="oh-title-line"></i></div>
         <div class="oh-row">
@@ -955,7 +967,7 @@
 <script src="transposicao.js?v=12"></script>
 <script src="player.js?v=12"></script>
 <script src="recorder.js?v=12"></script>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 <script src="afinador.js?v=12"></script>
 <script src="historico.js?v=12"></script>
 <script src="fichaAvaliacao.js?v=12"></script>
@@ -982,6 +994,7 @@
 <script src="singergame.js"></script>
 <script src="vocalise.js"></script>
 <script src="biblioteca_picker.js"></script>
+<script src="ambientes.js?v=1"></script>
 <script src="miniplayer.js?v=12"></script>
 </body>
 </html>

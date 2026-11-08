@@ -1,0 +1,71 @@
+/* ambientes.css — Home e ambientes do Orange Harmony. Usa as cores e fontes que o app já tem; cada ambiente ganha uma cor própria (--amb-cor). */
+.oh-nav-legado { display: none !important; }   /* os botões antigos seguem no HTML (outros códigos os acionam), só não aparecem */
+
+/* ── menu lateral: Início + 5 ambientes ── */
+.oh-nav-ambientes { display: flex; flex-direction: column; gap: 4px; }
+.oh-amb-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: transparent; color: #d9d9d9; border: 1px solid transparent; border-radius: 12px; font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 0.98rem; padding: 11px 12px; cursor: pointer; transition: background .15s, color .15s, border-color .15s; --amb-cor: #f97316; --amb-rgb: 249, 115, 22; }
+.oh-amb-item .oh-ic { color: var(--amb-cor); display: inline-flex; width: 22px; height: 22px; flex: none; } .oh-amb-item .oh-ic svg { width: 100%; height: 100%; }
+.oh-amb-item:hover { background: rgba(var(--amb-rgb), .12); color: #fff; }
+.oh-amb-item.oh-nav-active { background: linear-gradient(135deg, rgba(var(--amb-rgb), .26), rgba(var(--amb-rgb), .08)); color: #fff; border-color: rgba(var(--amb-rgb), .5); box-shadow: 0 0 14px rgba(var(--amb-rgb), .18); }
+.oh-amb-item[data-ir="home"] { margin-bottom: 8px; }
+.oh-sidebar.oh-sidebar-colapsada .oh-amb-item { justify-content: center; padding: 11px 0; gap: 0; } .oh-sidebar.oh-sidebar-colapsada .oh-amb-item span { display: none; }
+
+/* ── Home ── */
+.amb-hero { text-align: center; padding: 4px 0 22px; }
+.amb-slogan { font-family: 'Bricolage Grotesque', sans-serif; font-size: 1.05rem; letter-spacing: .5px; color: #f6c9a0; }
+.amb-pergunta { margin: 6px 0 0; font-family: 'Baloo 2', sans-serif; font-size: clamp(1.5rem, 3.4vw, 2.1rem); font-weight: 800; color: #fff; }
+.amb-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; }
+.amb-card { grid-column: span 2; position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; min-height: 196px; padding: 22px 22px 18px; border-radius: 22px; cursor: pointer; color: #f2f2f2; font: inherit; overflow: hidden;
+  background: linear-gradient(150deg, rgba(var(--amb-rgb), .20), rgba(255, 255, 255, .035) 62%); border: 1px solid rgba(var(--amb-rgb), .38); box-shadow: 0 10px 34px rgba(0, 0, 0, .38); transition: transform .18s, box-shadow .18s, border-color .18s; }
+.amb-card:nth-child(n+4) { grid-column: span 3; }
+.amb-card::after { content: ""; position: absolute; right: -50px; top: -50px; width: 170px; height: 170px; border-radius: 50%; background: radial-gradient(circle, rgba(var(--amb-rgb), .30), transparent 68%); pointer-events: none; }
+.amb-card:hover, .amb-card:focus-visible { transform: translateY(-4px); border-color: var(--amb-cor); box-shadow: 0 16px 44px rgba(var(--amb-rgb), .28), 0 0 0 1px rgba(var(--amb-rgb), .4); outline: none; }
+.amb-ico { display: inline-flex; align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 16px; color: #0a0a0a; background: linear-gradient(135deg, var(--amb-cor), rgba(var(--amb-rgb), .65)); box-shadow: 0 6px 18px rgba(var(--amb-rgb), .4); flex: none; }
+.amb-ico .oh-ic { display: inline-flex; width: 28px; height: 28px; } .amb-ico .oh-ic svg { width: 100%; height: 100%; }
+.amb-ico.mini { width: 40px; height: 40px; border-radius: 12px; } .amb-ico.mini .oh-ic { width: 21px; height: 21px; } .amb-ico.grande { width: 64px; height: 64px; border-radius: 18px; } .amb-ico.grande .oh-ic { width: 34px; height: 34px; }
+.amb-nome { margin-top: 8px; font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 1.22rem; letter-spacing: 1.4px; color: #fff; }
+.amb-desc { font-size: .98rem; color: #e6d9cc; line-height: 1.35; }
+.amb-rodape-card { margin-top: auto; padding-top: 12px; width: 100%; display: flex; align-items: center; justify-content: space-between; }
+.amb-meta { font-size: .78rem; color: #bfae9c; } .amb-entrar { font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: .95rem; color: var(--amb-cor); } .amb-entrar b { display: inline-block; transition: transform .18s; } .amb-card:hover .amb-entrar b { transform: translateX(4px); }
+.amb-dica { text-align: center; margin: 22px 0 0; font-size: .86rem; color: #bfae9c; }
+.amb-linkinline { background: none; border: none; padding: 0; font: inherit; font-weight: 700; color: var(--oh-orange); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── página de um ambiente ── */
+.amb-trilha { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: .88rem; color: #cbb9a6; }
+.amb-trilha b { color: #fff; font-weight: 700; } .amb-sep { opacity: .5; }
+.amb-link { background: none; border: none; padding: 2px 4px; font: inherit; color: var(--amb-cor, var(--oh-orange)); cursor: pointer; border-radius: 6px; } .amb-link:hover { background: rgba(var(--amb-rgb, 249, 115, 22), .14); }
+.amb-cab { display: flex; align-items: center; gap: 16px; margin: 14px 0 6px; padding: 18px 20px; border-radius: 20px; background: linear-gradient(150deg, rgba(var(--amb-rgb), .18), rgba(255, 255, 255, .03)); border: 1px solid rgba(var(--amb-rgb), .38); flex-wrap: wrap; }
+.amb-cab-texto { flex: 1 1 260px; min-width: 0; } .amb-cab h2 { margin: 0; font-family: 'Baloo 2', sans-serif; font-weight: 800; letter-spacing: 1.6px; font-size: 1.5rem; color: #fff; } .amb-cab p { margin: 4px 0 0; color: #e6d9cc; line-height: 1.4; }
+.amb-btn-laranjinha { border: 1px solid rgba(var(--amb-rgb), .5); background: rgba(var(--amb-rgb), .12); color: #fff; font: inherit; font-weight: 700; font-size: .85rem; padding: 8px 14px; border-radius: 999px; cursor: pointer; } .amb-btn-laranjinha:hover { background: rgba(var(--amb-rgb), .26); }
+.amb-grupo { margin-top: 22px; } .amb-grupo h3 { margin: 0 0 10px; font-family: 'Baloo 2', sans-serif; font-size: .8rem; letter-spacing: 1.6px; text-transform: uppercase; color: var(--amb-cor); }
+.amb-ferr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+.amb-ferr { position: relative; display: flex; align-items: flex-start; gap: 14px; text-align: left; padding: 16px 16px 14px; border-radius: 16px; cursor: pointer; color: #f2f2f2; font: inherit; background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .1); transition: transform .15s, border-color .15s, background .15s; }
+.amb-ferr:hover, .amb-ferr:focus-visible { transform: translateY(-2px); border-color: var(--amb-cor); background: rgba(var(--amb-rgb), .10); outline: none; }
+.amb-ferr-corpo { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+.amb-ferr-nome { font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 1.05rem; color: #fff; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.amb-marca, .amb-ultima { font-style: normal; font-family: 'Nunito', sans-serif; font-size: .66rem; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(var(--amb-rgb), .5); color: var(--amb-cor); } .amb-ultima { background: rgba(var(--amb-rgb), .18); }
+.amb-ferr-desc { font-size: .88rem; color: #d9cbbd; line-height: 1.4; }
+.amb-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; } .amb-tags em { font-style: normal; font-size: .72rem; color: #cbb9a6; padding: 2px 8px; border-radius: 999px; background: rgba(255, 255, 255, .06); }
+.amb-seta { color: var(--amb-cor); font-weight: 800; align-self: center; transition: transform .15s; } .amb-ferr:hover .amb-seta { transform: translateX(4px); }
+.amb-voltar { margin-top: 26px; background: transparent; border: 1px solid rgba(255, 255, 255, .18); color: #e6d9cc; font: inherit; font-weight: 700; padding: 10px 18px; border-radius: 999px; cursor: pointer; } .amb-voltar:hover { border-color: var(--amb-cor); color: #fff; }
+
+/* ── barra de navegação das ferramentas (migalhas + outras ferramentas do mesmo ambiente) ── */
+.amb-barra { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; margin: -8px 0 16px; padding: 8px 12px; border-radius: 14px; background: rgba(255, 255, 255, .04); border: 1px solid rgba(var(--amb-rgb), .3); }
+.amb-barra[hidden] { display: none; }
+.amb-irmaos { display: flex; flex-wrap: wrap; gap: 6px; }
+.amb-chip { background: transparent; border: 1px solid rgba(255, 255, 255, .16); color: #e6d9cc; font: inherit; font-size: .8rem; font-weight: 700; padding: 5px 12px; border-radius: 999px; cursor: pointer; } .amb-chip:hover { border-color: var(--amb-cor); color: #fff; } .amb-chip.ativo { background: rgba(var(--amb-rgb), .22); border-color: var(--amb-cor); color: #fff; }
+
+/* ── telas menores ── */
+@media (max-width: 900px) { .amb-grid { grid-template-columns: repeat(2, 1fr); } .amb-card, .amb-card:nth-child(n+4) { grid-column: span 1; } .amb-card:last-child { grid-column: span 2; } }
+@media (max-width: 560px) { .amb-grid { grid-template-columns: 1fr; gap: 12px; } .amb-card, .amb-card:nth-child(n+4), .amb-card:last-child { grid-column: span 1; min-height: 0; padding: 18px; } .amb-ferr-grid { grid-template-columns: 1fr; } .amb-cab { padding: 14px; } .amb-cab h2 { font-size: 1.25rem; } }
+body.estudio-ativo .amb-barra { display: none; }
+
+/* os ícones do app já vêm num círculo laranja (identidade.css): nos cartões o próprio quadrado colorido faz esse papel, e no menu o círculo ganha a cor do ambiente */
+.amb-ico .oh-ic { background: none !important; box-shadow: none !important; border-radius: 0; width: 30px; height: 30px; min-width: 0; margin: 0; }
+.amb-ico .oh-ic svg { width: 100%; height: 100%; fill: #0a0a0a; }
+.amb-ico.mini .oh-ic { width: 22px; height: 22px; } .amb-ico.grande .oh-ic { width: 36px; height: 36px; }
+.oh-amb-item .oh-ic { background: linear-gradient(135deg, var(--amb-cor), rgba(var(--amb-rgb), .7)) !important; box-shadow: 0 0 10px rgba(var(--amb-rgb), .35) !important; width: 28px; height: 28px; min-width: 28px; border-radius: 50%; }
+.oh-amb-item .oh-ic svg { fill: #0a0a0a; width: 62%; height: 62%; }
+
+/* espaço no fim da Home e dos ambientes para o botão flutuante da Laranjinha não cobrir o último cartão */
+#page-home, .oh-page[id^="page-amb-"] { padding-bottom: 96px; }
