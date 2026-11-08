@@ -18,6 +18,7 @@
 
   // ── ícones (desenhados, sem emoji) ──
   const P = {
+    loop: '<path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 013-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 01-3 3H3"/>',
     play: '<path d="M8 5v14l11-7z"/>', pause: '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>', rec: '<circle cx="12" cy="12" r="6"/>', rew: '<path d="M6 5h2v14H6zM20 5v14L9 12z"/>',
     sel: '<path d="M5 3l14 8-6 2 3 7-3 1-3-7-5 4z"/>', tes: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.5 8l11 10M8.5 16L19.5 6"/>',
     mao: '<path d="M8 12V5a1.5 1.5 0 013 0v6M11 11V4a1.5 1.5 0 013 0v7M14 11V6a1.5 1.5 0 013 0v8c0 4-2 6-5 6-3 0-5-2-6-5l-1-3a1.5 1.5 0 012.5-1z"/>',
@@ -26,7 +27,7 @@
     mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/>', pasta: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
     divide: '<path d="M12 3v18M5 8l-3 4 3 4M19 8l3 4-3 4"/>', metro: '<path d="M8 21h8l-1.6-15h-4.8zM12 15l4.5-8"/>', baixar: '<path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>',
   };
-  const TRACADOS = new Set(["metro", "tes", "mao", "lupa", "undo", "redo", "mais", "seta", "mic", "pasta", "divide", "baixar"]);
+  const TRACADOS = new Set(["loop", "metro", "tes", "mao", "lupa", "undo", "redo", "mais", "seta", "mic", "pasta", "divide", "baixar"]);
   const ic = (n) => `<svg class="dw-ic ${TRACADOS.has(n) ? "tr" : ""}" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
   const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const corA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
@@ -36,7 +37,7 @@
   const COMPASSOS = { "4/4": { n: 4, u: 1 }, "3/4": { n: 3, u: 1 }, "2/4": { n: 2, u: 1 }, "6/8": { n: 6, u: 0.5 } };
   const CORES = ["#a855f7", "#ec4899", "#eab308", "#38bdf8", "#84cc16", "#fb7185"];
   const S = {
-    id: "p" + Date.now().toString(36), nome: "Meu projeto", bpm: 100, compasso: "4/4", tom: "", pps: 40, snap: "off", ferr: "sel", tAtual: 0, tocando: false, seguir: true,
+    loop: { on: false, ini: 0, fim: 0 }, id: "p" + Date.now().toString(36), nome: "Meu projeto", bpm: 100, compasso: "4/4", tom: "", pps: 40, snap: "off", ferr: "sel", tAtual: 0, tocando: false, seguir: true,
     metro: "off", contagem: 1, latencia: 0, mestreVol: 0.9, monitor: "caixa", faixas: [], regioes: [], faixaSel: null, regiaoSel: null, sujo: false, gravando: false, contando: false,
   };
   let proxId = 1;
@@ -200,6 +201,7 @@
           <button class="dw-tb" id="dwRew" title="Voltar ao início (Home)">${ic("rew")}</button>
           <button class="dw-tb play" id="dwPlay" title="Tocar / pausar (Espaço)">${ic("play")}</button>
           <button class="dw-tb" id="dwStop" title="Parar e voltar ao início">${ic("stop")}</button>
+          <button class="dw-tb" id="dwLoop" title="Loop: repete um trecho (tecla L). Para escolher o trecho, arraste na régua segurando Shift.">${ic("loop")}</button>
           <button class="dw-tb gravar" id="dwRec" title="Gravar na faixa armada (R). Sem faixa armada, cria uma faixa de voz.">${ic("rec")}</button>
         </div>
         <div class="dw-relogio" id="dwRelogio">0:00.0<small>Compasso 1 · tempo 1</small></div>
@@ -235,7 +237,7 @@
       </div>
       <div class="dw-area">
         <div class="dw-cab-col"><div class="dw-cab-topo"><span>FAIXAS</span><button class="dw-btn peq" id="dwAddFaixa">${ic("mais")} Faixa</button></div><div class="dw-cab-lista" id="dwCabLista"></div></div>
-        <div class="dw-tl-scroll" id="dwTlScroll"><div class="dw-tl" id="dwTl"><div class="dw-regua" id="dwRegua"></div><div class="dw-faixas" id="dwFaixas"></div><div class="dw-playhead" id="dwPlayhead"></div></div>
+        <div class="dw-tl-scroll" id="dwTlScroll"><div class="dw-tl" id="dwTl"><div class="dw-regua" id="dwRegua"></div><div class="dw-loop" id="dwLoopBand" hidden></div><div class="dw-faixas" id="dwFaixas"></div><div class="dw-playhead" id="dwPlayhead"></div></div>
           <div class="dw-vazio" id="dwVazio" hidden>
             <h2>Comece o seu projeto</h2><p>Traga uma música, grave a sua voz ou importe um áudio. Depois é só mexer: cortar, mover, ajustar volume e exportar.</p>
             <div class="opcoes">
@@ -250,7 +252,7 @@
         <div class="dw-ed-redim" id="dwEdRedim" title="Arraste para mudar a altura deste painel (duplo clique volta ao padrão)"></div>
         <div class="dw-abas">
           <button class="dw-aba on" data-aba="mix">Mixer</button><button class="dw-aba" data-aba="reg">Região</button>
-          <button class="dw-aba" data-aba="afin">Afinação</button><button class="dw-aba" data-aba="fx">Efeitos</button><button class="dw-aba" data-aba="sm">Samples</button>
+          <button class="dw-aba" data-aba="afin">Afinação</button><button class="dw-aba" data-aba="fx">Efeitos</button><button class="dw-aba" data-aba="sm">Samples</button><button class="dw-aba" data-aba="voz">Edição vocal</button><button class="dw-aba" data-aba="prod">Produtor</button>
           <span class="esp"></span><button class="dw-btn peq" id="dwRecolher">${ic("seta")} Recolher</button>
         </div>
         <div class="dw-painel-aba on" id="dwP-mix"><div class="dw-mix" id="dwMix"></div></div>
@@ -258,6 +260,8 @@
         <div class="dw-painel-aba" id="dwP-afin"><div class="dw-afin" id="dwAfin"></div></div>
         <div class="dw-painel-aba" id="dwP-fx"><div class="dw-fx" id="dwFx"></div></div>
         <div class="dw-painel-aba" id="dwP-sm"><div class="dw-sm" id="dwSm"></div></div>
+        <div class="dw-painel-aba" id="dwP-voz"><div class="dw-vz" id="dwVoz"></div></div>
+        <div class="dw-painel-aba" id="dwP-prod"><div class="dw-vz" id="dwProd"></div></div>
       </section>
       <div class="dw-status"><span class="e" id="dwStatus">Pronto.</span><span id="dwStatusSel"></span><span id="dwSalvo"></span><span>Espaço toca/pausa · R grava · V seleciona · C divide · S divide no cursor · Ctrl+Z desfaz</span></div>
       <div class="dw-contagem" id="dwContagemOv" hidden></div>
@@ -296,11 +300,26 @@
         </div>
       </div>
       <input type="file" id="dwArqSample" accept="audio/*" hidden>
+      <input type="file" id="dwArqProj" accept=".ohstudio,.zip" hidden>
+      <div class="dw-modal" id="dwModalExp" hidden>
+        <div class="dw-modal-cartao">
+          <div class="dw-modal-topo"><b>Exportar</b><button id="dwExpFechar" aria-label="Fechar">×</button></div>
+          <div class="dw-exp-grade">
+            <label>O que exportar<select id="dwExpO"><option value="mix">A mixagem final (um arquivo)</option><option value="stems">Cada faixa separada (stems, num .zip)</option></select></label>
+            <label>Formato<select id="dwExpF"><option value="wav">WAV (qualidade total)</option><option value="mp3-192">MP3 192 kbps (bom e leve)</option><option value="mp3-128">MP3 128 kbps (o menor)</option><option value="mp3-320">MP3 320 kbps (máximo)</option></select></label>
+            <label>Trecho<select id="dwExpT"><option value="tudo">O projeto inteiro</option><option value="loop">Só o trecho do loop</option></select></label>
+          </div>
+          <div class="dw-dica" id="dwExpInfo"></div>
+          <div class="dw-acoes"><button class="dw-btn" id="dwExpFechar2">Fechar</button><button class="dw-btn cheio" id="dwExpIr">Exportar</button></div>
+        </div>
+      </div>
       <input type="file" id="dwArqAudio" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.webm" hidden>
     </div>
     <div class="dw-menu" id="dwMenuArquivo" hidden>
       <button data-a="importar"><b>Importar áudio</b><small>traz um arquivo do aparelho para uma faixa nova</small></button>
-      <button data-a="exportar"><b>Exportar mixagem (WAV)</b><small>junta todas as faixas, com volume e pan, num arquivo</small></button>
+      <button data-a="exportar"><b>Exportar…</b><small>mixagem ou cada faixa separada, em WAV ou MP3</small></button>
+      <button data-a="projsalvar"><b>Salvar projeto em arquivo…</b><small>um arquivo .ohstudio com tudo, para guardar ou levar a outro computador</small></button>
+      <button data-a="projabrir"><b>Abrir projeto de um arquivo…</b><small>um arquivo .ohstudio salvo antes</small></button>
       <button data-a="salvar"><b>Salvar agora (Ctrl+S)</b><small>ele também salva sozinho enquanto você mexe</small></button>
       <button data-a="abrir"><b>Abrir projeto…</b><small>seus projetos salvos neste aparelho</small></button>
       <button data-a="novo"><b>Novo projeto</b><small>o atual fica salvo; começa um em branco</small></button>
@@ -369,6 +388,10 @@
         <div class="dw-sinc"><button class="dw-btn peq" data-rs="-10">−10 ms</button><button class="dw-btn peq" data-rs="-1">−1 ms</button><input type="number" id="dwSincMs" value="0" step="1" title="Quantos milissegundos mover (negativo = para a esquerda)"><button class="dw-btn peq" data-rs="aplicar">Mover</button><button class="dw-btn peq" data-rs="1">+1 ms</button><button class="dw-btn peq" data-rs="10">+10 ms</button></div>
         <div class="dw-sinc"><button class="dw-btn peq" data-rs="cursor">Alinhar ao cursor</button><button class="dw-btn peq" data-rs="batida">Alinhar à batida mais próxima</button></div>
       </div>
+      <div class="dw-bloco"><h4>Repetir (loop)</h4>
+        <div class="dw-dica">Repete só este trecho ao tocar: ótimo para ensaiar, afinar e regravar. Também dá para arrastar na régua segurando Shift.</div>
+        <div class="dw-sinc"><button class="dw-btn peq" data-rs="loop">Repetir esta região</button><button class="dw-btn peq" data-rs="loopoff">Desligar o loop</button></div>
+      </div>
       <div class="dw-bloco"><h4>Limpeza de ruído</h4>
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
           <select id="dwLimpaInt" title="Quanto o ruído é atenuado">${[["0.6", "Leve"], ["0.8", "Média"], ["0.95", "Forte"]].map(([v, n]) => `<option value="${v}" ${+v === limpaInt ? "selected" : ""}>${n}</option>`).join("")}</select>
@@ -381,7 +404,7 @@
   }
   function renderTudo() {
     renderCab(); renderLinhas(); renderMixer(); renderRegiao();
-    selStatus(); atualizarUndo(); if (abaAtiva === "fx") renderFx(); if (abaAtiva === "sm") renderSm();
+    selStatus(); atualizarUndo(); if (abaAtiva === "fx") renderFx(); if (abaAtiva === "sm") renderSm(); if (abaAtiva === "voz") renderVoz(); if (abaAtiva === "prod") renderProd(); desenharLoop();
   }
   function selStatus() { const r = regiaoPorId(S.regiaoSel), e = $("#dwStatusSel"); if (e) e.textContent = r ? `Região: ${r.nome}` : ""; if (abaAtiva === "afin") prepararAfinacao(); }
   function posicionar() {
@@ -399,6 +422,7 @@
   function tick() {
     if (!S.tocando) return;
     S.tAtual = base0 + (ctx.currentTime - baseCtx);
+    if (S.loop.on && !S.gravando && S.loop.fim > S.loop.ini && S.tAtual >= S.loop.fim) { ir(S.loop.ini); requestAnimationFrame(tick); return; }   // loop: volta ao início do trecho
     if (!S.gravando && S.tAtual > fimProjeto() + 0.3) { pausar(); S.tAtual = Math.max(0, fimProjeto()); posicionar(); return; }
     posicionar(); agendarMetro(); if (S.gravando) atualizarGravacao();
     if (S.seguir) { const sc = $("#dwTlScroll"), x = px(S.tAtual); if (x > sc.scrollLeft + sc.clientWidth * 0.88 || x < sc.scrollLeft) sc.scrollLeft = Math.max(0, x - sc.clientWidth * 0.15); }
@@ -415,7 +439,7 @@
   }
   function parar() { pausar(); S.tAtual = 0; posicionar(); $("#dwTlScroll").scrollLeft = 0; dica("Parado no início."); }
   function ir(t) { if (S.gravando) return; S.tAtual = Math.max(0, t); posicionar(); if (S.tocando) { base0 = S.tAtual; baseCtx = ctx.currentTime; agendarRegioes(S.tAtual); atualizarNos(); } }
-  function mudarZoom(v) { S.pps = Math.max(8, Math.min(120, v)); $("#dwZoom").value = S.pps; renderLinhas(); }
+  function mudarZoom(v) { S.pps = Math.max(8, Math.min(120, v)); $("#dwZoom").value = S.pps; renderLinhas(); desenharLoop(); }
 
   // ══ GRAVAÇÃO ══════════════════════════════════════════════════════════
   let gravacao = null, contTimers = [];
@@ -659,30 +683,124 @@
   }
 
   // ══ EXPORTAR ══════════════════════════════════════════════════════════
-  async function renderizarMixagem() {
+  async function renderizarMixagem(opc) {
+    opc = opc || {};
     if (!S.regioes.some((r) => bufs.has(r.buf))) throw new Error("Não há áudio para exportar.");
     garantirAudio();
-    const audiveis = S.faixas.filter((f) => audivel(f.id)), temFx = (f) => (f.fx || []).some((x) => x.ligado);
+    const t0 = Math.max(0, opc.ini || 0), audiveis = opc.faixas ? S.faixas.filter((f) => opc.faixas.includes(f.id)) : S.faixas.filter((f) => audivel(f.id)), temFx = (f) => (f.fx || []).some((x) => x.ligado);
     const cauda = window.EstudioFx ? Math.max(0, ...audiveis.filter(temFx).map((f) => EstudioFx.cauda(f.fx))) : 0;   // o reverb e o eco continuam soando depois do fim da música
-    const sr = ctx.sampleRate, fim = fimProjeto() + 0.3 + cauda, OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    const off = new OC(2, Math.ceil(fim * sr), sr), m = off.createGain(); m.gain.value = S.mestreVol;
-    const lim = criarLimitador(off); m.connect(lim); lim.connect(off.destination);
+    const sr = ctx.sampleRate, fimT = opc.fim != null ? opc.fim : fimProjeto(), dur = Math.max(0.05, fimT - t0) + 0.3 + cauda, OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const off = new OC(2, Math.ceil(dur * sr), sr), m = off.createGain(); m.gain.value = opc.semMestre ? 1 : S.mestreVol;
+    if (opc.semMestre) m.connect(off.destination); else { const lim = criarLimitador(off); m.connect(lim); lim.connect(off.destination); }   // faixas separadas: sem o volume geral e sem o limitador (a soma delas dá a mixagem)
     if (window.EstudioFx && audiveis.some((f) => EstudioFx.precisaWorklet(f.fx))) await EstudioFx.carregarWorklet(off);
     audiveis.forEach((f) => {
       const g = off.createGain(); g.gain.value = f.vol; if (off.createStereoPanner) { const p = off.createStereoPanner(); p.pan.value = f.pan; g.connect(p); p.connect(m); } else g.connect(m);
-      const cad = window.EstudioFx ? EstudioFx.criarCadeia(off, f.fx || [], Object.assign(ambFx(), { origem: 0 })) : null, alvo = cad ? cad.entrada : g; if (cad) cad.saida.connect(g);
-      S.regioes.filter((r) => r.f === f.id).forEach((r) => programarRegiao(off, r, alvo, 0, 0));
+      const cad = window.EstudioFx ? EstudioFx.criarCadeia(off, f.fx || [], Object.assign(ambFx(), { origem: -t0 })) : null, alvo = cad ? cad.entrada : g; if (cad) cad.saida.connect(g);
+      S.regioes.filter((r) => r.f === f.id).forEach((r) => programarRegiao(off, r, alvo, t0, 0));
     });
     return off.startRendering();
   }
-  async function exportar() {
-    dica("Exportando a mixagem…");
+  // ══ ARQUIVOS: ZIP simples (sem compressão), MP3 e a janela de exportação ═══
+  const CRC_TAB = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = (u8) => { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_TAB[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  function criarZip(arqs) {   // arqs: [{ nome, dados: Uint8Array }] → Blob .zip (guardado, sem compressão: WAV e MP3 já são pesados ou compactados)
+    const enc = new TextEncoder(), partes = [], central = [], ag = new Date(), dt = ((ag.getFullYear() - 1980) << 9) | ((ag.getMonth() + 1) << 5) | ag.getDate(), hr = (ag.getHours() << 11) | (ag.getMinutes() << 5) | (ag.getSeconds() >> 1); let desloc = 0;
+    for (const a of arqs) {
+      const nome = enc.encode(a.nome), crc = crc32(a.dados), tam = a.dados.length, lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(10, hr, true); lh.setUint16(12, dt, true); lh.setUint32(14, crc, true); lh.setUint32(18, tam, true); lh.setUint32(22, tam, true); lh.setUint16(26, nome.length, true);
+      partes.push(lh.buffer, nome, a.dados);
+      const ch = new DataView(new ArrayBuffer(46)); ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(12, hr, true); ch.setUint16(14, dt, true); ch.setUint32(16, crc, true); ch.setUint32(20, tam, true); ch.setUint32(24, tam, true); ch.setUint16(28, nome.length, true); ch.setUint32(42, desloc, true);
+      central.push(ch.buffer, nome); desloc += 30 + nome.length + tam;
+    }
+    const tamC = central.reduce((s, p) => s + p.byteLength, 0), fim = new DataView(new ArrayBuffer(22)); fim.setUint32(0, 0x06054b50, true); fim.setUint16(8, arqs.length, true); fim.setUint16(10, arqs.length, true); fim.setUint32(12, tamC, true); fim.setUint32(16, desloc, true);
+    return new Blob([...partes, ...central, fim.buffer], { type: "application/zip" });
+  }
+  async function lerZip(ab) {   // devolve Map nome → Uint8Array (aceita guardado e "deflate")
+    const dv = new DataView(ab), u8 = new Uint8Array(ab); let fim = -1;
+    for (let i = ab.byteLength - 22; i >= Math.max(0, ab.byteLength - 66000); i--) if (dv.getUint32(i, true) === 0x06054b50) { fim = i; break; }
+    if (fim < 0) throw new Error("Este arquivo não é um projeto válido (não parece um .zip).");
+    const n = dv.getUint16(fim + 10, true), dec = new TextDecoder(), out = new Map(); let p = dv.getUint32(fim + 16, true);
+    for (let k = 0; k < n; k++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) throw new Error("O arquivo do projeto está corrompido.");
+      const met = dv.getUint16(p + 10, true), crc = dv.getUint32(p + 16, true), tamC = dv.getUint32(p + 20, true), ln = dv.getUint16(p + 28, true), le = dv.getUint16(p + 30, true), lc = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true), nome = dec.decode(u8.subarray(p + 46, p + 46 + ln)); p += 46 + ln + le + lc;
+      const ini = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true), bruto = u8.subarray(ini, ini + tamC); let dados;
+      if (met === 0) dados = bruto; else if (met === 8 && window.DecompressionStream) dados = new Uint8Array(await new Response(new Blob([bruto]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer()); else throw new Error("Este arquivo usa uma compressão que este navegador não abre.");
+      if (crc32(dados) !== crc) throw new Error(`O arquivo do projeto está corrompido (“${nome}” não confere).`);
+      out.set(nome, dados);
+    }
+    return out;
+  }
+  function carregarLame() {
+    if (window.lamejs && window.lamejs.Mp3Encoder) return Promise.resolve();
+    return new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "lame.min.js?v=1"; sc.onload = () => (window.lamejs && window.lamejs.Mp3Encoder ? ok() : no(new Error("O codificador de MP3 não iniciou."))); sc.onerror = () => no(new Error("Não consegui carregar o codificador de MP3 (arquivo lame.min.js). Confira se ele foi enviado junto com o app.")); document.head.appendChild(sc); });
+  }
+  async function audioBufferParaMp3Blob(buf, kbps, progresso) {
+    await carregarLame(); const canais = Math.min(2, buf.numberOfChannels), enc = new window.lamejs.Mp3Encoder(canais, buf.sampleRate, kbps), n = buf.length, L = new Int16Array(n), R = canais === 2 ? new Int16Array(n) : null;
+    const cv = (x) => { const v = x > 1 ? 1 : x < -1 ? -1 : x; return v < 0 ? v * 32768 : v * 32767; }, c0 = buf.getChannelData(0), c1 = canais === 2 ? buf.getChannelData(1) : null;
+    for (let i = 0; i < n; i++) { L[i] = cv(c0[i]); if (R) R[i] = cv(c1[i]); }
+    const blocos = [], B = 1152 * 24; let k = 0;
+    for (let i = 0; i < n; i += B, k++) { const m = R ? enc.encodeBuffer(L.subarray(i, i + B), R.subarray(i, i + B)) : enc.encodeBuffer(L.subarray(i, i + B)); if (m.length) blocos.push(new Uint8Array(m.buffer.slice(m.byteOffset, m.byteOffset + m.length))); if (progresso && k % 6 === 0) { progresso(i / n); await new Promise((r) => setTimeout(r, 0)); } }
+    const f = enc.flush(); if (f.length) blocos.push(new Uint8Array(f.buffer.slice(f.byteOffset, f.byteOffset + f.length))); return new Blob(blocos, { type: "audio/mpeg" });
+  }
+  const nomeLimpo = (t, padrao) => (String(t || padrao || "projeto").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") || padrao || "projeto");
+  function baixar(blob, nome) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nome; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); }
+  function infoExportar() {
+    const o = $("#dwExpO").value, [f, kb] = $("#dwExpF").value.split("-"), usaLoop = $("#dwExpT").value === "loop" && S.loop.fim > S.loop.ini, dur = usaLoop ? S.loop.fim - S.loop.ini : fimProjeto(), n = S.faixas.filter((x) => audivel(x.id) && S.regioes.some((r) => r.f === x.id)).length, sr = (ctx && ctx.sampleRate) || 44100, mult = o === "stems" ? n : 1;
+    const bytes = f === "wav" ? dur * sr * 4 * mult : (dur * (+kb) * 125) * mult, mb = bytes / 1048576;
+    $("#dwExpInfo").textContent = `${o === "stems" ? `${n} faixa(s) separada(s)` : "Mixagem de " + n + " faixa(s)"} · ${fmt(dur)} · tamanho aproximado ${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB.${o === "stems" ? " Cada faixa sai com o seu volume, panorâmica e efeitos, sem o volume geral." : ""}`;
+    $("#dwExpT").querySelector('option[value="loop"]').disabled = !(S.loop.fim > S.loop.ini);
+  }
+  function abrirExportar() { if (!S.regioes.some((r) => bufs.has(r.buf))) return dica("Não há áudio para exportar."); $("#dwExpO").value = "mix"; /* abre sempre na mixagem (o formato fica lembrado) */ const t = $("#dwExpT"); t.value = S.loop.on && S.loop.fim > S.loop.ini ? "loop" : "tudo"; infoExportar(); $("#dwModalExp").hidden = false; }
+  async function exportarAgora() {
+    const botao = $("#dwExpIr"), o = $("#dwExpO").value, [fm, kb] = $("#dwExpF").value.split("-"), trecho = $("#dwExpT").value === "loop" && S.loop.fim > S.loop.ini ? { ini: S.loop.ini, fim: S.loop.fim } : {}, base = nomeLimpo(S.nome, "projeto"), ext = fm === "wav" ? "wav" : "mp3";
+    const codificar = async (buf, rot) => (fm === "wav" ? audioBufferParaWavBlob(buf) : audioBufferParaMp3Blob(buf, +kb, (p) => dica(`${rot} codificando MP3… ${Math.round(p * 100)}%`)));
+    botao.disabled = true; $("#dwModalExp").hidden = true;
     try {
-      const buf = await renderizarMixagem(), blob = audioBufferParaWavBlob(buf), a = document.createElement("a");
-      a.href = URL.createObjectURL(blob); a.download = (S.nome || "mixagem").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") + "_mixagem.wav";
-      document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
-      dica(`Mixagem exportada (${fmt(buf.duration)}, WAV).`);
-    } catch (e) { dica(e.message || "Não consegui exportar."); }
+      if (o === "mix") { dica("Exportando a mixagem…"); const buf = await renderizarMixagem(trecho), blob = await codificar(buf, "Mixagem:"); baixar(blob, `${base}_mixagem.${ext}`); dica(`Mixagem exportada (${fmt(buf.duration)}, ${ext.toUpperCase()}${fm === "wav" ? "" : " " + kb + " kbps"}).`); }
+      else {
+        const faixas = S.faixas.filter((f) => audivel(f.id) && S.regioes.some((r) => r.f === f.id && bufs.has(r.buf))); if (!faixas.length) throw new Error("Nenhuma faixa audível para exportar. Confira mudo e solo.");
+        const arqs = []; for (let i = 0; i < faixas.length; i++) { const f = faixas[i], rot = `Faixa ${i + 1} de ${faixas.length} (${f.nome}):`; dica(`${rot} renderizando…`); const buf = await renderizarMixagem(Object.assign({}, trecho, { faixas: [f.id], semMestre: true })), blob = await codificar(buf, rot); arqs.push({ nome: `${String(i + 1).padStart(2, "0")} - ${nomeLimpo(f.nome, "faixa")}.${ext}`, dados: new Uint8Array(await blob.arrayBuffer()) }); }
+        baixar(criarZip(arqs), `${base}_faixas.zip`); dica(`${arqs.length} faixa(s) exportada(s) num .zip (${ext.toUpperCase()}).`);
+      }
+    } catch (e) { dica(e.message || "Não consegui exportar."); } finally { botao.disabled = false; }
+  }
+  function exportar() { abrirExportar(); }
+
+  // ══ PROJETO EM ARQUIVO (.ohstudio): tudo num arquivo só, para guardar ou levar a outro computador ═══
+  async function exportarProjetoArquivo() {
+    const regs = S.regioes.filter((r) => !r.gravando); if (!S.faixas.length && !regs.length) return dica("Ainda não há nada neste projeto para salvar em arquivo.");
+    if (S.gravando || S.contando) return dica("Pare a gravação antes de salvar o projeto em arquivo.");
+    dica("Montando o arquivo do projeto…");
+    try {
+      const ids = [...new Set(regs.flatMap((r) => (r.alt ? [r.buf, r.alt.buf] : [r.buf])))].filter((b) => bufs.has(b)), proj = { id: S.id, nome: S.nome, atualizado: Date.now(), faixas: JSON.parse(JSON.stringify(S.faixas)), regioes: JSON.parse(JSON.stringify(regs)), bpm: S.bpm, compasso: S.compasso, tom: S.tom, mestreVol: S.mestreVol, proxId, nFaixas: S.faixas.length };
+      const arqs = [], info = []; for (const b of ids) { const blob = blobs.get(b) || audioBufferParaWavBlob(bufs.get(b)); arqs.push({ nome: "audios/" + b, dados: new Uint8Array(await blob.arrayBuffer()) }); info.push({ id: b, tipo: blob.type || "" }); }
+      arqs.unshift({ nome: "projeto.json", dados: new TextEncoder().encode(JSON.stringify({ app: "orange-estudio", versao: 1, criado: Date.now(), proj, audios: info })) });
+      const zip = criarZip(arqs); baixar(zip, `${nomeLimpo(S.nome, "projeto")}.ohstudio`); dica(`Projeto salvo em arquivo (${(zip.size / 1048576).toFixed(1)} MB, ${ids.length} áudio(s)). Guarde-o onde quiser: ele abre em qualquer computador.`);
+    } catch (e) { dica("Não consegui montar o arquivo: " + (e.message || "erro inesperado")); }
+  }
+  async function abrirProjetoArquivo(arq) {
+    dica("Abrindo o arquivo do projeto…");
+    try {
+      const mapa = await lerZip(await arq.arrayBuffer()), j = mapa.get("projeto.json"); if (!j) throw new Error("Este arquivo não parece um projeto do Orange Estúdio.");
+      const d = JSON.parse(new TextDecoder().decode(j)); if (d.app !== "orange-estudio" || !d.proj || !Array.isArray(d.proj.regioes)) throw new Error("Este arquivo não parece um projeto do Orange Estúdio.");
+      await salvarProjeto();                                         // o projeto aberto agora fica guardado antes de trocar
+      const pid = "p" + Date.now().toString(36), proj = d.proj; proj.id = pid; proj.atualizado = Date.now();   // id novo: abrir o mesmo arquivo de novo cria uma CÓPIA, nunca sobrescreve
+      const db = await abrirDB();
+      await new Promise((ok, no) => { const t = db.transaction(["projetos", "audios"], "readwrite"); (d.audios || []).forEach((a) => { const dados = mapa.get("audios/" + a.id); if (dados) t.objectStore("audios").put(dados.slice().buffer, pid + ":" + a.id); }); t.objectStore("projetos").put(proj); t.oncomplete = ok; t.onerror = () => no(t.error); t.onabort = () => no(t.error); });
+      db.close(); const abriu = await abrirProjeto(pid); if (abriu) dica(`Projeto “${proj.nome}” aberto a partir do arquivo.`);
+    } catch (e) { dica("Não consegui abrir o arquivo: " + (e.message || "erro inesperado")); }
+  }
+
+  // ══ LOOP: repete um trecho ao tocar (tecla L; Shift + arrastar na régua escolhe o trecho) ═══
+  function desenharLoop() {
+    const b = $("#dwLoopBand"), L = S.loop; if (!b) return; const ok = L.fim > L.ini; b.hidden = !ok; b.classList.toggle("on", ok && L.on); $("#dwLoop").classList.toggle("on", !!L.on);
+    if (ok) { b.style.left = px(L.ini) + "px"; b.style.width = Math.max(2, px(L.fim) - px(L.ini)) + "px"; }
+  }
+  function definirLoop(ini, fim, ligar) { ini = Math.max(0, ini); if (fim - ini < 0.1) return; S.loop.ini = Math.round(ini * 1000) / 1000; S.loop.fim = Math.round(fim * 1000) / 1000; if (ligar !== false) S.loop.on = true; desenharLoop(); dica(`Loop ${S.loop.on ? "ligado" : "definido"}: ${fmt(S.loop.ini)} a ${fmt(S.loop.fim)}. A tecla L liga e desliga.`); }
+  function alternarLoop() {
+    const L = S.loop;
+    if (!(L.fim > L.ini)) { const r = regiaoPorId(S.regiaoSel); if (r) return definirLoop(r.ini, r.ini + r.dur, true); if (fimProjeto() > 0.2) return definirLoop(0, fimProjeto(), true); return dica("Selecione uma região, ou arraste na régua segurando Shift para escolher o trecho."); }
+    L.on = !L.on; desenharLoop(); dica(L.on ? `Loop ligado: ${fmt(L.ini)} a ${fmt(L.fim)}.` : "Loop desligado.");
   }
 
   // ══ EDIÇÃO DE REGIÕES ═════════════════════════════════════════════════
@@ -747,7 +865,18 @@
     $("#dwLat").addEventListener("change", (e) => { S.latencia = Math.max(0, Math.min(500, +e.target.value || 0)); e.target.value = S.latencia; localStorage.setItem("oh-dw-lat", S.latencia); dica(`Atraso de gravação: ${S.latencia} ms (as próximas gravações começam esse tanto mais adiantadas).`); });
     // faixas
     $("#dwFaixas").addEventListener("pointerdown", aoPressionarFaixas);
-    $("#dwRegua").addEventListener("pointerdown", (e) => { const x = e.clientX - $("#dwRegua").getBoundingClientRect().left; ir(snap(x / S.pps, e.altKey)); });
+    $("#dwRegua").addEventListener("pointerdown", (e) => {
+      const rg = $("#dwRegua"), tDe = (ev) => snap(Math.max(0, (ev.clientX - rg.getBoundingClientRect().left) / S.pps), ev.altKey);
+      if (!e.shiftKey) return void ir(tDe(e));
+      e.preventDefault(); const t0 = tDe(e); rg.setPointerCapture(e.pointerId);
+      const mover = (ev) => { const t1 = tDe(ev); S.loop.ini = Math.min(t0, t1); S.loop.fim = Math.max(t0, t1); S.loop.on = true; desenharLoop(); };
+      const soltar = () => { rg.removeEventListener("pointermove", mover); rg.removeEventListener("pointerup", soltar); rg.removeEventListener("pointercancel", soltar); if (S.loop.fim - S.loop.ini < 0.1) { S.loop.ini = S.loop.fim = 0; S.loop.on = false; } desenharLoop(); if (S.loop.fim > S.loop.ini) dica(`Loop de ${fmt(S.loop.ini)} a ${fmt(S.loop.fim)} ligado. A tecla L liga e desliga.`); };
+      rg.addEventListener("pointermove", mover); rg.addEventListener("pointerup", soltar); rg.addEventListener("pointercancel", soltar);
+    });
+    $("#dwLoop").addEventListener("click", alternarLoop);
+    $("#dwExpFechar").addEventListener("click", () => { $("#dwModalExp").hidden = true; }); $("#dwExpFechar2").addEventListener("click", () => { $("#dwModalExp").hidden = true; }); $("#dwExpIr").addEventListener("click", exportarAgora);
+    ["dwExpO", "dwExpF", "dwExpT"].forEach((id) => $("#" + id).addEventListener("change", infoExportar));
+    $("#dwArqProj").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) abrirProjetoArquivo(f); });
     $("#dwTlScroll").addEventListener("wheel", (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); mudarZoom(S.pps * (e.deltaY < 0 ? 1.12 : 0.89)); } }, { passive: false });
     let sync = false;
     $("#dwTlScroll").addEventListener("scroll", () => { if (sync) return; sync = true; $("#dwCabLista").scrollTop = $("#dwTlScroll").scrollTop; sync = false; });
@@ -791,6 +920,8 @@
       const b = e.target.closest("[data-a]"); if (!b) return; $("#dwMenuArquivo").hidden = true;
       if (b.dataset.a === "importar") $("#dwArqAudio").click();
       else if (b.dataset.a === "exportar") exportar();
+      else if (b.dataset.a === "projsalvar") exportarProjetoArquivo();
+      else if (b.dataset.a === "projabrir") $("#dwArqProj").click();
       else if (b.dataset.a === "classico") { const f = document.getElementById("fabEstudio"); if (f) f.click(); }
       else if (b.dataset.a === "novo") novoProjeto();
       else if (b.dataset.a === "salvar") salvarProjeto().then((okk) => { if (okk) dica("Projeto salvo neste aparelho."); });
@@ -809,7 +940,7 @@
     $("#dwSepBib").addEventListener("click", (e) => { if (window.escolherDaBiblioteca) window.escolherDaBiblioteca($("#dwSepArq"), e.currentTarget); else $("#dwSepStatus").textContent = "A biblioteca não está disponível agora."; });
     $("#dwSepArq").addEventListener("change", (e) => { sepArquivo = e.target.files[0] || null; $("#dwSepNome").textContent = sepArquivo ? `Escolhido: ${sepArquivo.name}` : "Nenhum áudio escolhido."; atualizarBotaoSep(); });
     $("#dwSepIniciar").addEventListener("click", iniciarSeparacao);
-    ligarEventosFx(); ligarEventosSm();
+    ligarEventosFx(); ligarEventosSm(); ligarEventosVoz(); ligarEventosProd();
     { // altura do painel de baixo: arrastar a alça da borda de cima (fica guardada; duplo clique volta ao padrão)
       const ed = $("#dwEditor"), alca = $("#dwEdRedim"), lim = (h) => Math.max(120, Math.min(window.innerHeight - 330, h));   // sempre sobra espaço para a linha do tempo
       const salvo = parseInt(localStorage.getItem("oh-dw-ed-h"), 10); if (salvo) ed.style.height = lim(salvo) + "px";
@@ -835,7 +966,7 @@
     document.addEventListener("keydown", (e) => {
       const pag = $("#page-estudio"); if (!pag || !pag.classList.contains("oh-page-ativa")) return;
       if ((/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !(e.target.tagName === "INPUT" && e.target.type === "range" && (e.ctrlKey || e.metaKey))) || e.target.isContentEditable) return;
-      if (!$("#dwModalSep").hidden || !$("#dwModalProj").hidden || !$("#dwModalCal").hidden) return;
+      if (!$("#dwModalSep").hidden || !$("#dwModalProj").hidden || !$("#dwModalCal").hidden || !$("#dwModalExp").hidden) return;
       if (abaAtiva === "afin") {
         if (afin && afin.tecla(e)) return;
         if (e.code === "Space") { if (!/^(BUTTON|A)$/.test(e.target.tagName)) { e.preventDefault(); const p = document.getElementById("afPlay"); if (p) p.click(); } return; }
@@ -853,6 +984,7 @@
       else if ((e.key === "Delete" || e.key === "Backspace") && r) { e.preventDefault(); excluirRegiao(r.id); }
       else if (!meta && k === "s" && r) dividirRegiao(r, S.tAtual);
       else if (!meta && k === "r") { e.preventDefault(); iniciarGravacao(); }
+      else if (!meta && k === "l") { e.preventDefault(); alternarLoop(); }
       else if (!meta && ["v", "c", "h", "z"].includes(k)) usarFerramenta({ v: "sel", c: "tes", h: "mao", z: "lupa" }[k]);
       else if (e.key === "Home") { ir(0); $("#dwTlScroll").scrollLeft = 0; }
       else if (e.key === "Escape") { S.regiaoSel = null; renderTudo(); }
@@ -863,9 +995,9 @@
   }
   function abrirAba(n) {
     abaAtiva = n; $$(".dw-aba").forEach((a) => a.classList.toggle("on", a.dataset.aba === n)); $$(".dw-painel-aba").forEach((p) => p.classList.toggle("on", p.id === "dwP-" + n));
-    const ed = $("#dwEditor"); ed.classList.remove("fechado"); ed.classList.toggle("alto", n === "afin"); ed.classList.toggle("medio", n === "fx" || n === "sm"); $("#dwRecolher").innerHTML = ic("seta") + " Recolher";
+    const ed = $("#dwEditor"); ed.classList.remove("fechado"); ed.classList.toggle("alto", n === "afin" || n === "prod"); ed.classList.toggle("medio", n === "fx" || n === "sm" || n === "voz"); $("#dwRecolher").innerHTML = ic("seta") + " Recolher";
     if (n !== "afin") { ed.classList.remove("ampliado"); if (afin) { afin.parar(); afin.definirModoAmpliado(false); } }
-    if (n === "afin") prepararAfinacao(); else if (n === "fx") renderFx(); else if (n === "sm") renderSm();
+    if (n === "afin") prepararAfinacao(); else if (n === "fx") renderFx(); else if (n === "sm") renderSm(); else if (n === "voz") renderVoz(); else if (n === "prod") renderProd();
   }
   function novoProjeto() {
     salvarProjeto();                                   // o projeto atual fica guardado (Arquivo → Abrir projeto)
@@ -1219,6 +1351,162 @@
     document.addEventListener("keyup", (e) => { const i = TECLAS_PC[e.key.toLowerCase()]; if (i === undefined || !apertadas.has(i)) return; apertadas.delete(i); const k = el.querySelector(`[data-smn="${i}"]`); if (k) k.classList.remove("on"); if (smSegurar && smSel) soltarAmostra(smSel, semisDaTecla(i)); }, true);
   }
 
+  // ══ EDIÇÃO VOCAL: ferramenta da região de voz (pedido em português ou escolha manual). Reaproveita a limpeza de ruído, a mudança de tom e os efeitos do Estúdio ═══
+  let vozMsg = "", vozOcupado = false, vozTexto = "", vozMarcas = { reduzir_ruido: false, normalizar: false, eq_presenca: false, compressao: false, remover_sibilancia: false, reverb_leve: false }, vozTom = 0;
+  const flagsVazias = () => ({ reduzir_ruido: false, normalizar: false, ajustar_tom: 0, eq_presenca: false, compressao: false, remover_sibilancia: false, reverb_leve: false });
+  function interpretarLocal(texto) {   // o "plano B" sem servidor: as mesmas palavras-chave do servidor
+    const c = (texto || "").toLowerCase(), f = flagsVazias(), tem = (...p) => p.some((x) => c.includes(x));
+    if (tem("ruído", "ruido", "limpa", "limpe", "barulho")) f.reduzir_ruido = true;
+    if (tem("normaliz", "volume")) f.normalizar = true;
+    if (tem("grave", "mais baixo", "desce o tom", "descer o tom")) f.ajustar_tom = -1;
+    if (tem("agudo", "mais alto", "sobe o tom", "subir o tom")) f.ajustar_tom = 1;
+    if (tem("presente", "presença", "presenca", "eq", "clareza", "brilho")) f.eq_presenca = true;
+    if (tem("compress", "dinamica", "dinâmica", "punch")) f.compressao = true;
+    if (tem("sibil", "assobio", "chiado agudo", "dos s")) f.remover_sibilancia = true;
+    if (tem("reverb", "ambiente", "espaço", "espaco", "sala")) f.reverb_leve = true;
+    if (tem("profission", "melhor", "melhora", "capricha")) { f.reduzir_ruido = true; f.normalizar = true; f.eq_presenca = true; f.compressao = true; }
+    return f;
+  }
+  async function interpretarEdicao(texto) {
+    try { const fd = new FormData(); fd.append("comando", texto); const resp = await fetch(`${API_BASE}/api/edicao/interpretar`, { method: "POST", body: fd }); if (!resp.ok) throw new Error("http " + resp.status); const d = await resp.json(); if (!d || !d.flags) throw new Error("sem ajustes"); return { flags: Object.assign(flagsVazias(), d.flags), ia: !!d.usou_ia, servidor: true }; }
+    catch (e) { return { flags: interpretarLocal(texto), ia: false, servidor: false }; }
+  }
+  async function aplicarEdicaoVoz(flags, prefixo) {
+    const r = regiaoPorId(S.regiaoSel);
+    if (!r || r.gravando) { vozMsg = "Selecione uma região de voz na linha do tempo primeiro."; return renderVoz(); }
+    if (vozOcupado) return; const semis = Math.max(-12, Math.min(12, +flags.ajustar_tom || 0)), quer = flags.reduzir_ruido || flags.normalizar || flags.eq_presenca || flags.compressao || flags.remover_sibilancia || flags.reverb_leve || Math.abs(semis) >= 0.05;
+    if (!quer) { vozMsg = (prefixo || "") + "Não entendi nenhum ajuste nesse pedido. Tente algo como “limpa o ruído e deixa mais presente”, ou marque as opções ao lado."; return renderVoz(); }
+    vozOcupado = true; renderVoz(); const feitos = [], avisos = [];
+    try {
+      if (flags.reduzir_ruido) {   // 1) o áudio da região: primeiro a limpeza (ela se recusa depois de afinar), depois o tom
+        if (r.limpo) avisos.push("o ruído já estava reduzido nesta região"); else if (r.afin) avisos.push("não limpei o ruído: esta região já tem afinação aplicada (desfaça-a antes)");
+        else { await limparRegiao(r); if (r.limpo) feitos.push("ruído reduzido"); else avisos.push("a limpeza de ruído não rodou: " + limpaTxt); }
+      }
+      if (Math.abs(semis) >= 0.05) {
+        if (r.afin) avisos.push("não mudei o tom: esta região já tem afinação aplicada (aba Afinação)");
+        else if (!window.EstudioAfinacao) avisos.push("o módulo de afinação não carregou");
+        else {
+          const base = baseDaRegiao(r); dica(`Mudando o tom (${semis > 0 ? "+" : ""}${semis} semitons)…`); await new Promise((ok) => setTimeout(ok, 30));
+          const det = base ? await EstudioAfinacao.detectarAltura(base.buf.getChannelData(0).slice(base.ini, base.fim), base.sr, {}) : null;
+          if (!det || !det.voz || !Array.from(det.voz).some(Boolean)) avisos.push("não achei voz cantada para mudar o tom");
+          else { await aplicarAfinacao(new Float32Array(det.n).fill(semis * 100), det); if (r.afin) { feitos.push(`tom ${semis > 0 ? "+" : ""}${semis} semitom${Math.abs(semis) === 1 ? "" : "s"}`); if (Math.abs(semis) > 3) avisos.push("acima de 3 semitons a voz fica artificial"); } else avisos.push("não consegui mudar o tom"); }
+        }
+      }
+      if (flags.normalizar || flags.eq_presenca || flags.compressao || flags.remover_sibilancia || flags.reverb_leve) {   // 2) ganho e efeitos: um só passo de desfazer
+        mudarFx(() => {
+          if (flags.normalizar) {
+            const b = bufs.get(r.buf); let pico = 0; if (b) { const sr = b.sampleRate, i0 = Math.max(0, Math.round(r.off * sr)), i1 = Math.min(b.length, Math.round((r.off + r.dur) * sr)); for (let c = 0; c < b.numberOfChannels; c++) { const d = b.getChannelData(c); for (let i = i0; i < i1; i++) { const v = d[i] < 0 ? -d[i] : d[i]; if (v > pico) pico = v; } } }
+            if (pico > 1e-4) { r.ganho = Math.round(Math.max(-24, Math.min(24, -1 - 20 * Math.log10(pico))) * 10) / 10; feitos.push(`volume normalizado (${r.ganho > 0 ? "+" : ""}${r.ganho} dB na região, pico em −1 dB)`); } else avisos.push("a região está em silêncio: não normalizei");
+          }
+          const f = faixaPorId(r.f); f.fx = f.fx || [];
+          const juntar = (tipo, p, rot) => { if (f.fx.some((x) => x.tipo === tipo)) { avisos.push(`${rot}: a faixa já tem esse efeito`); return; } f.fx.push(EstudioFx.novo(tipo, p)); feitos.push(`${rot} (efeito na faixa)`); };
+          if (flags.eq_presenca) juntar("eq", { hpf: 80, b2g: -1.5, b2f: 300, b4g: 3, b4f: 4500, b5g: 1.5 }, "EQ de presença");
+          if (flags.remover_sibilancia) juntar("deesser", { limiar: -30, razao: 4 }, "sibilância reduzida");
+          if (flags.compressao) juntar("compressor", { limiar: -20, razao: 2.5, ataque: 15, liberacao: 150, ganho: 2 }, "compressão suave");
+          if (flags.reverb_leve) juntar("reverb", { tipo: "quarto", tempo: 0.5, pre: 4, mistura: 12 }, "reverb leve");
+        });
+      }
+      vozMsg = (prefixo || "") + (feitos.length ? "Apliquei: " + feitos.join(", ") + "." : "Nada foi alterado.") + (avisos.length ? " Atenção: " + avisos.join("; ") + "." : "") + (feitos.length ? " Os efeitos você ajusta na aba Efeitos; Ctrl+Z desfaz cada passo." : "");
+    } catch (e) { vozMsg = "Não consegui aplicar: " + ((e && e.message) || "erro inesperado") + "."; }
+    finally { vozOcupado = false; renderVoz(); dica(vozMsg); }
+  }
+  function renderVoz() {
+    const el = $("#dwVoz"); if (!el) return; const r = regiaoPorId(S.regiaoSel), f = r && faixaPorId(r.f), ok = r && !r.gravando && !vozOcupado, M = vozMarcas;
+    const caixa = (id, rot) => `<label class="bool"><input type="checkbox" data-vzm="${id}" ${M[id] ? "checked" : ""}> ${rot}</label>`;
+    el.innerHTML = `<div class="dw-fx-barra"><span class="dw-dica">${r ? `Região: <b>${esc(r.nome)}</b> (${fmt(r.dur)}) · faixa <b>${esc(f ? f.nome : "")}</b>` : "Selecione uma região de voz na linha do tempo para editar."}</span></div>
+      <div class="dw-vz-corpo">
+        <div class="dw-vz-cartao"><h4>Peça em português</h4><div class="dw-dica">A IA entende o pedido e aplica as ferramentas do Estúdio nesta região. Dá para desfazer.</div>
+          <div class="linha"><input type="text" id="dwVozTexto" value="${esc(vozTexto)}" placeholder="Ex.: limpa o ruído e deixa mais presente" ${vozOcupado ? "disabled" : ""}><button class="dw-btn cheio" id="dwVozIA" ${ok ? "" : "disabled"}>Aplicar com IA</button></div>
+          <div class="exemplos">${["limpa o ruído e deixa mais presente", "deixa profissional", "tira o chiado dos S", "dá um espaço de sala", "um tom mais grave"].map((t) => `<button class="dw-ex" data-vzex="${esc(t)}" ${vozOcupado ? "disabled" : ""}>${esc(t)}</button>`).join("")}</div></div>
+        <div class="dw-vz-cartao"><h4>Ou escolha</h4>
+          <div class="grade">${caixa("reduzir_ruido", "Reduzir ruído")}${caixa("normalizar", "Normalizar volume")}${caixa("eq_presenca", "EQ de presença")}${caixa("compressao", "Compressão suave")}${caixa("remover_sibilancia", "Reduzir sibilância")}${caixa("reverb_leve", "Reverb leve")}</div>
+          <div class="linha"><label class="num">Ajuste de tom (semitons) <input type="number" id="dwVozTom" min="-12" max="12" step="0.5" value="${vozTom}"></label><button class="dw-btn cheio" id="dwVozAplicar" ${ok ? "" : "disabled"}>Aplicar edição</button></div></div>
+      </div>
+      <div class="dw-vz-msg" id="dwVozMsg">${vozOcupado ? "Trabalhando… (limpar ruído e mudar o tom levam alguns segundos)" : esc(vozMsg)}</div>`;
+  }
+  function ligarEventosVoz() {
+    const el = $("#dwVoz");
+    el.addEventListener("input", (e) => { if (e.target.id === "dwVozTexto") vozTexto = e.target.value; else if (e.target.id === "dwVozTom") vozTom = +e.target.value || 0; });
+    el.addEventListener("change", (e) => { const m = e.target.dataset.vzm; if (m) vozMarcas[m] = e.target.checked; });
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "dwVozTexto") { e.preventDefault(); $("#dwVozIA").click(); } });
+    el.addEventListener("click", async (e) => {
+      const t = e.target;
+      if (t.dataset.vzex) { vozTexto = t.dataset.vzex; renderVoz(); return $("#dwVozIA").click(); }
+      if (t.id === "dwVozIA") { const txt = ($("#dwVozTexto").value || "").trim(); vozTexto = txt; if (!txt) { vozMsg = "Descreva o que você quer primeiro."; return renderVoz(); }
+        vozOcupado = true; vozMsg = ""; renderVoz(); dica("A IA está interpretando o pedido…"); const it = await interpretarEdicao(txt); vozOcupado = false;
+        return aplicarEdicaoVoz(it.flags, it.servidor ? (it.ia ? "A IA entendeu o pedido. " : "Entendi pelas palavras-chave. ") : "Sem conexão com o servidor: entendi pelas palavras-chave. "); }
+      if (t.id === "dwVozAplicar") { vozTom = +$("#dwVozTom").value || 0; return aplicarEdicaoVoz(Object.assign(flagsVazias(), vozMarcas, { ajustar_tom: vozTom }), ""); }
+    });
+  }
+
+  // ══ PRODUTOR: gera instrumentos em cima da região selecionada; cada instrumento vira uma FAIXA nova, alinhada com ela ═══
+  let prodMsg = "", prodOcupado = false, prodEstilosPedidos = false, prodForm = { estilo: "Pop", baixo: true, bateria: true, acordes: true, teclado: false, solo: false, pro: true, modoAcordes: "melodia", bpmModo: "projeto", bpmManual: "", ajustar: false, descricao: "" };
+  const PROD_CAMADAS = [["bateria", "Bateria"], ["baixo", "Baixo"], ["acordes", "Acordes"], ["teclado", "Teclado"], ["solo", "Solo"]];
+  function renderProd() {
+    const el = $("#dwProd"); if (!el) return; const r = regiaoPorId(S.regiaoSel), F = prodForm, ok = r && !r.gravando && !prodOcupado;
+    if (!prodEstilosPedidos && typeof carregarEstilos === "function") { prodEstilosPedidos = true; carregarEstilos().then(() => { if (abaAtiva === "prod") renderProd(); }); }
+    const caixa = (id, rot) => `<label class="bool"><input type="checkbox" data-pf="${id}" ${F[id] ? "checked" : ""}> ${rot}</label>`;
+    el.innerHTML = `<div class="dw-fx-barra"><span class="dw-dica">${r ? `Gerar em cima de: <b>${esc(r.nome)}</b> (${fmt(r.dur)}). Cada instrumento vira uma faixa nova, no mesmo ponto da linha do tempo.` : "Selecione, na linha do tempo, a região (voz, violão…) sobre a qual gerar o acompanhamento."}</span></div>
+      <div class="dw-vz-corpo">
+        <div class="dw-vz-cartao"><h4>Estilo</h4>
+          <div class="linha"><input type="text" id="dwProdDesc" value="${esc(F.descricao)}" placeholder="Descreva: ex. um funk animado com bateria forte" ${prodOcupado ? "disabled" : ""}><button class="dw-btn" id="dwProdIA" ${prodOcupado ? "disabled" : ""}>Sugerir com IA</button></div>
+          <div class="linha"><select id="dwProdEstilo" ${prodOcupado ? "disabled" : ""}></select></div><div class="dw-dica" id="dwProdEstiloDesc"></div>
+          <h4 style="margin-top:10px">Instrumentos</h4><div class="grade">${caixa("bateria", "Bateria")}${caixa("baixo", "Baixo")}${caixa("acordes", "Acordes")}${caixa("teclado", "Teclado")}${caixa("solo", "Solo")}${caixa("pro", "Qualidade profissional (abre espaço para a voz)")}</div></div>
+        <div class="dw-vz-cartao"><h4>Harmonia e andamento</h4>
+          <div class="linha"><label class="num">Os acordes <select id="dwProdModoAc"><option value="melodia" ${F.modoAcordes === "melodia" ? "selected" : ""}>seguem a sua melodia</option><option value="estilo" ${F.modoAcordes === "estilo" ? "selected" : ""}>seguem a sequência do estilo</option></select></label></div>
+          <div class="radios"><label><input type="radio" name="dwProdBpm" value="projeto" ${F.bpmModo === "projeto" ? "checked" : ""}> Usar o andamento do projeto (<b>${S.bpm}</b> BPM)</label><label><input type="radio" name="dwProdBpm" value="detectar" ${F.bpmModo === "detectar" ? "checked" : ""}> Detectar na região</label><label><input type="radio" name="dwProdBpm" value="manual" ${F.bpmModo === "manual" ? "checked" : ""}> Digitar: <input type="number" id="dwProdBpmManual" min="40" max="220" value="${esc(F.bpmManual)}" placeholder="BPM"></label></div>
+          <label class="bool"><input type="checkbox" data-pf="ajustar" ${F.ajustar ? "checked" : ""}> Ajustar o andamento e o tom do projeto ao que for detectado</label>
+          <div class="linha"><button class="dw-btn cheio" id="dwProdGerar" ${ok ? "" : "disabled"}>Gerar faixas</button></div></div>
+      </div>
+      <div class="dw-vz-msg" id="dwProdMsg">${prodOcupado ? "Gerando o acompanhamento… pode levar alguns segundos (até 1 minuto em regiões longas)." : esc(prodMsg)}</div>`;
+    const sel = $("#dwProdEstilo"); if (typeof preencherSelectEstilos === "function") preencherSelectEstilos(sel);
+    if ([...sel.options].some((o) => o.value === F.estilo)) sel.value = F.estilo; else F.estilo = sel.value;
+    const dsc = $("#dwProdEstiloDesc"); if (dsc && typeof ESTILOS_MUSICAIS !== "undefined") dsc.textContent = ESTILOS_MUSICAIS[sel.value] || "";
+  }
+  async function sugerirProducao() {
+    const d = ($("#dwProdDesc").value || "").trim(); prodForm.descricao = d; if (!d) { prodMsg = "Descreva o que você quer primeiro."; return renderProd(); }
+    prodOcupado = true; renderProd(); dica("Pensando na melhor combinação…");
+    try { const fd = new FormData(); fd.append("descricao", d); const resp = await fetch(`${API_BASE}/api/producao/interpretar`, { method: "POST", body: fd }); if (!resp.ok) throw new Error("http " + resp.status); const j = await resp.json();
+      if (j.estilo) prodForm.estilo = j.estilo; if ("com_baixo" in j) { prodForm.baixo = !!j.com_baixo; prodForm.bateria = !!j.com_bateria; prodForm.acordes = !!j.com_acordes; prodForm.teclado = !!j.com_teclado; prodForm.solo = !!j.com_solo; prodForm.pro = !!j.qualidade_pro; }
+      prodMsg = `Sugestão da IA aplicada (${prodForm.estilo}). Revise e clique em “Gerar faixas”.`; }
+    catch (e) { prodMsg = "Não consegui falar com a IA agora. Escolha o estilo e os instrumentos à mão."; }
+    finally { prodOcupado = false; renderProd(); dica(prodMsg); }
+  }
+  async function gerarProducao() {
+    const r = regiaoPorId(S.regiaoSel), F = prodForm; if (!r || r.gravando) { prodMsg = "Selecione uma região primeiro."; return renderProd(); }
+    if (prodOcupado) return; if (!(F.baixo || F.bateria || F.acordes || F.teclado || F.solo)) { prodMsg = "Escolha ao menos um instrumento para gerar."; return renderProd(); }
+    let bpmEnviar = 0; if (F.bpmModo === "projeto") bpmEnviar = S.bpm; else if (F.bpmModo === "manual") { bpmEnviar = +F.bpmManual; if (!(bpmEnviar >= 40 && bpmEnviar <= 220)) { prodMsg = "Digite um andamento entre 40 e 220 BPM, ou escolha outra opção."; return renderProd(); } }
+    prodOcupado = true; prodMsg = ""; renderProd();
+    try {
+      dica("Preparando o áudio da região…"); const full = await renderizarRegiao(r, false), maxN = Math.round(120 * full.sampleRate), n = Math.min(full.length, maxN), enviado = ctx.createBuffer(full.numberOfChannels, n, full.sampleRate);
+      for (let c = 0; c < full.numberOfChannels; c++) enviado.copyToChannel(full.getChannelData(c).subarray(0, n), c);
+      const fd = new FormData(); fd.append("arquivo", new File([audioBufferParaWavBlob(enviado)], "regiao.wav", { type: "audio/wav" })); fd.append("estilo", F.estilo); fd.append("acordes_modo", F.modoAcordes);
+      [["baixo", "com_baixo"], ["bateria", "com_bateria"], ["acordes", "com_acordes"], ["teclado", "com_teclado"], ["solo", "com_solo"], ["pro", "qualidade_pro"]].forEach(([k, nome]) => fd.append(nome, F[k] ? "true" : "false")); if (bpmEnviar) fd.append("bpm_manual", String(bpmEnviar));
+      dica("Gerando o acompanhamento no servidor… pode levar alguns segundos."); let resp;
+      try { resp = await fetch(`${API_BASE}/api/producao/camadas`, { method: "POST", body: fd }); } catch (e) { throw new Error("Não consegui falar com o servidor. Confira a conexão e tente de novo."); }
+      if (!resp.ok) { let det = ""; try { det = (await resp.json()).detail || ""; } catch (e) { /* sem corpo */ } throw new Error(resp.status === 503 ? "O servidor está ocupado com outra tarefa pesada. Tente de novo em instantes." : (det || `O servidor respondeu com erro (${resp.status}).`)); }
+      const cab = (k) => decodeURIComponent(resp.headers.get(k) || ""), bpm = parseFloat(cab("X-BPM")) || 0, tom = cab("X-Tom"), modo = cab("X-Modo"), acordes = cab("X-Acordes"), aviso = cab("X-Aviso"), avisoEstilo = cab("X-Aviso-Estilo"), estiloUsado = cab("X-Estilo") || F.estilo;
+      const mapa = await lerZip(await resp.arrayBuffer()), antes = foto(), criadas = [];
+      for (const [chave, rotulo] of PROD_CAMADAS) {
+        const dados = mapa.get(chave + ".wav"); if (!dados) continue; const buf = await decodificar(dados.slice().buffer);
+        const f = novaFaixa(`${rotulo} (${estiloUsado})`, undefined, { vol: 0.8 }), id = guardarAudio(buf, new Blob([dados], { type: "audio/wav" })); novaRegiao(f, id, rotulo, r.ini, 0, Math.min(buf.duration, r.dur)); criadas.push(rotulo);
+      }
+      if (!criadas.length) throw new Error("O servidor não devolveu nenhum instrumento.");
+      if (F.ajustar && bpm) { S.bpm = Math.round(bpm); $("#dwBpm").value = S.bpm; if (tom) { S.tom = `${tom}${modo ? " " + modo : ""}`; $("#dwTom").textContent = S.tom; } }
+      empilhar(antes); renderTudo(); atualizarNos();
+      prodMsg = `Criei ${criadas.length} faixa${criadas.length === 1 ? "" : "s"}: ${criadas.join(", ")}. Detectado: ${bpm ? bpm.toFixed(0) + " BPM" : "andamento do projeto"}${tom ? " · Tom: " + tom + (modo ? " " + modo : "") : ""}${acordes ? " · Acordes: " + acordes : ""}.${full.length > maxN ? " A região passa de 2 minutos: o servidor usou só os 2 primeiros." : ""}${aviso ? " " + aviso : ""}${avisoEstilo ? " " + avisoEstilo : ""} Ctrl+Z desfaz tudo de uma vez.`;
+    } catch (e) { prodMsg = (e && e.message) || "Não consegui gerar o acompanhamento."; }
+    finally { prodOcupado = false; renderProd(); dica(prodMsg); }
+  }
+  function ligarEventosProd() {
+    const el = $("#dwProd");
+    el.addEventListener("input", (e) => { if (e.target.id === "dwProdDesc") prodForm.descricao = e.target.value; else if (e.target.id === "dwProdBpmManual") { prodForm.bpmManual = e.target.value; prodForm.bpmModo = "manual"; const rd = el.querySelector('input[name="dwProdBpm"][value="manual"]'); if (rd) rd.checked = true; } });
+    el.addEventListener("change", (e) => { const t = e.target;
+      if (t.dataset.pf) prodForm[t.dataset.pf] = t.checked; else if (t.id === "dwProdEstilo") { prodForm.estilo = t.value; const dsc = $("#dwProdEstiloDesc"); if (dsc && typeof ESTILOS_MUSICAIS !== "undefined") dsc.textContent = ESTILOS_MUSICAIS[t.value] || ""; }
+      else if (t.id === "dwProdModoAc") prodForm.modoAcordes = t.value; else if (t.name === "dwProdBpm") prodForm.bpmModo = t.value; });
+    el.addEventListener("click", (e) => { if (e.target.id === "dwProdGerar") gerarProducao(); else if (e.target.id === "dwProdIA") sugerirProducao(); });
+  }
+
   // ══ SINCRONIA FINA DA REGIÃO ═══
   function moverRegiaoMs(r, ms) {
     const d = ms / 1000; let consumiu = 0;
@@ -1228,6 +1516,8 @@
   function acaoSinc(r, a) {
     if (a === "aplicar") { const v = +($("#dwSincMs") || { value: 0 }).value || 0; if (v) moverRegiaoMs(r, v); }
     else if (a === "cursor") { mudar(() => { r.ini = Math.round(S.tAtual * 1000) / 1000; }); dica(`Região alinhada ao cursor (${r.ini.toFixed(3)} s).`); }
+    else if (a === "loop") definirLoop(r.ini, r.ini + r.dur, true);
+    else if (a === "loopoff") { S.loop.on = false; desenharLoop(); dica("Loop desligado."); }
     else if (a === "batida") { mudar(() => { r.ini = Math.round((Math.round(r.ini / beatDur()) * beatDur()) * 1000) / 1000; }); dica(`Região encaixada na batida mais próxima (${r.ini.toFixed(3)} s).`); }
     else moverRegiaoMs(r, +a);
   }
@@ -1286,7 +1576,7 @@
     aoAbrir,
     _teste: {
       pilhaN: () => pilha.length,
-      sm: { listar: () => amostras.map((a) => ({ id: a.id, nome: a.nome, dur: a.dur, canais: a.canais })), carregar: carregarAmostras, criar: criarAmostra, importar: importarAmostra, inserir: inserirAmostra, tocar: tocarAmostra, excluir: excluirAmostra, renomear: renomearAmostra, renderizarRegiao, taxa: smTaxa, semisDaTecla, sel: () => smSel }, cadeiaDe: (id) => { const n = nos.get(id); return n && n.cadeia ? { assinatura: n.cadeia.assinatura, itens: [...n.cadeia.itens.keys()], reducao: [...n.cadeia.itens.values()].map((i) => i.reducao) } : null; }, fxOk: () => fxOk, renderFx, moverRegiaoMs, medirAtrasoDeCliques, acaoSinc,
+      sm: { listar: () => amostras.map((a) => ({ id: a.id, nome: a.nome, dur: a.dur, canais: a.canais })), carregar: carregarAmostras, criar: criarAmostra, importar: importarAmostra, inserir: inserirAmostra, tocar: tocarAmostra, excluir: excluirAmostra, renomear: renomearAmostra, renderizarRegiao, taxa: smTaxa, semisDaTecla, sel: () => smSel }, bufs, renderVoz, aplicarEdicaoVoz, interpretarLocal, renderProd, gerarProducao, zip: { criar: criarZip, ler: lerZip, crc: crc32 }, mp3: audioBufferParaMp3Blob, exportarProjetoArquivo, abrirProjetoArquivo, definirLoop, alternarLoop, desenharLoop, exportarAgora, cadeiaDe: (id) => { const n = nos.get(id); return n && n.cadeia ? { assinatura: n.cadeia.assinatura, itens: [...n.cadeia.itens.keys()], reducao: [...n.cadeia.itens.values()].map((i) => i.reducao) } : null; }, fxOk: () => fxOk, renderFx, moverRegiaoMs, medirAtrasoDeCliques, acaoSinc,
       afin: () => afin, aplicarAfinacao, prepararAfinacao, limparRegiao, modoSep, salvarProjeto, listarProjetos, abrirProjeto, S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
       fontes: () => fontes.length, cliques: () => cliquesTotal, cliqueLog: () => cliqueLog.slice(),
       ganhoDe: (id) => { const n = nos.get(id); return n ? n.gain.gain.value : null; },

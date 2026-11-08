@@ -18,14 +18,16 @@ function botaoExperimente(recurso) {
   if (!recurso) return null;
   const rotulos = {
     avaliacao: "a Avaliação", estudo: "o Estudo", afinador: "o Afinador", acordes: "os Acordes", biblioteca: "a Biblioteca",
-    historico: "o Histórico", composicoes: "as Composições", conversor: "o Conversor", producao: "a Produção",
-    edicao: "a Edição Vocal", songwriter: "o Songwriter", estudio: "o Orange Studio",
+    historico: "o Histórico", composicoes: "as Composições", conversor: "o Conversor", producao: "o Produtor (no Orange Studio)",
+    edicao: "a Edição vocal (no Orange Studio)", songwriter: "o Songwriter", estudio: "o Orange Studio",
   };
   const b = jEl("button", "oh-jornal-botao", `Experimente no app: abrir ${rotulos[recurso] || recurso} →`);
   b.type = "button";
   b.addEventListener("click", () => {
-    const alvo = recurso === "estudio" ? document.getElementById("fabEstudio") : document.querySelector(`.oh-nav-item[data-page="${recurso}"]`);
+    const abaDoEstudio = { producao: "prod", edicao: "voz" }[recurso];   // essas duas ferramentas agora moram dentro do Orange Studio
+    const alvo = recurso === "estudio" ? document.getElementById("fabEstudio") : abaDoEstudio ? document.querySelector('.oh-nav-item[data-page="estudio"]') : document.querySelector(`.oh-nav-item[data-page="${recurso}"]`);
     if (alvo) alvo.click();
+    if (abaDoEstudio) setTimeout(() => { const aba = document.querySelector(`.dw-aba[data-aba="${abaDoEstudio}"]`); if (aba) aba.click(); }, 500);
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
   return b;

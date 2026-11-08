@@ -8,9 +8,9 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=12">
+<link rel="stylesheet" href="styles.css?v=13">
 <link rel="stylesheet" href="identidade.css?v=12">
-<link rel="stylesheet" href="estudioDaw.css?v=20">
+<link rel="stylesheet" href="estudioDaw.css?v=21">
 <link rel="stylesheet" href="abcjs-audio.css?v=12">
 </head>
 <body>
@@ -31,8 +31,6 @@
       <button class="oh-nav-item" data-page="historico"><i class="oh-ic" data-ic="chart"></i> <span>Histórico</span></button>
       <button class="oh-nav-item" data-page="composicoes"><i class="oh-ic" data-ic="partitura"></i> <span>Composições</span></button>
       <button class="oh-nav-item" data-page="conversor"><i class="oh-ic" data-ic="roda"></i> <span>Conversor</span></button>
-      <button class="oh-nav-item" data-page="producao"><i class="oh-ic" data-ic="mix"></i> <span>Produtor</span></button>
-      <button class="oh-nav-item" data-page="edicao"><i class="oh-ic" data-ic="brilho"></i> <span>Edição Vocal Inteligente</span></button>
       <button class="oh-nav-item" data-page="estudio"><i class="oh-ic" data-ic="controle"></i> <span>Estúdio</span></button>
       <button class="oh-nav-item" data-page="songwriter"><i class="oh-ic" data-ic="robo"></i> <span>Songwriter</span></button>
       <button class="oh-nav-item" data-page="partitura"><i class="oh-ic" data-ic="partitura"></i> <span>Partitura</span></button>
@@ -190,71 +188,6 @@
     </section>
 
     <!-- ── PÁGINA: ESTÚDIO / PRODUÇÃO ── -->
-    <section class="oh-page" id="page-producao">
-      <div class="oh-card oh-card-estudio">
-        <div class="oh-section-title"><span><i class="oh-ic" data-ic="mix"></i></span> Estúdio de Produção<i class="oh-title-line"></i></div>
-
-        <p class="oh-label-campo"><i class="oh-ic" data-ic="pasta"></i> Subir gravação (voz + violão)</p>
-        <label class="oh-dropzone">
-          <input type="file" id="producaoArquivo" accept=".wav,.mp3,.m4a,.ogg,.flac,.aac,.webm">
-          <span class="oh-dropzone-btn"><i class="oh-ic" data-ic="subir"></i> Upload</span>
-          <span class="oh-dropzone-hint">WAV, MP3, M4A, OGG, FLAC, AAC, WEBM</span>
-        </label>
-        <p id="producaoNomeArquivo" class="oh-hint"></p>
-
-        <p class="oh-label-campo"><i class="oh-ic" data-ic="mic"></i> Ou grave agora</p>
-        <div id="gravadorEstudio" class="oh-gravador oh-gravador-grande"></div>
-
-        <div class="oh-row" style="margin-top:16px;">
-          <label><i class="oh-ic" data-ic="nota"></i> Estilo musical
-            <select id="producaoEstiloSelect"></select>
-          </label>
-        </div>
-        <p id="producaoEstiloDescricao" class="oh-hint"></p>
-
-        <div class="oh-row" style="margin-top:6px;">
-          <label><i class="oh-ic" data-ic="relogio"></i> Andamento (BPM) — opcional
-            <input type="number" id="producaoBpm" class="oh-input-texto" min="40" max="220" step="1" placeholder="automático">
-          </label>
-          <label><i class="oh-ic" data-ic="nota"></i> Acordes
-            <select id="producaoAcordes">
-              <option value="melodia">Seguir a minha melodia (automático)</option>
-              <option value="estilo">Usar a sequência fixa do estilo</option>
-            </select>
-          </label>
-        </div>
-        <p class="oh-hint">No modo automático, o app ouve a sua gravação, descobre o tom (maior ou menor) e escolhe os acordes que combinam com as notas que você cantou ou tocou; o baixo, o teclado e os acordes seguem essa harmonia, e a banda toca mais forte ou mais fraca conforme a sua voz. É uma estimativa: se não combinar, tente a sequência fixa do estilo.</p>
-
-        <div class="oh-row" style="margin-top:10px;">
-          <label class="oh-radio"><input type="checkbox" id="producaoComBaixo" checked> Gerar baixo</label>
-          <label class="oh-radio"><input type="checkbox" id="producaoComBateria" checked> Gerar bateria</label>
-          <label class="oh-radio"><input type="checkbox" id="producaoComAcordes" checked> Gerar acordes</label>
-        </div>
-        <div class="oh-row">
-          <label class="oh-radio"><input type="checkbox" id="producaoComTeclado"> <i class="oh-ic" data-ic="piano"></i> Gerar teclado</label>
-          <label class="oh-radio"><input type="checkbox" id="producaoComSolo"> <i class="oh-ic" data-ic="nota"></i> Gerar solo</label>
-        </div>
-        <label class="oh-radio" style="margin-top:6px;">
-          <input type="checkbox" id="producaoQualidadePro" checked>
-          <i class="oh-ic" data-ic="brilho"></i> Qualidade profissional (ducking + reverb de master)
-        </label>
-
-        <p class="oh-label-campo" style="margin-top:16px;"><i class="oh-ic" data-ic="brilho"></i> Ou descreva o que você quer (a IA escolhe as opções acima)</p>
-        <div class="oh-row">
-          <input type="text" id="producaoDescricaoIA" class="oh-input-texto" placeholder="Ex: quero algo animado tipo samba, com solo">
-          <button id="btnInterpretarProducao" class="oh-btn oh-btn-secundario"><i class="oh-ic" data-ic="robo"></i> Aplicar sugestão</button>
-        </div>
-        <p id="producaoStatusIA" class="oh-hint"></p>
-
-        <button id="btnGerarProducao" class="oh-btn" style="margin-top:16px;"><i class="oh-ic" data-ic="mix"></i> Gerar produção</button>
-        <p id="producaoStatus" class="oh-status"></p>
-
-        <div id="producaoResultado" class="oh-resultados" hidden>
-          <p id="producaoInfo" class="oh-hint"></p>
-          <div id="producaoPlayerContainer"></div>
-        </div>
-      </div>
-    </section>
 
     <!-- ── PÁGINA: AVALIAÇÃO (perfil vocal inicial) ── -->
     <section class="oh-page" id="page-avaliacao">
@@ -624,54 +557,6 @@
     </section>
 
     <!-- ── PÁGINA: EDIÇÃO VOCAL INTELIGENTE ── -->
-    <section class="oh-page" id="page-edicao">
-      <div class="oh-card">
-        <div class="oh-section-title"><span><i class="oh-ic" data-ic="brilho"></i></span> Edição Vocal Inteligente<i class="oh-title-line"></i></div>
-        <p class="oh-hint">Escolha os efeitos manualmente, ou peça pra Laranjinha no Estúdio interpretar um comando em texto livre.</p>
-
-        <p class="oh-label-campo">Voz para editar</p>
-        <label class="oh-dropzone">
-          <input type="file" id="edicaoArquivo" accept=".wav,.mp3,.m4a,.ogg,.flac,.aac,.webm">
-          <span class="oh-dropzone-btn"><i class="oh-ic" data-ic="subir"></i> Upload</span>
-          <span class="oh-dropzone-hint">use o áudio isolado, se tiver</span>
-        </label>
-        <p id="edicaoNomeArquivo" class="oh-hint"></p>
-
-        <p class="oh-label-campo"><i class="oh-ic" data-ic="mic"></i> Ou grave agora</p>
-        <div id="edicaoGravador" class="oh-gravador"></div>
-
-        <p class="oh-label-campo" style="margin-top:14px;">Efeitos</p>
-        <div class="oh-row">
-          <label class="oh-radio"><input type="checkbox" id="edicaoReduzirRuido"> Reduzir ruído</label>
-          <label class="oh-radio"><input type="checkbox" id="edicaoNormalizar"> Normalizar volume</label>
-          <label class="oh-radio"><input type="checkbox" id="edicaoEqPresenca"> EQ de presença</label>
-        </div>
-        <div class="oh-row">
-          <label class="oh-radio"><input type="checkbox" id="edicaoCompressao"> Compressão suave</label>
-          <label class="oh-radio"><input type="checkbox" id="edicaoRemoverSibilancia"> Reduzir sibilância</label>
-          <label class="oh-radio"><input type="checkbox" id="edicaoReverbLeve"> Reverb leve</label>
-        </div>
-        <div class="oh-row">
-          <label>Ajuste de tom (semitons)
-            <input type="number" id="edicaoAjustarTom" class="oh-input-texto" value="0" step="0.5" min="-12" max="12">
-          </label>
-        </div>
-
-        <button id="btnAplicarEdicao" class="oh-btn" style="margin-top:10px;"><i class="oh-ic" data-ic="brilho"></i> Aplicar edição</button>
-        <p id="edicaoStatus" class="oh-status"></p>
-
-        <p class="oh-label-campo" style="margin-top:18px;"><i class="oh-ic" data-ic="robo"></i> Ou descreva o que você quer, em português</p>
-        <div class="oh-row">
-          <input type="text" id="edicaoComandoIA" class="oh-input-texto" placeholder="Ex: limpa o ruído e deixa mais grave">
-          <button id="btnAplicarComandoIA" class="oh-btn oh-btn-secundario"><i class="oh-ic" data-ic="brilho"></i> Aplicar com IA</button>
-        </div>
-
-        <div id="edicaoResultado" class="oh-resultados" hidden>
-          <p id="edicaoAcoesTexto" class="oh-hint"></p>
-          <div id="edicaoPlayerContainer"></div>
-        </div>
-      </div>
-    </section>
 
     <!-- ── PÁGINA: SONGWRITER ── -->
     <section class="oh-page" id="page-songwriter">
@@ -1070,22 +955,21 @@
 <script src="transposicao.js?v=12"></script>
 <script src="player.js?v=12"></script>
 <script src="recorder.js?v=12"></script>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 <script src="afinador.js?v=12"></script>
 <script src="historico.js?v=12"></script>
 <script src="fichaAvaliacao.js?v=12"></script>
 <script src="composicoes.js"></script>
 <script src="conversor.js"></script>
-<script src="producao.js"></script>
-<script src="edicao.js"></script>
+<script src="producao.js?v=2"></script>
 <script src="avaliacao.js"></script>
 <script src="laranjinha.js"></script>
 <script src="estudio.js"></script>
 <script src="estudioDsp.js?v=20"></script>
-<script src="estudioAfinacao.js?v=20"></script>
-<script src="estudioAfinacaoUI.js?v=20"></script>
-<script src="estudioFx.js?v=20"></script>
-<script src="estudioDaw.js?v=20"></script>
+<script src="estudioAfinacao.js?v=21"></script>
+<script src="estudioAfinacaoUI.js?v=21"></script>
+<script src="estudioFx.js?v=21"></script>
+<script src="estudioDaw.js?v=21"></script>
 <script src="abcjs-basic-min.js?v=12"></script>
 <script src="songwriter.js?v=12"></script>
 <script src="partitura.js?v=12"></script>
@@ -1094,7 +978,7 @@
 <script src="partituraTutorial.js?v=12"></script>
 <script src="redimensionar.js?v=12"></script>
 <script src="acordes.js"></script>
-<script src="news.js"></script>
+<script src="news.js?v=2"></script>
 <script src="singergame.js"></script>
 <script src="vocalise.js"></script>
 <script src="biblioteca_picker.js"></script>

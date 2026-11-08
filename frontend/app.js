@@ -984,7 +984,6 @@ document.addEventListener("DOMContentLoaded", () => {
   inicializarComposicoes();
   inicializarConversor();
   inicializarProducao();
-  inicializarEdicaoVocal();
   inicializarAvaliacao();
   inicializarLaranjinha();
   inicializarEstudio();
