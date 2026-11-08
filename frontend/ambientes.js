@@ -48,6 +48,7 @@
           { id: "studio-gravar", nome: "Gravar uma voz", icone: "mic", studio: "gravar", desc: "Crie uma faixa já armada e grave com metrônomo e pré-contagem.", tags: ["microfone", "metrônomo"] },
           { id: "studio-voz", nome: "Edição vocal", icone: "brilho", studio: "voz", desc: "Peça em português ou escolha: ruído, tom, EQ, compressão, sibilância e reverb.", tags: ["IA", "ruído", "tom"] },
           { id: "studio-prod", nome: "Produtor IA", icone: "mix", studio: "prod", desc: "Gere bateria, baixo e acordes em cima da sua faixa, uma faixa por instrumento.", tags: ["270+ estilos", "faixa por instrumento"] },
+          { id: "studio-cifra", nome: "Cifra e letra", icone: "nota", studio: "cifra", desc: "Descubra o tom, o andamento e os acordes de uma música e veja a letra com as cifras rolando, com velocidade ajustável.", tags: ["tom", "acordes", "letra", "velocidade"] },
           { id: "studio-afin", nome: "Afinação", icone: "diapasao", studio: "afin", desc: "Corrija a afinação da voz desenhando a linha.", tags: ["linha contínua", "corrigir tudo"] },
           { id: "studio-fx", nome: "Efeitos", icone: "raio", studio: "fx", desc: "Efeitos por faixa, com predefinições para cada instrumento.", tags: ["33 efeitos", "47 predefinições"] },
           { id: "studio-sm", nome: "Samples", icone: "piano", studio: "sm", desc: "Transforme trechos em samples e toque nas teclas.", tags: ["sampler", "teclado"] },
@@ -80,7 +81,7 @@
       ] },
   ];
 
-  const ABAS_STUDIO = ["voz", "prod", "fx", "afin", "sm"];   // as únicas ações do Studio que viram endereço (as outras não devem se repetir ao recarregar a página)
+  const ABAS_STUDIO = ["voz", "prod", "fx", "afin", "sm", "cifra"];   // as únicas ações do Studio que viram endereço (as outras não devem se repetir ao recarregar a página)
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

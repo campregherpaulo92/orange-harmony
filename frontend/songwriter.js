@@ -9,6 +9,57 @@ function montarSelectEstiloSongwriter() {
   preencherSelectEstilos(select);                    // mesma lista agrupada da Produção (vem de /api/estilos)
 }
 
+// ── Atalhos sob a música gerada: salvar na Biblioteca e enviar para o Estúdio ──
+// O servidor recusa envios acima de ~32 MB: se o áudio passar de LIMITE, vira MP3 antes de salvar.
+const ohAtalhosAudio = {
+  limiteBytes: 25 * 1024 * 1024,
+  sugerirNome(rotulo) {
+    const tema = ((document.getElementById("songwriterTema") || {}).value || "").trim().replace(/\s+/g, " ").slice(0, 40), d = new Date(), data = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return `Songwriter${rotulo ? " " + rotulo : ""}${tema ? " - " + tema : ""} (${data})`;
+  },
+  adicionar(container, blob, rotulo) {
+    const antiga = container.querySelector(".sw-atalhos"); if (antiga) antiga.remove();
+    const sugestao = this.sugerirNome(rotulo), barra = document.createElement("div"); barra.className = "sw-atalhos";
+    const ic = (n) => (window.ICONE ? window.ICONE(n) : "");
+    barra.innerHTML = `<input type="text" class="sw-at-nome" maxlength="80" aria-label="Nome da música na Biblioteca" value="${sugestao.replace(/"/g, "&quot;")}">
+      <button type="button" class="oh-btn oh-btn-secundario sw-at-bib">${ic("salvar")} Salvar na Biblioteca</button>
+      <button type="button" class="oh-btn oh-btn-secundario sw-at-est">${ic("controle")} Enviar para o Estúdio</button>
+      <span class="sw-at-msg" role="status"></span>`;
+    container.appendChild(barra);
+    const nomeEl = barra.querySelector(".sw-at-nome"), msg = barra.querySelector(".sw-at-msg"), bBib = barra.querySelector(".sw-at-bib"), bEst = barra.querySelector(".sw-at-est"), limite = () => this.limiteBytes;
+    const nomeFinal = () => nomeEl.value.trim() || sugestao;
+    bBib.addEventListener("click", async () => {
+      bBib.disabled = true; msg.textContent = "Salvando na Biblioteca…";
+      try {
+        let arquivo = blob, ext = "wav", tipo = blob.type || "audio/wav";
+        if (blob.size > limite()) {
+          if (!window.EstudioDaw || !window.EstudioDaw.paraMp3) throw new Error("o arquivo é grande demais para salvar e o conversor de MP3 não está disponível. Use o botão de baixar do player.");
+          msg.textContent = "O áudio é grande: convertendo para MP3 antes de salvar…"; arquivo = await window.EstudioDaw.paraMp3(blob, 192); ext = "mp3"; tipo = "audio/mpeg";
+          if (arquivo.size > limite()) throw new Error("mesmo em MP3 o arquivo é grande demais para a Biblioteca. Use o botão de baixar do player.");
+        }
+        const form = new FormData(); form.append("nome", nomeFinal()); form.append("arquivo", new File([arquivo], (nomeFinal().replace(/[^\p{L}\p{N} _-]+/gu, "").trim().slice(0, 60) || "songwriter") + "." + ext, { type: tipo }));
+        const resp = await fetch(`${API_BASE}/api/gravacoes`, { method: "POST", body: form });
+        if (!resp.ok) { let det = ""; try { det = (await resp.json()).detail || ""; } catch (e) { /* sem corpo */ } throw new Error(det || resp.statusText || `erro ${resp.status}`); }
+        msg.textContent = `✓ Salvo na Biblioteca como “${nomeFinal()}” (Orange Library › Biblioteca de gravações).`;
+        if (typeof carregarListaGravacoes === "function") carregarListaGravacoes();
+      } catch (e) { msg.textContent = "Não consegui salvar: " + (e && e.message ? e.message : "erro inesperado"); }
+      finally { bBib.disabled = false; }
+    });
+    bEst.addEventListener("click", async () => {
+      bEst.disabled = true; msg.textContent = "Enviando para o Estúdio…";
+      try {
+        if (!window.OrangeNav || !window.EstudioDaw || !window.EstudioDaw.importar) throw new Error("o Estúdio não está disponível. Atualize a página.");
+        window.OrangeNav.irStudio("cifra");                                   // abre o Orange Studio já na aba Cifra (tom, acordes e letra)
+        await window.EstudioDaw.importar(new File([blob], nomeFinal().slice(0, 26) + ".wav", { type: blob.type || "audio/wav" }));
+        msg.textContent = "";
+      } catch (e) { msg.textContent = "Não consegui enviar para o Estúdio: " + (e && e.message ? e.message : "erro inesperado"); }
+      finally { bEst.disabled = false; }
+    });
+    return barra;
+  },
+};
+window.ohAtalhosAudio = ohAtalhosAudio;
+
 function inicializarSongwriter() {
   const btnGerarLetra = document.getElementById("btnGerarLetra");
   if (!btnGerarLetra) return;
@@ -225,6 +276,7 @@ function inicializarSongwriter() {
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       criarPlayer(musicaResultado, { src: url, nomeArquivo: "songwriter.wav" });
+      ohAtalhosAudio.adicionar(musicaResultado, blob, "");
       musicaResultado.hidden = false;
       statusMusica.textContent = "";
       const abcDaMusica = partituraDoCabecalho(resp);
@@ -368,6 +420,7 @@ function inicializarSongwriter() {
         }
         const blob = await resp.blob();
         criarPlayer(coverResultado, { src: URL.createObjectURL(blob), nomeArquivo: "cover.wav" });
+        ohAtalhosAudio.adicionar(coverResultado, blob, "banda");
         coverResultado.hidden = false;
         statusCover.textContent = aviso;
       } catch (err) {

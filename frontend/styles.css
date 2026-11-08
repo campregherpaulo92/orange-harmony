@@ -1342,3 +1342,9 @@ body.oh-bib-aberta { overflow: hidden; }
 .oh-mp-compacto .oh-mp-play { min-width: 36px; height: 36px; }
 .oh-mp-compacto .oh-mp-espectro, .oh-mp-compacto .oh-mp-aleatorio, .oh-mp-compacto .oh-mp-repetir, .oh-mp-compacto .oh-mp-velocidade, .oh-mp-compacto .oh-mp-redimensionar { display: none; }
 @media (max-width: 560px) { .oh-mp.oh-mp-compacto { padding: 8px 10px; } }
+
+/* atalhos sob a música gerada no Songwriter */
+.sw-atalhos { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.sw-at-nome { flex: 1 1 240px; min-width: 160px; background: rgba(0,0,0,0.35); color: #f2f2f2; border: 1px solid rgba(249,115,22,0.35); border-radius: 10px; padding: 9px 12px; font: inherit; font-size: 0.9rem; }
+.sw-at-nome:focus { outline: 1px solid var(--oh-orange); }
+.sw-at-msg { flex: 1 1 100%; font-size: 0.85rem; color: #e6d9cc; line-height: 1.45; } .sw-at-msg:empty { display: none; }

@@ -252,7 +252,7 @@
         <div class="dw-ed-redim" id="dwEdRedim" title="Arraste para mudar a altura deste painel (duplo clique volta ao padrão)"></div>
         <div class="dw-abas">
           <button class="dw-aba on" data-aba="mix">Mixer</button><button class="dw-aba" data-aba="reg">Região</button>
-          <button class="dw-aba" data-aba="afin">Afinação</button><button class="dw-aba" data-aba="fx">Efeitos</button><button class="dw-aba" data-aba="sm">Samples</button><button class="dw-aba" data-aba="voz">Edição vocal</button><button class="dw-aba" data-aba="prod">Produtor</button>
+          <button class="dw-aba" data-aba="afin">Afinação</button><button class="dw-aba" data-aba="fx">Efeitos</button><button class="dw-aba" data-aba="sm">Samples</button><button class="dw-aba" data-aba="voz">Edição vocal</button><button class="dw-aba" data-aba="prod">Produtor</button><button class="dw-aba" data-aba="cifra">Cifra</button>
           <span class="esp"></span><button class="dw-btn peq" id="dwRecolher">${ic("seta")} Recolher</button>
         </div>
         <div class="dw-painel-aba on" id="dwP-mix"><div class="dw-mix" id="dwMix"></div></div>
@@ -262,6 +262,7 @@
         <div class="dw-painel-aba" id="dwP-sm"><div class="dw-sm" id="dwSm"></div></div>
         <div class="dw-painel-aba" id="dwP-voz"><div class="dw-vz" id="dwVoz"></div></div>
         <div class="dw-painel-aba" id="dwP-prod"><div class="dw-vz" id="dwProd"></div></div>
+        <div class="dw-painel-aba" id="dwP-cifra"><div class="cf" id="dwCifra"></div></div>
       </section>
       <div class="dw-status"><span class="e" id="dwStatus">Pronto.</span><span id="dwStatusSel"></span><span id="dwSalvo"></span><span>Espaço toca/pausa · R grava · V seleciona · C divide · S divide no cursor · Ctrl+Z desfaz</span></div>
       <div class="dw-contagem" id="dwContagemOv" hidden></div>
@@ -404,7 +405,7 @@
   }
   function renderTudo() {
     renderCab(); renderLinhas(); renderMixer(); renderRegiao();
-    selStatus(); atualizarUndo(); if (abaAtiva === "fx") renderFx(); if (abaAtiva === "sm") renderSm(); if (abaAtiva === "voz") renderVoz(); if (abaAtiva === "prod") renderProd(); desenharLoop();
+    selStatus(); atualizarUndo(); if (abaAtiva === "fx") renderFx(); if (abaAtiva === "sm") renderSm(); if (abaAtiva === "voz") renderVoz(); if (abaAtiva === "prod") renderProd(); if (abaAtiva === "cifra") renderCifra(); desenharLoop();
   }
   function selStatus() { const r = regiaoPorId(S.regiaoSel), e = $("#dwStatusSel"); if (e) e.textContent = r ? `Região: ${r.nome}` : ""; if (abaAtiva === "afin") prepararAfinacao(); }
   function posicionar() {
@@ -995,9 +996,10 @@
   }
   function abrirAba(n) {
     abaAtiva = n; $$(".dw-aba").forEach((a) => a.classList.toggle("on", a.dataset.aba === n)); $$(".dw-painel-aba").forEach((p) => p.classList.toggle("on", p.id === "dwP-" + n));
-    const ed = $("#dwEditor"); ed.classList.remove("fechado"); ed.classList.toggle("alto", n === "afin" || n === "prod"); ed.classList.toggle("medio", n === "fx" || n === "sm" || n === "voz"); $("#dwRecolher").innerHTML = ic("seta") + " Recolher";
+    const ed = $("#dwEditor"); ed.classList.remove("fechado"); ed.classList.toggle("alto", n === "afin" || n === "prod" || n === "cifra"); ed.classList.toggle("medio", n === "fx" || n === "sm" || n === "voz"); $("#dwRecolher").innerHTML = ic("seta") + " Recolher";
+    if (n !== "cifra" && cifraUI) cifraUI.pausar();                       // a música da Cifra para quando você sai da aba
     if (n !== "afin") { ed.classList.remove("ampliado"); if (afin) { afin.parar(); afin.definirModoAmpliado(false); } }
-    if (n === "afin") prepararAfinacao(); else if (n === "fx") renderFx(); else if (n === "sm") renderSm(); else if (n === "voz") renderVoz(); else if (n === "prod") renderProd();
+    if (n === "afin") prepararAfinacao(); else if (n === "fx") renderFx(); else if (n === "sm") renderSm(); else if (n === "voz") renderVoz(); else if (n === "prod") renderProd(); else if (n === "cifra") renderCifra();
   }
   function novoProjeto() {
     salvarProjeto();                                   // o projeto atual fica guardado (Arquivo → Abrir projeto)
@@ -1507,6 +1509,16 @@
     el.addEventListener("click", (e) => { if (e.target.id === "dwProdGerar") gerarProducao(); else if (e.target.id === "dwProdIA") sugerirProducao(); });
   }
 
+  // ══ CIFRA: tom, andamento e acordes + a letra com os acordes rolando junto com a música (a tela mora em estudioCifra.js) ═══
+  let cifraUI = null;
+  function renderCifra() {
+    if (!window.EstudioCifra) { const el = $("#dwCifra"); if (el && !el.textContent) el.innerHTML = '<div class="cf-vazio">O módulo da Cifra não carregou. Atualize a página.</div>'; return; }
+    if (!cifraUI) cifraUI = EstudioCifra.criar($("#dwCifra"), {
+      regiaoSel: () => regiaoPorId(S.regiaoSel), nomeFaixa: (r) => { const f = faixaPorId(r.f); return f ? f.nome : ""; }, renderRegiao: (r) => renderizarRegiao(r, false), wavBlob: (buf) => audioBufferParaWavBlob(buf),
+      persistir: () => agendarSalvar(), dica, apiBase: API_BASE, studioTocando: () => S.tocando, pausarStudio: () => { if (S.tocando) pausar(); } });
+    cifraUI.render(false);
+  }
+
   // ══ SINCRONIA FINA DA REGIÃO ═══
   function moverRegiaoMs(r, ms) {
     const d = ms / 1000; let consumiu = 0;
@@ -1578,9 +1590,11 @@
   }
   window.EstudioDaw = {
     aoAbrir, abrirAba: (n) => { montar(); abrirAba(n); }, acao: (n) => { montar(); acaoExterna(n); },
+    importar: async (arq) => { montar(); await importarAudio(arq); },                                   // o Songwriter manda a música gerada para uma faixa nova
+    paraMp3: async (blob, kbps) => { garantirAudio(); return audioBufferParaMp3Blob(await decodificar(await blob.arrayBuffer()), kbps || 192); },   // e converte para MP3 quando o arquivo é grande demais para a Biblioteca
     _teste: {
       pilhaN: () => pilha.length,
-      sm: { listar: () => amostras.map((a) => ({ id: a.id, nome: a.nome, dur: a.dur, canais: a.canais })), carregar: carregarAmostras, criar: criarAmostra, importar: importarAmostra, inserir: inserirAmostra, tocar: tocarAmostra, excluir: excluirAmostra, renomear: renomearAmostra, renderizarRegiao, taxa: smTaxa, semisDaTecla, sel: () => smSel }, bufs, renderVoz, aplicarEdicaoVoz, interpretarLocal, renderProd, gerarProducao, zip: { criar: criarZip, ler: lerZip, crc: crc32 }, mp3: audioBufferParaMp3Blob, exportarProjetoArquivo, abrirProjetoArquivo, definirLoop, alternarLoop, desenharLoop, exportarAgora, cadeiaDe: (id) => { const n = nos.get(id); return n && n.cadeia ? { assinatura: n.cadeia.assinatura, itens: [...n.cadeia.itens.keys()], reducao: [...n.cadeia.itens.values()].map((i) => i.reducao) } : null; }, fxOk: () => fxOk, renderFx, moverRegiaoMs, medirAtrasoDeCliques, acaoSinc,
+      sm: { listar: () => amostras.map((a) => ({ id: a.id, nome: a.nome, dur: a.dur, canais: a.canais })), carregar: carregarAmostras, criar: criarAmostra, importar: importarAmostra, inserir: inserirAmostra, tocar: tocarAmostra, excluir: excluirAmostra, renomear: renomearAmostra, renderizarRegiao, taxa: smTaxa, semisDaTecla, sel: () => smSel }, bufs, cifra: () => cifraUI, renderCifra, renderVoz, aplicarEdicaoVoz, interpretarLocal, renderProd, gerarProducao, zip: { criar: criarZip, ler: lerZip, crc: crc32 }, mp3: audioBufferParaMp3Blob, exportarProjetoArquivo, abrirProjetoArquivo, definirLoop, alternarLoop, desenharLoop, exportarAgora, cadeiaDe: (id) => { const n = nos.get(id); return n && n.cadeia ? { assinatura: n.cadeia.assinatura, itens: [...n.cadeia.itens.keys()], reducao: [...n.cadeia.itens.values()].map((i) => i.reducao) } : null; }, fxOk: () => fxOk, renderFx, moverRegiaoMs, medirAtrasoDeCliques, acaoSinc,
       afin: () => afin, aplicarAfinacao, prepararAfinacao, limparRegiao, modoSep, salvarProjeto, listarProjetos, abrirProjeto, S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
       fontes: () => fontes.length, cliques: () => cliquesTotal, cliqueLog: () => cliqueLog.slice(),
       ganhoDe: (id) => { const n = nos.get(id); return n ? n.gain.gain.value : null; },
