@@ -107,7 +107,7 @@
   }
   function desenharHome() {
     const el = $("#page-home"); if (!el) return;
-    el.innerHTML = `<div class="amb-hero"><div class="amb-slogan">Seu universo musical inteligente</div><h2 class="amb-pergunta">O que vamos fazer hoje?</h2></div>
+    el.innerHTML = `<div class="amb-hero"><h2 class="amb-pergunta">O que vamos fazer hoje?</h2></div>
       <div class="amb-grid">${AMBIENTES.map((a) => {
         const n = a.grupos.reduce((s, g) => s + g.itens.length, 0);
         return `<button type="button" class="amb-card" data-ir="amb:${a.id}" data-amb="${a.id}" style="${estilo(a)}" aria-label="${esc(a.nome)}: ${esc(a.resumo)}">

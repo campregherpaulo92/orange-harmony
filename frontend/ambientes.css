@@ -69,3 +69,7 @@ body.estudio-ativo .amb-barra { display: none; }
 
 /* espaço no fim da Home e dos ambientes para o botão flutuante da Laranjinha não cobrir o último cartão */
 #page-home, .oh-page[id^="page-amb-"] { padding-bottom: 96px; }
+
+/* o slogan fica logo abaixo do logo (é a linha do cabeçalho, em todas as telas); na Home ele é maior e mais claro, já que é o slogan e não uma linha técnica */
+body[data-tela="home"] .oh-subtitle { font-size: 1.1rem; font-weight: 600; letter-spacing: .02em; color: #f6c9a0; margin-top: 8px; }
+.amb-hero { padding-top: 0; }
