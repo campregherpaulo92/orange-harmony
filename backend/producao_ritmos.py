@@ -418,10 +418,15 @@ def nivelar(trilha, rms_alvo, pico_max=0.85, saturacao=2.0):
     return x
 
 
+def camada_nivelada(trilha, ref, camada, estilo="Pop"):
+    """Uma camada no volume certo em relação à voz (ref = volume médio da voz), SEM somar em lugar nenhum."""
+    alvo = ref * 10 ** (NIVEL_DB[camada] / 20) * R.energia(estilo)
+    return nivelar(trilha, alvo)
+
+
 def somar_nivelado(mix, trilha, ref, camada, estilo="Pop"):
     """Soma UMA camada na mixagem, no volume certo em relação à voz (ref = volume médio da voz)."""
-    alvo = ref * 10 ** (NIVEL_DB[camada] / 20) * R.energia(estilo)
-    x = nivelar(trilha, alvo)
+    x = camada_nivelada(trilha, ref, camada, estilo)
     n = min(len(mix), len(x))
     mix[:n] += x[:n]
 

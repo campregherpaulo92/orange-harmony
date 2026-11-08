@@ -666,6 +666,61 @@ def gerar_producao_rota(
     return Response(content=wav_bytes, media_type="audio/wav", headers=cabecalhos)
 
 
+@app.post("/api/producao/camadas")
+@somente_uma_pesada
+def gerar_producao_camadas_rota(
+    arquivo: UploadFile = File(...),
+    estilo: str = Form("Pop"),
+    com_baixo: bool = Form(True),
+    com_bateria: bool = Form(True),
+    com_acordes: bool = Form(True),
+    com_teclado: bool = Form(False),
+    com_solo: bool = Form(False),
+    qualidade_pro: bool = Form(True),
+    acordes_modo: str = Form("melodia"),
+    bpm_manual: float = Form(0.0),
+):
+    """Igual a /api/producao, mas devolve cada instrumento como um WAV SEPARADO dentro de um .zip (sem compressão):
+    é o que o Estúdio usa para criar uma faixa por instrumento em cima de uma faixa que já existe."""
+    import io as _io, zipfile as _zip
+    if not (com_baixo or com_bateria or com_acordes or com_teclado or com_solo):
+        raise HTTPException(status_code=400, detail="Escolha ao menos um instrumento para gerar.")
+    pedido = estilo
+    estilo, achou = ritmos.resolver(estilo)
+    dados = arquivo.file.read()
+    audio, sr = carregar_audio_bytes(dados, arquivo.filename or "audio.wav")
+    del dados
+    if audio is None:
+        raise HTTPException(status_code=400, detail="Não foi possível ler o áudio. Tente outro formato.")
+    audio, aviso = _limitar_duracao(audio, sr)
+    try:
+        camadas, resumo = producao_pipeline.produzir_camadas(
+            audio, sr, estilo, com_baixo=com_baixo, com_bateria=com_bateria, com_acordes=com_acordes,
+            com_teclado=com_teclado, com_solo=com_solo, qualidade_pro=qualidade_pro,
+            acordes_modo=acordes_modo, bpm_manual=bpm_manual)
+    except producao_pipeline.ErroProducao as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar produção: {e}")
+    duracao = len(audio) / float(sr)
+    del audio
+    saida = _io.BytesIO()
+    with _zip.ZipFile(saida, "w", _zip.ZIP_STORED) as z:
+        for nome in list(camadas.keys()):
+            z.writestr(f"{nome}.wav", converter_audio.audio_para_wav_bytes(camadas.pop(nome), sr))     # uma por vez: libera a memória logo
+            liberar_memoria()
+    cabecalhos = {
+        "X-BPM": f"{resumo['bpm']:.1f}", "X-Tom": quote(resumo["tom_detectado"]), "X-Modo": quote(resumo["modo_detectado"] or ""),
+        "X-Estilo": quote(estilo), "X-Acordes": quote(" – ".join(resumo["acordes"])), "X-Duracao": f"{duracao:.3f}",
+        "Access-Control-Expose-Headers": "X-BPM, X-Tom, X-Modo, X-Aviso, X-Estilo, X-Acordes, X-Aviso-Estilo, X-Duracao",
+    }
+    if aviso:
+        cabecalhos["X-Aviso"] = aviso
+    if not achou and (pedido or "").strip():
+        nome_ascii = (pedido.strip().encode("ascii", "ignore").decode() or "?")[:40]
+        cabecalhos["X-Aviso-Estilo"] = f"Estilo '{nome_ascii}' nao existe; usei Pop. Parecidos: " + ", ".join(
+            x.encode("ascii", "ignore").decode() for x in ritmos.sugerir(pedido, 4))
+    return Response(content=saida.getvalue(), media_type="application/zip", headers=cabecalhos)
+
+
 @app.get("/api/memoria")
 def memoria_do_servidor():
     """Memória do servidor agora e o pico desde que ele ligou (para ver quanto sobra no plano gratuito)."""
@@ -783,6 +838,24 @@ def aplicar_edicao_por_comando_rota(arquivo: UploadFile = File(...), comando: st
     if aviso:
         cabecalhos["X-Aviso"] = aviso
     return Response(content=wav_bytes, media_type="audio/wav", headers=cabecalhos)
+
+
+@app.post("/api/edicao/interpretar")
+def interpretar_edicao_rota(comando: str = Form(...)):
+    """SÓ interpreta um pedido em português (ex.: 'limpa o ruído e deixa mais grave') e devolve os ajustes, SEM mexer em áudio nenhum:
+    o Estúdio aplica esses ajustes com as próprias ferramentas (não destrutivo, com desfazer). Usa o Gemini quando ligado e, se não, palavras-chave."""
+    if not (comando or "").strip():
+        raise HTTPException(status_code=400, detail="Descreva o que você quer fazer com a voz.")
+    flags = laranjinha.interpretar_comando_edicao(comando[:500])
+    for k in ("reduzir_ruido", "normalizar", "eq_presenca", "compressao", "remover_sibilancia", "reverb_leve"):
+        flags[k] = bool(flags.get(k, False))
+    try:
+        tom = float(flags.get("ajustar_tom", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        tom = 0.0
+    flags["ajustar_tom"] = max(-12.0, min(12.0, tom))
+    import gemini_client as _g
+    return {"flags": flags, "usou_ia": bool(_g.gemini_disponivel())}
 
 
 # ══════════════════════════════════════════════════════════════

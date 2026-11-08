@@ -60,3 +60,48 @@ def produzir(audio, sr, estilo, com_baixo=True, com_bateria=True, com_acordes=Tr
     liberar_memoria()
     return wav_bytes, {"bpm": bpm, "tom_detectado": info["tom_detectado"], "modo_detectado": info["modo_detectado"],
                        "acordes": info["acordes"], "estilo": estilo}
+
+
+def produzir_camadas(audio, sr, estilo, com_baixo=True, com_bateria=True, com_acordes=True, com_teclado=False, com_solo=False,
+                     qualidade_pro=True, acordes_modo="melodia", bpm_manual=0.0):
+    """O MESMO caminho de `produzir`, mas devolve cada camada SEPARADA (para o Estúdio criar uma faixa por instrumento).
+    Cada camada sai com o ducking (se qualidade_pro) e no volume certo EM RELAÇÃO AO ÁUDIO ORIGINAL (a voz não é mexida: o equilíbrio
+    entre as camadas e o original é o mesmo da mixagem pronta). Não há reverb nem limitador finais: o Estúdio tem os próprios.
+    Devolve (camadas: dict nome -> np.float32 com o MESMO comprimento de `audio`, resumo)."""
+    import numpy as np
+    bpm, beat_times = detectar_bpm_e_beats(audio, sr, bpm_manual if 40 <= bpm_manual <= 220 else None)
+    info = harmonia.preparar(audio, sr, estilo, bpm, beat_times, acordes_modo if acordes_modo in ("melodia", "estilo") else "melodia")
+    tom, harm = info["tom"], info["harmonia"]
+    liberar_memoria()
+    env_voz = producao_dsp.envelope_voz(audio) if qualidade_pro else None
+    pico = float(np.max(np.abs(audio))) + 1e-9
+    ref = producao_ritmos.rms_voz(producao_dsp.iniciar_mix(audio))     # volume médio da voz já normalizada (como na mixagem pronta)
+    escala = pico / 0.70                                              # volta ao volume do áudio ORIGINAL (a mixagem normaliza a voz para 0,70)
+    n = len(audio)
+    camadas = {}
+    try:
+        lista = [
+            (com_baixo,   "baixo",   lambda: producao_ritmos.gerar_baixo_estilo(audio, sr, tom, bpm, beat_times, estilo, harm),   0.30),
+            (com_bateria, "bateria", lambda: producao_ritmos.gerar_bateria_estilo(audio, sr, bpm, beat_times, estilo),      None),
+            (com_acordes, "acordes", lambda: producao_ritmos.gerar_acordes_estilo(audio, sr, tom, bpm, beat_times, estilo, harm), 0.40),
+            (com_teclado, "teclado", lambda: producao_ritmos.gerar_teclado_estilo(audio, sr, tom, bpm, beat_times, estilo, harm), 0.35),
+            (com_solo,    "solo",    lambda: producao_ritmos.gerar_solo_estilo(audio, sr, tom, bpm, beat_times, estilo, harm, info["modo"]),     0.30),
+        ]
+        for ativa, nome, gerar, ducking in lista:
+            if not ativa:
+                continue
+            trilha = gerar()
+            if qualidade_pro and ducking is not None:
+                trilha = producao_dsp.aplicar_ducking(trilha, audio, sr, intensidade=ducking, envelope=env_voz)
+            x = producao_ritmos.camada_nivelada(trilha, ref, nome, estilo).astype(np.float32) * np.float32(escala)
+            del trilha
+            saida = np.zeros(n, dtype=np.float32)
+            m = min(n, len(x))
+            saida[:m] = x[:m]
+            camadas[nome] = saida
+            del x
+            liberar_memoria()
+    except Exception as e:
+        raise ErroProducao(str(e)) from e
+    return camadas, {"bpm": bpm, "tom_detectado": info["tom_detectado"], "modo_detectado": info["modo_detectado"],
+                     "acordes": info["acordes"], "estilo": estilo}
