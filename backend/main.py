@@ -41,6 +41,7 @@ import ritmos
 import harmonia
 import producao_ritmos
 import producao_pipeline
+import transcricao
 import singergame
 import chats
 import songwriter
@@ -719,6 +720,64 @@ def gerar_producao_camadas_rota(
         cabecalhos["X-Aviso-Estilo"] = f"Estilo '{nome_ascii}' nao existe; usei Pop. Parecidos: " + ", ".join(
             x.encode("ascii", "ignore").decode() for x in ritmos.sugerir(pedido, 4))
     return Response(content=saida.getvalue(), media_type="application/zip", headers=cabecalhos)
+
+
+@app.post("/api/transcricao/acordes")
+@somente_uma_pesada
+def transcrever_acordes_rota(arquivo: UploadFile = File(...), bpm: float = Form(0.0)):
+    """Tom, andamento e acordes ao longo do tempo (detector próprio do app). Usa até 5 minutos de áudio. O andamento pode ser informado (0 = detectar)."""
+    import numpy as _np
+    dados = arquivo.file.read()
+    audio, sr = carregar_audio_bytes(dados, arquivo.filename or "audio.wav")
+    del dados
+    if audio is None or not len(audio):
+        raise HTTPException(status_code=400, detail="Não foi possível ler o áudio. Tente outro formato.")
+    if sr != transcricao.SR:
+        audio = _np.interp(_np.arange(0, len(audio), sr / float(transcricao.SR)), _np.arange(len(audio)), audio).astype(_np.float32)
+        sr = transcricao.SR
+    aviso = None
+    if len(audio) > transcricao.DURACAO_MAX_S * sr:
+        audio = audio[: transcricao.DURACAO_MAX_S * sr]
+        aviso = f"A música passa de {transcricao.DURACAO_MAX_S // 60} minutos: analisei só os {transcricao.DURACAO_MAX_S // 60} primeiros."
+    bpm_dado = bpm if 40 <= bpm <= 220 else None
+    beats, bpm_final = None, bpm_dado
+    try:
+        bpm_final, bt = audio_analysis.detectar_bpm_e_beats(audio, sr, bpm_dado)
+        beats = [float(x) for x in bt]
+    except Exception:
+        beats = None                                      # sem as batidas os acordes saem igual, só sem o "encaixe" na grade
+    try:
+        res = transcricao.analisar(audio, beats=beats, bpm=round(float(bpm_final), 1) if bpm_final else None)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao analisar os acordes: {e}")
+    if aviso:
+        res["aviso_duracao"] = aviso
+    res["beats"] = [round(b, 2) for b in (beats or [])[:3000]]
+    liberar_memoria()
+    return res
+
+
+@app.post("/api/transcricao/letra")
+def transcrever_letra_rota(arquivo: UploadFile = File(...), letra: str = Form("")):
+    """A IA ouve a música e devolve a letra, linha por linha, com o tempo de cada uma. Se a pessoa já tem a letra (ex.: do Songwriter), ela vai junto e a IA só marca os tempos (bem mais confiável)."""
+    if not gemini_client.gemini_disponivel():
+        raise HTTPException(status_code=503, detail="A IA não está disponível agora. A cifra (tom e acordes) funciona sem ela.")
+    dados = arquivo.file.read()
+    audio, sr = carregar_audio_bytes(dados, arquivo.filename or "audio.wav")
+    if audio is None or not len(audio):
+        raise HTTPException(status_code=400, detail="Não foi possível ler o áudio. Tente outro formato.")
+    dur = len(audio) / float(sr)
+    del audio
+    if dur > transcricao.DURACAO_MAX_S + 1:
+        raise HTTPException(status_code=400, detail=f"A música passa de {transcricao.DURACAO_MAX_S // 60} minutos. Selecione um trecho menor.")
+    letra = (letra or "").strip()[:6000]
+    mime = arquivo.content_type if (arquivo.content_type or "").startswith("audio/") else "audio/wav"
+    texto, modelo = gemini_client.chamar_com_audio(transcricao.montar_prompt_letra(dur, letra), dados, arquivo.filename or "audio.wav", mime)
+    del dados
+    if texto is None:
+        raise HTTPException(status_code=502, detail=f"A IA não conseguiu ouvir a música agora: {modelo}")
+    linhas, avisos = transcricao.ler_resposta_letra(texto, dur, letra)
+    return {"linhas": linhas, "avisos": avisos, "modelo": modelo, "duracao": round(dur, 2), "origem": "letra_colada" if letra else "ia"}
 
 
 @app.get("/api/memoria")
