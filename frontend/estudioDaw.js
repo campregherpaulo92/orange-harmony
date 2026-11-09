@@ -269,7 +269,12 @@
       <div class="dw-modal" id="dwModalSep" hidden>
         <div class="dw-modal-cartao">
           <div class="dw-modal-topo"><b>Separar uma música em faixas</b><button id="dwSepFechar" aria-label="Fechar">×</button></div>
-          <div class="dw-colab" id="dwColab" hidden><span class="dw-pilula" id="dwColabPilula">Desligado</span><p id="dwColabTexto"></p><a class="dw-btn peq" id="dwColabLink" href="#" target="_blank" rel="noopener" style="width:fit-content;text-decoration:none">Abrir o separador no Colab</a></div>
+          <div class="dw-colab" id="dwColab" hidden><span class="dw-pilula" id="dwColabPilula">Desligado</span><p id="dwColabTexto"></p><a class="dw-btn peq" id="dwColabLink" href="#" target="_blank" rel="noopener" style="width:fit-content;text-decoration:none">Abrir o separador no Colab</a>
+            <details class="dw-colab-outro" id="dwColabOutro"><summary>Abriu o notebook errado? Usar o meu link</summary>
+              <p class="dw-dica">Se você tem uma cópia do notebook no seu Drive (com o segredo FIREBASE_JSON já liberado), cole aqui o link dela. Fica guardado neste aparelho.</p>
+              <input type="url" id="dwColabUrl" placeholder="https://colab.research.google.com/drive/…" autocomplete="off" spellcheck="false">
+              <div class="dw-colab-botoes"><button class="dw-btn peq" id="dwColabUsar">Usar este link</button><button class="dw-btn peq" id="dwColabPadrao">Voltar ao link do app</button></div></details>
+            <p class="dw-dica" id="dwColabUrlMsg"></p></div>
           <div>
             <input type="file" id="dwSepArq" accept=".wav,.mp3,.m4a,.ogg,.flac,.webm" hidden>
             <div class="dw-acoes" style="justify-content:flex-start"><button class="dw-btn" id="dwSepUpload">${ic("pasta")} Escolher do aparelho</button><button class="dw-btn" id="dwSepBib">${ic("pasta")} Escolher da biblioteca</button></div>
@@ -540,6 +545,17 @@
     try { const r = await fetch(`${API_BASE}/api/estudio/config`); configEst = await r.json(); } catch (e) { configEst = configEst || { modo: "fila", colab: { online: false }, colab_url: "#" }; }
     atualizarColab(); return configEst;
   }
+  // Link do notebook: o que a pessoa colou (guardado neste aparelho) vale mais que o do servidor. Só aceita endereços do Colab.
+  const COLAB_CHAVE = "oh_colab_url", COLAB_PREFIXO = "https://colab.research.google.com/";
+  const colabUrlValida = (u) => typeof u === "string" && u.length <= 600 && u.indexOf(COLAB_PREFIXO) === 0 && !/\s/.test(u);
+  function colabUrlEscolhida() { try { const u = (localStorage.getItem(COLAB_CHAVE) || "").trim(); return colabUrlValida(u) ? u : null; } catch (e) { return null; } }
+  function colabUrlFinal() { return colabUrlEscolhida() || (configEst && configEst.colab_url) || "#"; }
+  function colabOrigemTexto() {
+    if (colabUrlEscolhida()) return "Abrindo o SEU link (guardado neste aparelho).";
+    if (configEst && configEst.colab_url_origem === "variavel") return "Abrindo o link definido no servidor (variável COLAB_SEPARADOR_URL). Se ele é o notebook antigo, cole o seu link acima ou atualize essa variável no servidor.";
+    if (/\/github\//.test((configEst && configEst.colab_url) || "")) return "Abrindo o notebook do GitHub. Cada vez que ele abre é uma cópia nova: o acesso ao segredo precisa ser ligado de novo. Para não repetir isso, salve uma cópia no seu Drive e cole o link dela acima.";
+    return "Abrindo o notebook do app (a cópia que está no Drive, com o segredo FIREBASE_JSON já liberado).";
+  }
   function atualizarColab() {
     const card = $("#dwColab"); if (!card || !configEst) return;
     if (configEst.modo !== "fila") { card.hidden = true; atualizarBotaoSep(); return; }
@@ -547,7 +563,7 @@
     const comp = configEst.colab ? configEst.colab.completo : undefined;      // true = notebook novo (6 faixas); false = antigo; undefined = servidor ainda não informa
     card.classList.toggle("on", on); $("#dwColabPilula").textContent = on ? (configEst.colab.gpu ? "Ligado · GPU" : "Ligado") + (comp === true ? " · 6 faixas" : comp === false ? " · versão antiga (só 2 faixas)" : "") : "Desligado";
     $("#dwColabTexto").textContent = on && comp === false ? "O Colab que está ligado é a versão ANTIGA do notebook: ele só separa voz e instrumental. Pare-o (no Colab: Ambiente de execução → Desconectar e excluir ambiente de execução), abra o notebook novo pelo botão abaixo e rode Executar tudo." : on ? "Pronto! Escolha um áudio e clique em Separar." : "A separação roda no Google Colab (o servidor gratuito não tem memória para o Demucs). Ligue o separador uma vez: abra o Colab, use Ambiente de execução → Executar tudo e volte aqui. Este cartão fica verde sozinho.";
-    $("#dwColabLink").href = configEst.colab_url || "#"; $("#dwColabLink").hidden = on && comp !== false; atualizarBotaoSep(); atualizarAvisoModo();
+    $("#dwColabLink").href = colabUrlFinal(); $("#dwColabLink").hidden = on && comp !== false; $("#dwColabUrlMsg").textContent = colabOrigemTexto(); const ui = $("#dwColabUrl"); if (ui && !ui.value && document.activeElement !== ui && colabUrlEscolhida()) ui.value = colabUrlEscolhida(); atualizarBotaoSep(); atualizarAvisoModo();
   }
   function colabPronto() { return !configEst || configEst.modo !== "fila" || !!(configEst.colab && configEst.colab.online); }
   function atualizarBotaoSep() { const b = $("#dwSepIniciar"); if (b) b.disabled = sepRodando || !sepArquivo || !colabPronto(); }
@@ -941,6 +957,13 @@
     $("#dwSepBib").addEventListener("click", (e) => { if (window.escolherDaBiblioteca) window.escolherDaBiblioteca($("#dwSepArq"), e.currentTarget); else $("#dwSepStatus").textContent = "A biblioteca não está disponível agora."; });
     $("#dwSepArq").addEventListener("change", (e) => { sepArquivo = e.target.files[0] || null; $("#dwSepNome").textContent = sepArquivo ? `Escolhido: ${sepArquivo.name}` : "Nenhum áudio escolhido."; atualizarBotaoSep(); });
     $("#dwSepIniciar").addEventListener("click", iniciarSeparacao);
+    $("#dwColabUsar").addEventListener("click", () => {
+      const u = ($("#dwColabUrl").value || "").trim();
+      if (!colabUrlValida(u)) { $("#dwColabUrlMsg").textContent = `Esse link não serve: ele precisa começar com ${COLAB_PREFIXO} (copie o endereço da barra do navegador com o notebook aberto).`; return; }
+      try { localStorage.setItem(COLAB_CHAVE, u); } catch (e) { $("#dwColabUrlMsg").textContent = "Não consegui guardar o link neste aparelho."; return; }
+      atualizarColab(); dica("Link do notebook guardado neste aparelho.");
+    });
+    $("#dwColabPadrao").addEventListener("click", () => { try { localStorage.removeItem(COLAB_CHAVE); } catch (e) { /* sem armazenamento */ } $("#dwColabUrl").value = ""; atualizarColab(); dica("Voltei ao link do app."); });
     ligarEventosFx(); ligarEventosSm(); ligarEventosVoz(); ligarEventosProd();
     { // altura do painel de baixo: arrastar a alça da borda de cima (fica guardada; duplo clique volta ao padrão)
       const ed = $("#dwEditor"), alca = $("#dwEdRedim"), lim = (h) => Math.max(120, Math.min(window.innerHeight - 330, h));   // sempre sobra espaço para a linha do tempo
@@ -1594,7 +1617,7 @@
     paraMp3: async (blob, kbps) => { garantirAudio(); return audioBufferParaMp3Blob(await decodificar(await blob.arrayBuffer()), kbps || 192); },   // e converte para MP3 quando o arquivo é grande demais para a Biblioteca
     _teste: {
       pilhaN: () => pilha.length,
-      sm: { listar: () => amostras.map((a) => ({ id: a.id, nome: a.nome, dur: a.dur, canais: a.canais })), carregar: carregarAmostras, criar: criarAmostra, importar: importarAmostra, inserir: inserirAmostra, tocar: tocarAmostra, excluir: excluirAmostra, renomear: renomearAmostra, renderizarRegiao, taxa: smTaxa, semisDaTecla, sel: () => smSel }, bufs, cifra: () => cifraUI, renderCifra, renderVoz, aplicarEdicaoVoz, interpretarLocal, renderProd, gerarProducao, zip: { criar: criarZip, ler: lerZip, crc: crc32 }, mp3: audioBufferParaMp3Blob, exportarProjetoArquivo, abrirProjetoArquivo, definirLoop, alternarLoop, desenharLoop, exportarAgora, cadeiaDe: (id) => { const n = nos.get(id); return n && n.cadeia ? { assinatura: n.cadeia.assinatura, itens: [...n.cadeia.itens.keys()], reducao: [...n.cadeia.itens.values()].map((i) => i.reducao) } : null; }, fxOk: () => fxOk, renderFx, moverRegiaoMs, medirAtrasoDeCliques, acaoSinc,
+      sm: { listar: () => amostras.map((a) => ({ id: a.id, nome: a.nome, dur: a.dur, canais: a.canais })), carregar: carregarAmostras, criar: criarAmostra, importar: importarAmostra, inserir: inserirAmostra, tocar: tocarAmostra, excluir: excluirAmostra, renomear: renomearAmostra, renderizarRegiao, taxa: smTaxa, semisDaTecla, sel: () => smSel }, bufs, colabUrlFinal, cifra: () => cifraUI, renderCifra, renderVoz, aplicarEdicaoVoz, interpretarLocal, renderProd, gerarProducao, zip: { criar: criarZip, ler: lerZip, crc: crc32 }, mp3: audioBufferParaMp3Blob, exportarProjetoArquivo, abrirProjetoArquivo, definirLoop, alternarLoop, desenharLoop, exportarAgora, cadeiaDe: (id) => { const n = nos.get(id); return n && n.cadeia ? { assinatura: n.cadeia.assinatura, itens: [...n.cadeia.itens.keys()], reducao: [...n.cadeia.itens.values()].map((i) => i.reducao) } : null; }, fxOk: () => fxOk, renderFx, moverRegiaoMs, medirAtrasoDeCliques, acaoSinc,
       afin: () => afin, aplicarAfinacao, prepararAfinacao, limparRegiao, modoSep, salvarProjeto, listarProjetos, abrirProjeto, S, bufs, picos, foto, desfazer, refazer, renderizarMixagem, importarAudio, aplicarSeparacao, garantirAudio,
       fontes: () => fontes.length, cliques: () => cliquesTotal, cliqueLog: () => cliqueLog.slice(),
       ganhoDe: (id) => { const n = nos.get(id); return n ? n.gain.gain.value : null; },
