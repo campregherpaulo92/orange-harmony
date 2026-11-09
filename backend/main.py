@@ -375,10 +375,9 @@ def escalas_descrever(tonica: str = Form(...), tipo: str = Form(...)):
 # ── Separação de stems via Colab (fila no Firebase) ──
 # Link do notebook no Colab (abre direto do GitHub, da branch cloudrun, a mesma do deploy). Dá pra trocar pela variável
 # de ambiente COLAB_SEPARADOR_URL no Render, se você mover o notebook de lugar.
-COLAB_SEPARADOR_URL = os.environ.get(
-    "COLAB_SEPARADOR_URL",
-    "https://colab.research.google.com/github/campregherpaulo92/orange-harmony/blob/cloudrun/notebooks/separador_stems.ipynb",
-)
+# O padrão é a cópia do notebook que está no Drive do dono do app (já com o segredo FIREBASE_JSON liberado). O do GitHub (notebooks/separador_stems.ipynb) abre sempre como cópia nova.
+COLAB_SEPARADOR_URL_PADRAO = "https://colab.research.google.com/drive/1t3hGG4PRyDifL2pZGf0kNpCkAc8lZaQZ#scrollTo=JJ5tApkU9IyH"
+COLAB_SEPARADOR_URL = os.environ.get("COLAB_SEPARADOR_URL", COLAB_SEPARADOR_URL_PADRAO)
 
 
 @app.get("/api/estudio/config")
@@ -386,7 +385,9 @@ def estudio_config():
     """Diz ao front-end COMO separar: 'local' (este servidor tem Demucs) ou
     'fila' (manda pro Colab), e se o Colab está ligado agora."""
     modo = estudio_fila.modo_separacao()
-    resp = {"modo": modo, "colab_url": COLAB_SEPARADOR_URL}
+    # colab_url_origem diz de onde o link veio: "variavel" (definido no servidor) ou "padrao" (o notebook do GitHub); a tela mostra isso para a pessoa saber qual notebook vai abrir
+    resp = {"modo": modo, "colab_url": COLAB_SEPARADOR_URL, "colab_url_padrao": COLAB_SEPARADOR_URL_PADRAO,
+            "colab_url_origem": "variavel" if COLAB_SEPARADOR_URL != COLAB_SEPARADOR_URL_PADRAO else "padrao"}
     if modo == "local":
         resp["completo"] = True        # este servidor tem Demucs: pode separar em 6 faixas
     if modo == "fila":
