@@ -1387,3 +1387,7 @@ body.oh-bib-aberta { overflow: hidden; }
 .sw-palavras { margin-top: 12px; font-size: 0.85rem; color: #cdbfb0; } .sw-palavras summary { cursor: pointer; } .sw-palavras textarea { margin-top: 6px; }
 #swEstrMsg { white-space: pre-line; }
 @media (max-width: 560px) { .sw-tempo { margin-left: 0; flex-basis: 100%; } .sw-seg button { padding: 7px 12px; } .sw-ajustes input[data-f="nome"] { width: 100%; } }
+
+/* Mapa da música: estrutura montada pela letra */
+.sw-letra-info { margin: 10px 0; padding: 10px 12px; border: 1px solid rgba(249,115,22,0.45); border-radius: 12px; background: rgba(249,115,22,0.07); }
+.sw-letra-info .sw-sub { margin: 0 0 4px; } .sw-letra-info .oh-row { margin: 6px 0; flex-wrap: wrap; } .sw-letra-msg { color: #ffe3cf; }

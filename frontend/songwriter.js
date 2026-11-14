@@ -318,7 +318,16 @@ function inicializarSongwriter() {
       coverDica.textContent = "Melodia ajustada pela estrutura (cortes e repetições aplicados).";
     },
     copiar: async (txt) => { try { await navigator.clipboard.writeText(txt); return true; } catch (e) { return false; } },
+    // alinha a letra do usuário à gravação: a IA ouve o áudio e devolve o tempo de cada linha (mesma rota da aba Cifra)
+    alinharLetra: async (linhas) => {
+      const arq = arquivoReferenciaAtual(); if (!arq) throw new Error("falta o áudio de referência");
+      const f = new FormData(); f.append("arquivo", arq); f.append("letra", linhas);
+      const r = await fetch(`${API_BASE}/api/transcricao/letra`, { method: "POST", body: f });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || `erro ${r.status}`); }
+      return r.json();
+    },
   }) : null;
+  const letraGravacao = document.getElementById("songwriterLetraGravacao");
 
   function contarVersos(texto) {
     return (texto || "").split("\n").map((l) => l.trim())
@@ -353,6 +362,11 @@ function inicializarSongwriter() {
     coverBloco.hidden = false;
   }
 
+  // Tira do texto do estilo as sobras de formatação (“> ” no começo, **negrito**, crases, marcadores de lista) que vão junto para o modelo; as palavras ficam todas.
+  function limparEstilo(t) {
+    return String(t || "").split(/\r?\n/).map((l) => l.replace(/^\s*(?:[>#\-*•]+\s*)+/, "")).join(" ")
+      .replace(/\*\*+|__+|`+/g, "").replace(/\s{2,}/g, " ").trim();
+  }
   function avisoDeMetrica(letra) {
     if (estrutura && estrutura.temEstrutura()) return estrutura.avisoDeMetrica(letra);   // com a estrutura lida da melodia a conferência é por parte (Verso 2, Refrão…)
     const modelo = contarVersos(letraDaMelodia);
@@ -392,9 +406,16 @@ function inicializarSongwriter() {
           "Melodia extraída da sua gravação. Confira e, se quiser, corrija. Depois escreva ou cole a SUA letra no campo \"Letra\" logo abaixo.",
           dados.letra || "");
         letraCard.hidden = false;
-        if (!letraTexto.value.trim() && dados.letra) letraTexto.value = dados.letra;
+        const letraPre = letraGravacao ? letraGravacao.value.trim() : "";
+        // se a pessoa já colou a SUA letra, é ela que vai para o campo "Letra" (e não as palavras que o modelo ouviu, que costumam vir erradas)
+        if (!letraTexto.value.trim() && (letraPre || dados.letra)) letraTexto.value = letraPre || dados.letra;
         const resumo = (dados.resumo || "").replace(/\s+/g, " ").trim().slice(0, 180);
         statusCover.textContent = "✅ Melodia extraída." + (resumo ? " " + resumo : "");
+        if (letraPre && estrutura) {
+          statusCover.textContent += " Agora alinhando a sua letra à gravação…";
+          const msg = await estrutura.alinharComLetra(letraPre);
+          statusCover.textContent = "✅ Melodia extraída." + (msg ? " " + msg : "");
+        }
       } catch (err) {
         statusCover.textContent = err && err.name === "AbortError" ? MSG_CANCELADO : `Erro: ${err.message}`;
       } finally {
@@ -424,7 +445,7 @@ function inicializarSongwriter() {
       coverResultado.hidden = true;
       statusCover.textContent = (aviso ? aviso + " " : "") + "🎛️ Gerando a versão com banda… pode levar alguns minutos.";
       const form = new FormData();
-      form.append("estilo", coverEstilo.value.trim() || promptTexto.value.trim());
+      form.append("estilo", limparEstilo(coverEstilo.value.trim() || promptTexto.value.trim()));
       form.append("letra", letra);
       form.append("abc", abc);
       form.append("qualidade", coverQualidade.value);

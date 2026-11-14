@@ -8,7 +8,7 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=16">
+<link rel="stylesheet" href="styles.css?v=17">
 <link rel="stylesheet" href="identidade.css?v=12">
 <link rel="stylesheet" href="estudioDaw.css?v=25">
 <link rel="stylesheet" href="ambientes.css?v=2">
@@ -604,6 +604,9 @@
       <div class="oh-card" id="songwriterCoverCard">
         <div class="oh-section-title"><span><i class="oh-ic" data-ic="nota"></i></span> Criar a partir da minha gravação (fiel à melodia)<i class="oh-title-line"></i></div>
         <p class="oh-hint">Usa o <b>áudio de referência</b> acima (upload ou gravação). O app extrai a <b>melodia</b> como partitura, você revisa, escreve a letra e gera uma versão com banda seguindo as <b>suas notas</b>. A voz e o arranjo saem novos: a sua entonação e a batida do violão não são copiadas.</p>
+        <label class="oh-label-campo" for="songwriterLetraGravacao" style="margin-top:12px;"><i class="oh-ic" data-ic="documento"></i> Letra da gravação (opcional, mas ajuda muito)</label>
+        <textarea id="songwriterLetraGravacao" class="oh-textarea" rows="6" placeholder="[Verso 1]&#10;primeira linha do verso&#10;segunda linha&#10;&#10;[Refrão]&#10;primeira linha do refrão"></textarea>
+        <p class="oh-hint">Cole aqui a letra da sua música <b>com as partes marcadas</b> ([Verso 1], [Pré-refrão], [Refrão], [Ponte]…). Depois de extrair a melodia, o app descobre onde cada parte começa e termina na gravação e monta o mapa com os <b>seus nomes</b>. Gasta mais uma chamada da IA.</p>
         <div class="oh-row" style="margin-top:10px; align-items:flex-end;">
           <label>Idioma cantado na gravação
             <select id="songwriterCoverIdioma">
@@ -985,8 +988,8 @@
 <script src="estudioCifra.js?v=3"></script>
 <script src="estudioDaw.js?v=27"></script>
 <script src="abcjs-basic-min.js?v=12"></script>
-<script src="songwriterEstrutura.js?v=3"></script>
-<script src="songwriter.js?v=14"></script>
+<script src="songwriterEstrutura.js?v=4"></script>
+<script src="songwriter.js?v=15"></script>
 <script src="partitura.js?v=12"></script>
 <script src="partituraModelo.js?v=12"></script>
 <script src="partituraAssistente.js?v=12"></script>

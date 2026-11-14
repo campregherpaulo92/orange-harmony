@@ -59,7 +59,7 @@
     const novaSecao = (tipo, linhaMarca) => { sec = { id: secoes.length, tipo, linhaMarca, blocos: [] }; secoes.push(sec); itens.push({ t: "secao", id: sec.id }); bloco = null; };
     const novoBloco = () => {
       if (!sec) novaSecao("inicio", null);
-      bloco = { id: blocos.length, secao: sec.id, linhas: [], compVoz: 0, compOutras: 0, notas: 0, notasSeq: [], campos: [], temMusica: false };
+      bloco = { id: blocos.length, secao: sec.id, linhas: [], linhasVoz: [], compVoz: 0, compOutras: 0, notas: 0, notasSeq: [], campos: [], temMusica: false };
       blocos.push(bloco); sec.blocos.push(bloco.id); itens.push({ t: "bloco", id: bloco.id });
     };
     for (let i = k + 1; i < linhas.length; i++) {
@@ -82,7 +82,7 @@
       if (ehMusica(l)) {
         bloco.temMusica = true;
         const n = contarCompassos(l);
-        if (voz === vozPrincipal || voz === null) { bloco.compVoz += n; const tk = tokensNotas(l); bloco.notas += tk.length; bloco.notasSeq.push(...tk); } else bloco.compOutras += n;
+        if (voz === vozPrincipal || voz === null) { bloco.compVoz += n; const tk = tokensNotas(l); bloco.notas += tk.length; bloco.notasSeq.push(...tk); bloco.linhasVoz.push(l); } else bloco.compOutras += n;
       }
     }
     const avisos = [];
@@ -284,7 +284,7 @@
       const a = acoes[k]; if (!a || a.tipo !== "copiar") return;
       const quais = p.blocos.filter((id) => !fora.has(id)); if (!quais.length) return;
       const dest = partes[a.depoisDe != null ? a.depoisDe : k] || p;
-      marcas.copias.push({ blocos: quais, depoisDe: dest.blocos[dest.blocos.length - 1], comMarca: p.blocos.length === est.secoes[p.secao].blocos.length && quais.length === p.blocos.length, secao: p.secao, parte: k });
+      marcas.copias.push({ blocos: quais, depoisDe: dest.blocos[dest.blocos.length - 1], comMarca: p.blocos.length === est.secoes[p.secao].blocos.length && quais.length === p.blocos.length && p.blocos.every((id) => est.blocos[id].secao === p.secao), secao: p.secao, parte: k });
     });
     marcas.copias.sort((x, y) => x.parte - y.parte);
     return marcas;
@@ -304,8 +304,8 @@
   function montarResumo(est, r, saidas, mb, ms, mc) {
     const spc = est.segundosPorCompasso;
     return {
-      antes: { compassos: est.compassosTotal, segundos: spc ? est.compassosTotal * spc : null, linhas: est.blocos.filter((b) => b.cantado).length },
-      depois: { compassos: r.compassosFinal, segundos: spc ? r.compassosFinal * spc : null, linhas: saidas.reduce((a, s) => a + s.linhas, 0) },
+      antes: { compassos: est.compassosTotal, segundos: spc ? est.compassosTotal * spc : null, linhas: est.blocos.filter((b) => b.cantado).length, notas: est.blocos.reduce((a, b) => a + b.notas, 0) },
+      depois: { compassos: r.compassosFinal, segundos: spc ? r.compassosFinal * spc : null, linhas: saidas.reduce((a, s) => a + s.linhas, 0), notas: saidas.reduce((a, s) => a + (s.notas || 0), 0) },
       tirados: { blocos: r.blocosTirados, compassos: r.compassosTirados }, repetidos: { blocos: r.blocosRepetidos, compassos: r.compassosRepetidos },
       secoes: saidas, temMarcas: Object.keys(mb || {}).length + Object.keys(ms || {}).length + (mc || []).length > 0,
     };
@@ -319,8 +319,8 @@
     seq.forEach((e) => {
       if (e.t !== "bloco") return;
       const k = e.copia ? e.copiaDe : parteDe[e.id], ch = (e.copia ? "c" + e.grupo : "o") + ":" + k;
-      if (ch !== chave) { chave = ch; const nome = partes[k].nome + (e.copia && !/ \(cópia\)$/.test(partes[k].nome) ? " (cópia)" : ""); atual = { parte: k, nome, rotulo: nome, tipo: partes[k].tipo, copia: !!e.copia, compassos: 0, linhas: 0, nBlocos: 0 }; saidas.push(atual); }
-      const b = est.blocos[e.id]; atual.compassos += b.compassos; atual.nBlocos++; if (b.cantado) atual.linhas++;
+      if (ch !== chave) { chave = ch; const nome = partes[k].nome + (e.copia && !/ \(cópia\)$/.test(partes[k].nome) ? " (cópia)" : ""); atual = { parte: k, nome, rotulo: nome, tipo: partes[k].tipo, copia: !!e.copia, compassos: 0, linhas: 0, nBlocos: 0, notas: 0 }; saidas.push(atual); }
+      const b = est.blocos[e.id]; atual.compassos += b.compassos; atual.nBlocos++; atual.notas += b.notas; if (b.cantado) atual.linhas++;
     });
     return montarResumo(est, r, saidas, marcas.b, marcas.s, marcas.copias);
   }
@@ -412,12 +412,180 @@
     return out.join("\n").trim() + "\n";
   }
   const modeloLetra = (est, marcas) => modeloDe(resumo(est, marcas));
-  const modeloLetraPartes = (est, partes, marcas) => modeloDe(resumoPartes(est, partes, marcas));
+  const modeloLetraPartes = (est, partes, marcas) => {
+    const res = resumoPartes(est, partes, marcas); res.secoes.forEach((s) => { if (s.linhas > 0) s.linhas = Math.max(1, Math.round(s.notas / SIL_POR_LINHA)); });   // versos pelas NOTAS (≈ 9 sílabas por verso)
+    return modeloDe(res);
+  };
   // ABC tocável de um conjunto de blocos (cabeçalho + as linhas deles), para a prévia
   function abcDeBlocos(est, ids) { const out = est.cabecalho.slice(); ids.forEach((id) => est.blocos[id].linhas.forEach((l) => out.push(l))); return out.join("\n") + "\n"; }
 
+
+  // ───────── sílabas, letra com partes e alinhamento com a gravação ─────────
+  const SIL_POR_LINHA = 9;                              // um verso de música tem, em geral, uns 9 sílabas (usado só para estimar "uns N versos")
+  const DESCENDENTES = new Set(["ai", "ei", "oi", "ui", "au", "eu", "ou", "iu", "éi", "ói", "éu", "êi", "ôu", "ãe", "ão", "õe", "ãi", "ói", "ái", "áu", "êu", "âi"]);
+  const CRESCENTES = new Set(["ia", "ie", "io", "ua", "ue", "uo", "iá", "ié", "ió"]);
+  // Contagem aproximada de sílabas em português (a mesma ideia de “uma sílaba por grupo de vogais”, com os ditongos mais comuns).
+  function silabasDaPalavra(palavra) {
+    const w = String(palavra).toLowerCase().normalize("NFC").replace(/(q|g)u(?=[eiéêíèaoáâãõóô])/g, "$1");   // u mudo (que, guerra) ou semivogal que cola na consoante (quando, água)
+    const grupos = w.match(/[aeiouáéíóúâêôãõàü]+/g) || [];
+    if (!grupos.length) return 0;
+    let n = 0;
+    grupos.forEach((g, gi) => {
+      if (g.length === 1) { n += 1; return; }
+      const final = gi === grupos.length - 1 && w.endsWith(g);
+      if (g.length === 2 && final && grupos.length > 1 && CRESCENTES.has(g)) { n += 1; return; }   // história, armário, água: ditongo no fim da palavra
+      let sil = 1;
+      for (let i = 1; i < g.length; i++) {
+        const par = g[i - 1] + g[i];
+        if (/[íú]/.test(par)) { sil++; continue; }       // vogal tônica i/u acentuada: hiato (sa-í-da)
+        if (DESCENDENTES.has(par)) continue;             // mesmo ditongo
+        sil++;                                            // hiato (po-e-ta, vi-o-lão)
+      }
+      n += sil;
+    });
+    return Math.max(1, n);
+  }
+  function contarSilabas(texto) { return (String(texto || "").match(/[A-Za-zÀ-ÖØ-öø-ÿ]+/g) || []).reduce((a, p) => a + silabasDaPalavra(p), 0); }
+
+  // A letra do usuário, lida por partes: [Verso 1], [Refrão]… ou # Refrão. Devolve as partes e as linhas na ordem.
+  function secoesDaLetra(letra) {
+    const bruto = []; let atual = null;
+    String(letra || "").split(/\r?\n/).forEach((l0) => {
+      const l = l0.trim(); if (!l) return;
+      const m = /^\[(.+)\]$/.exec(l) || /^#\s*(.+)$/.exec(l);
+      if (m) { atual = { nome: m[1].trim(), tipo: tipoDeCabecalho(m[1]), linhas: [], silabas: 0 }; bruto.push(atual); return; }
+      if (!atual) { atual = { nome: "(sem título de parte)", tipo: null, linhas: [], silabas: 0, implicita: true }; bruto.push(atual); }
+      atual.linhas.push(l); atual.silabas += contarSilabas(l);
+    });
+    const secoes = bruto.filter((s) => s.linhas.length), planas = [];
+    secoes.forEach((s, k) => s.linhas.forEach((t) => planas.push({ texto: t, secao: k })));
+    return { secoes, planas, total: planas.length, temCabecalhos: secoes.some((s) => !s.implicita) };
+  }
+  const textoParaAlinhar = (sl) => sl.planas.map((x) => x.texto).join("\n");   // só as linhas cantadas: os títulos [Verso 1] não são cantados
+
+  function unidadeL(est) { for (const l of est.cabecalho) { const x = /^L:\s*(\d+)\/(\d+)/.exec(l); if (x) return +x[1] / +x[2]; } return est.campos.m / est.campos.n < 0.75 ? 1 / 16 : 1 / 8; }
+  // Quanto do começo e do fim do bloco é pausa da voz, em compassos (a voz quase nunca começa exatamente no início do bloco).
+  function restosDoBloco(est, b) {
+    const compU = (est.campos.m / est.campos.n) / unidadeL(est), compassos = [];
+    b.linhasVoz.forEach((linha) => {
+      linha.replace(/"[^"]*"/g, "").replace(/\|\]|\|\||\|:|:\||::/g, "|").split("|").forEach((tok) => {
+        const s = tok.trim(); if (!s) return;
+        const mz = /^Z(\d*)$/.exec(s);
+        if (mz) { for (let i = 0; i < (mz[1] ? +mz[1] : 1); i++) compassos.push({ tudo: true, s: "" }); return; }
+        compassos.push({ s, tudo: false });
+      });
+    });
+    const unidades = (rest, deTras) => {
+      let u = 0, m; const re = deTras ? /[zx](\d*)(?:\/(\d+))?\s*$/ : /^\s*[zx](\d*)(?:\/(\d+))?/;
+      while ((m = re.exec(rest))) { u += (m[1] ? +m[1] : 1) / (m[2] ? +m[2] : 1); rest = deTras ? rest.slice(0, m.index) : rest.slice(m[0].length); }
+      return { u, resto: rest.trim() };
+    };
+    let antes = 0, depois = 0;
+    for (let i = 0; i < compassos.length; i++) { const c = compassos[i]; if (c.tudo) { antes += 1; continue; } const r = unidades(c.s, false); if (r.resto === "") { antes += 1; continue; } antes += r.u / compU; break; }
+    for (let i = compassos.length - 1; i >= 0; i--) { const c = compassos[i]; if (c.tudo) { depois += 1; continue; } const r = unidades(c.s, true); if (r.resto === "") { depois += 1; continue; } depois += r.u / compU; break; }
+    return { antes, depois };
+  }
+  // Casa o tempo da gravação (onde a voz começa e termina, pela letra alinhada) com o tempo da melodia: dá o deslocamento e a escala (andamento).
+  function calibrar(est, alinhadas) {
+    const spc = est.segundosPorCompasso, cant = est.blocos.filter((b) => b.cantado), ok = (alinhadas || []).filter((a) => a && a.ini != null);
+    if (!spc || !cant.length || ok.length < 2) return null;
+    const b0 = cant[0], b1 = cant[cant.length - 1], r0 = restosDoBloco(est, b0), r1 = restosDoBloco(est, b1);
+    const A0 = (b0.de - 1 + r0.antes) * spc, A1 = (b1.ate - r1.depois) * spc;
+    const L0 = Math.min(...ok.map((a) => a.ini)), L1 = Math.max(...ok.map((a) => (a.fim != null ? a.fim : a.ini)));
+    let f = (A1 - A0) > 1 && (L1 - L0) > 1 ? (L1 - L0) / (A1 - A0) : 1;
+    if (!(f > 0.3 && f < 3)) f = 1;
+    return { f, off: L0 - f * A0, A0, A1, L0, L1 };
+  }
+  // Monta as PARTES da melodia a partir das partes da letra e do tempo de cada linha na gravação.
+  function partesPelaLetra(est, sl, alinhadas, cal) {
+    const spc = est.segundosPorCompasso, avisos = [], faixas = sl.secoes.map(() => ({ ini: null, fim: null }));
+    sl.planas.forEach((p, i) => {
+      const a = alinhadas[i]; if (!a || a.ini == null) return;
+      const fx = faixas[p.secao], f = a.fim != null ? a.fim : a.ini;
+      fx.ini = fx.ini == null ? a.ini : Math.min(fx.ini, a.ini); fx.fim = fx.fim == null ? f : Math.max(fx.fim, f);
+    });
+    const rot = est.blocos.map((b) => {
+      const bi = cal.f * (b.de - 1) * spc + cal.off, bf = cal.f * b.ate * spc + cal.off, dur = bf - bi;
+      let melhor = -1, ov = 0;
+      faixas.forEach((fx, k) => { if (fx.ini == null) return; const o = Math.min(bf, fx.fim) - Math.max(bi, fx.ini); if (o > ov) { ov = o; melhor = k; } });
+      return ov >= 0.3 * dur ? melhor : -1;
+    });
+    for (let i = 1; i < rot.length - 1; i++) if (rot[i] < 0 && rot[i - 1] >= 0 && rot[i - 1] === rot[i + 1]) rot[i] = rot[i - 1];   // um bloco solto no meio de uma parte pertence a ela
+    const grupos = [];
+    rot.forEach((k, i) => { const g = grupos[grupos.length - 1]; if (g && g.k === k) g.blocos.push(i); else grupos.push({ k, blocos: [i] }); });
+    if (!grupos.some((g) => g.k >= 0)) return { partes: [], avisos: ["Nenhuma parte da letra caiu em cima da melodia extraída."], semBlocos: sl.secoes.map((s) => s.nome) };
+    const semBlocos = sl.secoes.map((s, k) => (rot.includes(k) ? null : s.nome)).filter(Boolean);
+    if (semBlocos.length) avisos.push(`Estas partes da letra são curtas demais para ocupar um bloco inteiro de 4 compassos e ficaram sem parte própria: ${semBlocos.join(", ")}.`);
+    const entre = grupos.filter((g, i) => g.k < 0 && i > 0 && i < grupos.length - 1).length; let nInter = 0;
+    const partes = grupos.map((g, i) => {
+      let nome, tipo, letraSecao = null;
+      if (g.k >= 0) { nome = sl.secoes[g.k].nome; tipo = sl.secoes[g.k].tipo || "verse"; letraSecao = g.k; }
+      else if (i === 0) { nome = "Introdução"; tipo = "intro"; }
+      else if (i === grupos.length - 1) { nome = "Final"; tipo = "outro"; }
+      else { nInter++; nome = entre > 1 ? `Interlúdio ${nInter}` : "Interlúdio"; tipo = "interlude"; }
+      return { id: i, blocos: g.blocos, secao: est.blocos[g.blocos[0]].secao, tipo, nome, sugerida: false, pelaLetra: true, letraSecao };
+    });
+    return { partes, avisos, semBlocos };
+  }
+  const MARCA_ABC = { intro: "intro", verse: "verse", chorus: "chorus", interlude: "interlude", bridge: "bridge", outro: "outro", prechorus: "pre-chorus", solo: "interlude", instrumental: "interlude" };
+  // Reescreve SÓ os comentários de seção (% verse, % chorus…) para a melodia ter uma seção para cada parte. Nenhuma nota é mexida.
+  function reescreverSecoes(est, partes) {
+    const saida = est.cabecalho.slice();
+    est.itens.forEach((it) => { if (it.t === "texto") saida.push(it.linha); });
+    partes.forEach((p) => { saida.push(`% ${MARCA_ABC[p.tipo] || "verse"}`); p.blocos.forEach((id) => est.blocos[id].linhas.forEach((l) => saida.push(l))); });
+    return { abc: saida.join(est.eol) + (est.fimNL ? est.eol : "") };
+  }
+  // Troca só o andamento (Q:) do cabeçalho.
+  function reescreverAndamento(abc, bpm) {
+    const n = Math.max(30, Math.min(300, Math.round(bpm))), linhas = String(abc).split(/\r?\n/), eol = String(abc).indexOf("\r\n") >= 0 ? "\r\n" : "\n";
+    const k = linhas.findIndex((l) => /^K:/.test(l)); let feito = false;
+    for (let i = 0; i < (k < 0 ? linhas.length : k); i++) {
+      if (/^Q:/.test(linhas[i])) {
+        if (/=\s*\d/.test(linhas[i])) linhas[i] = linhas[i].replace(/=\s*\d+(?:\.\d+)?/, "=" + n); else linhas[i] = linhas[i].replace(/(\d+(?:\.\d+)?)\s*$/, String(n));
+        feito = true; break;
+      }
+    }
+    if (!feito && k >= 0) linhas.splice(k, 0, "Q:1/4=" + n);
+    return linhas.join(eol);
+  }
+  function sugerirAndamento(est, cal) {
+    if (!cal || !est.campos.bpm || Math.abs(cal.f - 1) < 0.06) return null;   // o alinhamento tem 1–2 s de imprecisão: abaixo de 6% seria falso alarme
+    const para = Math.round(est.campos.bpm / cal.f); return para === Math.round(est.campos.bpm) ? null : { de: Math.round(est.campos.bpm), para };
+  }
+  // A letra cabe nas notas? Uma sílaba por nota é o normal; bem menos que isso e as palavras esticam, bem mais e a voz aperta.
+  function avaliarEncaixe(notas, silabas) {
+    if (notas < 8) return { nivel: "n/a", marca: "" };
+    const r = silabas / notas;
+    if (r < 0.7) return { nivel: "curta", marca: "⚠ letra curta (as palavras vão esticar)" };
+    if (r > 1.35) return { nivel: "longa", marca: "⚠ letra longa (vai apertar)" };
+    return { nivel: "ok", marca: "✓" };
+  }
+  // Confere a letra com a melodia pelas SÍLABAS (a conta que realmente importa), parte por parte, já considerando o plano.
+  function conferirEncaixe(est, partes, marcas, letra) {
+    const res = resumoPartes(est, partes, marcas), pedidas = res.secoes.filter((s) => s.linhas > 0), sl = secoesDaLetra(letra);
+    if (!sl.total) return { nivel: "", texto: `A melodia tem ${res.depois.notas} notas: cabem uns ${res.depois.notas} sílabas (uns ${Math.max(1, Math.round(res.depois.notas / SIL_POR_LINHA))} versos).`, linhas: [] };
+    const silTotal = sl.secoes.reduce((a, s) => a + s.silabas, 0), notasTotal = res.depois.notas, linhas = [];
+    if (sl.temCabecalhos && sl.secoes.some((s) => s.tipo)) {
+      let tudo = pedidas.length === sl.secoes.length;
+      pedidas.forEach((p, i) => {
+        const d = sl.secoes[i];
+        if (!d) { linhas.push({ ok: false, texto: `${p.rotulo}: a melodia tem ~${p.notas} notas e a sua letra não tem essa parte.` }); tudo = false; return; }
+        const ev = avaliarEncaixe(p.notas, d.silabas);
+        if (ev.nivel === "ok" || ev.nivel === "n/a") linhas.push({ ok: true, texto: `${p.rotulo}: ~${d.silabas} sílabas para ~${p.notas} notas ✓` });
+        else { linhas.push({ ok: false, texto: `${p.rotulo}: ~${d.silabas} sílabas para ~${p.notas} notas. ${ev.marca.replace("⚠ ", "")}.` }); tudo = false; }
+      });
+      for (let i = pedidas.length; i < sl.secoes.length; i++) { linhas.push({ ok: false, texto: `Sobra uma parte na letra (“${sl.secoes[i].nome}”, ~${sl.secoes[i].silabas} sílabas) sem melodia.` }); tudo = false; }
+      return { nivel: tudo ? "ok" : "aviso", texto: tudo ? `A letra encaixa nas notas de todas as partes (~${silTotal} sílabas para ~${notasTotal} notas).` : `A letra não encaixa direito em alguma parte (~${silTotal} sílabas para ~${notasTotal} notas no total).`, linhas };
+    }
+    const ev = avaliarEncaixe(notasTotal, silTotal);
+    return ev.nivel === "ok" || ev.nivel === "n/a"
+      ? { nivel: "ok", texto: `A sua letra tem ~${silTotal} sílabas para ~${notasTotal} notas.`, linhas }
+      : { nivel: "aviso", texto: `A sua letra tem ~${silTotal} sílabas para ~${notasTotal} notas: ${ev.marca.replace("⚠ ", "")}. (Dica: marque as partes da letra com [Verso], [Refrão]… para eu conferir parte por parte.)`, linhas };
+  }
+
   const logica = { analisar, plano, reconstruir, resumo, resumoPartes, contarLetra, conferirLetra, conferirLetraPartes, modeloLetra, modeloLetraPartes, contarCompassos, contarNotas, marcasVazias, tempo, parseTempo, tipoDeCabecalho,
-    faixaDeBlocos, blocosNoIntervalo, sugerirPartes, renomearParte, dividirParte, juntarParte, montarMarcas, descreverPlano, partesAposAplicar, abcDeBlocos, MIN_NOTAS_CANTADO };
+    faixaDeBlocos, blocosNoIntervalo, sugerirPartes, renomearParte, dividirParte, juntarParte, montarMarcas, descreverPlano, partesAposAplicar, abcDeBlocos, MIN_NOTAS_CANTADO,
+    contarSilabas, secoesDaLetra, textoParaAlinhar, restosDoBloco, calibrar, partesPelaLetra, reescreverSecoes, reescreverAndamento, sugerirAndamento, avaliarEncaixe, conferirEncaixe, SIL_POR_LINHA };
   if (typeof module !== "undefined" && module.exports) { module.exports = { logica }; return; }
 
   // ═════════════════════════ O PAINEL (só no navegador) ═════════════════════════
@@ -466,9 +634,10 @@
   }
 
   function criar(el, api) {
-    const E = { base: "", original: "", est: null, partes: [], acoes: {}, trechos: [], abertos: {}, tDe: "", tAte: "", msg: "", msgTrecho: "", tocando: null };
+    const E = { base: "", original: "", est: null, partes: [], acoes: {}, trechos: [], abertos: {}, tDe: "", tAte: "", msg: "", msgTrecho: "", tocando: null, pelaLetra: null, msgLetra: "" };
     el.innerHTML = `<p class="oh-label-campo"><i class="oh-ic" data-ic="mix"></i> Mapa da música: o que fica, o que sai e o que se copia</p>
       <p class="oh-hint">O app lê a melodia e <b>sugere as partes</b> (a divisão é um palpite, feito pela repetição das melodias: confira ouvindo e corrija se precisar). O <b>▶ Ouvir</b> toca a melodia da partitura (voz e instrumental) com um som simples, feito no próprio aparelho, sem internet: <b>não é o áudio da gravação</b>, serve para reconhecer a parte. Os tempos seguem o andamento escrito na melodia e podem não bater exatamente com o áudio original.</p>
+      <div class="sw-letra-info" id="swLetraInfo" hidden></div>
       <ol class="sw-partes" id="swPartes"></ol>
       <div class="sw-tempo-box" id="swTempoBox">
         <p class="sw-sub">Tirar um trecho por tempo</p>
@@ -484,6 +653,30 @@
     const marcasAtuais = () => montarMarcas(E.est, E.partes, E.acoes, E.trechos);
     const faixaTxt = (ids) => { const f = faixaDeBlocos(E.est, ids); return f.ini != null ? `${tempo(f.ini)}–${tempo(f.fim)} · ${Math.round(f.fim - f.ini)} s` : `compassos ${f.de}–${f.ate}`; };
 
+    function infoParte(p) {
+      const bs = p.blocos.map((id) => E.est.blocos[id]), notas = bs.reduce((a, b) => a + b.notas, 0);
+      if (!bs.some((b) => b.cantado)) return "instrumental";
+      const sec = E.pelaLetra && p.letraSecao != null ? E.pelaLetra.sl.secoes[p.letraSecao] : null;
+      if (sec) { const ev = avaliarEncaixe(notas, sec.silabas); return `${plural(sec.linhas.length, "linha", "linhas")} da sua letra · ~${sec.silabas} sílabas para ~${notas} notas ${ev.marca}`.trim(); }
+      return `≈ ${notas} notas: cabem uns ${notas} sílabas (uns ${Math.max(1, Math.round(notas / SIL_POR_LINHA))} versos)`;
+    }
+    function renderLetraInfo() {
+      const box = $("#swLetraInfo"), pl = E.pelaLetra;
+      if (!pl && !E.msgLetra) { box.hidden = true; box.innerHTML = ""; return; }
+      box.hidden = false;
+      let h = E.msgLetra ? `<p class="oh-hint sw-letra-msg">${esc(E.msgLetra)}</p>` : "";
+      if (pl) {
+        const cal = pl.cal, spc = E.est.segundosPorCompasso;
+        h += `<p class="sw-sub">Estrutura montada pela sua letra: ${E.partes.length} partes</p>`;
+        h += `<p class="oh-hint">${esc(`Na gravação a sua voz vai de ${tempo(cal.L0)} a ${tempo(cal.L1)}; na melodia, de ${tempo(cal.A0)} a ${tempo(cal.A1)}.${pl.duracao && spc ? ` A gravação dura ${tempo(pl.duracao)} e a melodia, ${tempo(E.est.compassosTotal * spc)}.` : ""}`)}</p>`;
+        (pl.avisos || []).forEach((a) => { h += `<p class="oh-hint sw-conf aviso">${esc("⚠️ " + a)}</p>`; });
+        if (pl.sug) h += `<p class="oh-hint sw-conf aviso">${esc(`⚠️ A gravação está ${Math.round(Math.abs(cal.f - 1) * 100)}% ${cal.f > 1 ? "mais lenta" : "mais rápida"} que a melodia extraída (o modelo calculou ${pl.sug.de} BPM; pela sua voz seriam uns ${pl.sug.para} BPM).`)}</p><div class="oh-row"><button type="button" class="oh-btn oh-btn-secundario" id="swAjustarAndamento">Ajustar o andamento para ${pl.sug.para} BPM</button></div>`;
+        h += pl.aplicada
+          ? `<p class="oh-hint sw-conf ok">✅ A melodia já tem as mesmas partes da sua letra.</p>`
+          : `<div class="oh-row"><button type="button" class="oh-btn" id="swAplicarLetra">Aplicar a estrutura da letra à melodia</button></div><p class="oh-hint">Reescreve só os comentários de seção da melodia (% verse, % chorus…) para ela ter as mesmas partes da sua letra. Nenhuma nota é mexida.</p>`;
+      }
+      box.innerHTML = h;
+    }
     function render() {
       const est = E.est;
       if (!est) { el.hidden = true; return; }
@@ -494,14 +687,15 @@
         $("#swEstrAplicar").disabled = $("#swEstrModelo").disabled = true; $("#swEstrOriginal").disabled = E.base === E.original; return;
       }
       ["#swTempoBox", "#swPlano"].forEach((s) => { $(s).hidden = false; });
+      renderLetraInfo();
       $("#swPartes").innerHTML = E.partes.map((p, k) => {
-        const a = E.acoes[k], cant = p.blocos.filter((id) => est.blocos[id].cantado).length, aberto = !!E.abertos[k];
+        const a = E.acoes[k], aberto = !!E.abertos[k];
         const pode = k > 0 && E.partes[k - 1].secao === p.secao;
         return `<li class="sw-parte${a && a.tipo === "tirar" ? " tirada" : ""}${a && a.tipo === "copiar" ? " copiada" : ""}" data-p="${k}">
           <div class="sw-parte-topo"><button type="button" class="sw-ouvir" data-a="ouvir" aria-label="Ouvir ${esc(p.nome)}">${E.tocando === "p" + k ? "■ Parar" : "▶ Ouvir"}</button>
             <b class="sw-nome">${esc(p.nome)}</b>${p.sugerida ? '<em class="sw-sug" title="Divisão sugerida pelo app, pela repetição das melodias. Confira ouvindo.">sugestão</em>' : ""}
             <span class="sw-tempo">${esc(faixaTxt(p.blocos))}</span></div>
-          <div class="sw-parte-base"><span class="sw-info">${cant ? `≈ ${plural(cant, "linha", "linhas")} de letra` : "instrumental"}</span>
+          <div class="sw-parte-base"><span class="sw-info">${esc(infoParte(p))}</span>
             <span class="sw-seg" role="group" aria-label="O que fazer com ${esc(p.nome)}"><button type="button" data-a="manter" aria-pressed="${!a}" class="${!a ? "on" : ""}">Manter</button><button type="button" data-a="tirar" aria-pressed="${!!a && a.tipo === "tirar"}" class="${a && a.tipo === "tirar" ? "on tirar" : ""}">Tirar</button><button type="button" data-a="copiar" aria-pressed="${!!a && a.tipo === "copiar"}" class="${a && a.tipo === "copiar" ? "on copiar" : ""}">Copiar</button></span>
             <button type="button" class="sw-mini" data-a="ajustar" aria-expanded="${aberto}">Ajustar ${aberto ? "▴" : "▾"}</button></div>
           ${a && a.tipo === "copiar" ? `<label class="sw-destino">Colocar a cópia depois de: <select data-a="destino" aria-label="Depois de qual parte">${E.partes.map((q, j) => `<option value="${j}"${(a.depoisDe != null ? a.depoisDe : k) === j ? " selected" : ""}>${j === k ? "esta mesma parte" : esc(q.nome)}</option>`).join("")}</select></label>` : ""}
@@ -516,8 +710,8 @@
       $("#swPlanoLista").innerHTML = pendente ? frases.map((f) => `<li>${esc(f)}</li>`).join("") : "<li class=\"sw-nada\">Nada marcado ainda. Tudo fica como está.</li>";
       const vazia = r.depois.compassos === 0;
       $("#swEstrResumo").textContent = pendente
-        ? `A melodia iria de ${h(r.antes)} para ${h(r.depois)}. Passaria a pedir cerca de ${lin(r.depois.linhas)} de letra (estimativa: uma linha para cada trecho cantado de 4 compassos; pode variar).`
-        : `A melodia tem ${h(r.antes)} e pede cerca de ${lin(r.antes.linhas)} de letra (estimativa: uma linha para cada trecho cantado de 4 compassos; pode variar).`;
+        ? `A melodia iria de ${h(r.antes)} para ${h(r.depois)}. Ficaria com ~${r.depois.notas} notas: cabem uns ${r.depois.notas} sílabas (estimativa: uma sílaba por nota).`
+        : `A melodia tem ${h(r.antes)} e ~${r.antes.notas} notas: cabem uns ${r.antes.notas} sílabas, uns ${Math.max(1, Math.round(r.antes.notas / SIL_POR_LINHA))} versos de ${SIL_POR_LINHA} sílabas (estimativa: uma sílaba por nota).`;
       if (vazia) E.msg = "Com esse plano a melodia ficaria vazia. Deixe pelo menos uma parte.";
       $("#swEstrAplicar").disabled = !pendente || vazia; $("#swEstrModelo").disabled = false; $("#swEstrOriginal").disabled = E.base === E.original;
       atualizarLetra();
@@ -525,13 +719,13 @@
     }
     function atualizarLetra() {
       const p = $("#swEstrLetra"); if (!E.est || !E.est.ok) { p.textContent = ""; return; }
-      const c = conferirLetraPartes(E.est, E.partes, marcasAtuais(), api.lerLetra ? api.lerLetra() : "");
+      const c = conferirEncaixe(E.est, E.partes, marcasAtuais(), api.lerLetra ? api.lerLetra() : "");
       p.className = "oh-hint sw-conf " + (c.nivel || "");
       p.innerHTML = esc((c.nivel === "aviso" ? "⚠️ " : c.nivel === "ok" ? "✅ " : "") + c.texto) + (c.linhas.length ? `<br>${c.linhas.map((x) => esc(x.texto)).join("<br>")}` : "");
     }
     function recomecar(abc, opc) {
       E.base = String(abc || ""); E.est = E.base.trim() ? analisar(E.base) : null; E.partes = opc && opc.partes ? opc.partes : (E.est && E.est.ok ? sugerirPartes(E.est) : []);
-      E.acoes = {}; E.trechos = []; E.abertos = {}; E.tDe = E.tAte = ""; E.msgTrecho = ""; E.msg = (opc && opc.msg) || ""; pararSom(); E.tocando = null; render();
+      E.acoes = {}; E.trechos = []; E.abertos = {}; E.tDe = E.tAte = ""; E.msgTrecho = ""; E.msg = (opc && opc.msg) || ""; E.pelaLetra = null; E.msgLetra = ""; pararSom(); E.tocando = null; render();
     }
     function carregar(abc, opc) {
       opc = opc || {};
@@ -589,6 +783,18 @@
       if (a === "trecho-remover") { E.trechos.splice(+t.dataset.t, 1); render(); return; }
       if (t.id === "swTrechoOuvir") { const r = lerTrecho(); if (r.erro) { E.msgTrecho = r.erro; render(); return; } E.msgTrecho = textoDoTrecho(r); tocar("trecho", r.ids); return; }
       if (t.id === "swTrechoTirar") { const r = lerTrecho(); if (r.erro) { E.msgTrecho = r.erro; render(); return; } E.trechos.push({ blocos: r.ids }); E.tDe = E.tAte = ""; E.msgTrecho = ""; render(); return; }
+      if (t.id === "swAplicarLetra") {
+        const pl = E.pelaLetra, novo = reescreverSecoes(E.est, E.partes), est2 = analisar(novo.abc);
+        if (!pl || !est2.ok || est2.blocos.length !== E.est.blocos.length || est2.compassosTotal !== E.est.compassosTotal) { E.msg = "Não consegui aplicar a estrutura da letra com segurança; a melodia ficou como estava."; render(); return; }
+        api.aplicarAbc(novo.abc); E.base = novo.abc; E.est = est2; E.partes = E.partes.map((p) => Object.assign({}, p, { secao: est2.blocos[p.blocos[0]].secao })); pl.aplicada = true;
+        E.msg = `Pronto: a melodia agora tem ${E.partes.length} seções, uma para cada parte da sua letra. Nenhuma nota foi mexida. Para desfazer, use “Voltar ao original”.`; render(); return;
+      }
+      if (t.id === "swAjustarAndamento") {
+        const pl = E.pelaLetra; if (!pl || !pl.sug) return;
+        const novo = reescreverAndamento(E.base, pl.sug.para); api.aplicarAbc(novo); E.base = novo; E.est = analisar(novo);
+        pl.cal = calibrar(E.est, pl.alin) || pl.cal; const de = pl.sug.de; pl.sug = sugerirAndamento(E.est, pl.cal);
+        E.msg = `Andamento ajustado de ${de} para ${Math.round(E.est.campos.bpm)} BPM. As notas são as mesmas; só o ritmo de leitura mudou.`; render(); return;
+      }
       if (t.id === "swEstrAplicar") {
         const marcas = marcasAtuais(), r = reconstruir(E.est, marcas); api.aplicarAbc(r.abc);
         const seg = E.est.segundosPorCompasso ? ` (≈ ${tempo(r.compassosFinal * E.est.segundosPorCompasso)})` : "";
@@ -601,13 +807,32 @@
         (api.copiar ? api.copiar(txt) : Promise.resolve(false)).then((ok) => { E.msg = ok ? "Modelo da letra copiado: cole no campo “Letra” e escreva a sua letra em cada parte." : "Não consegui copiar sozinho. O modelo é:\n" + txt; render(); });
       }
     });
+    // Alinha a letra do usuário (com as partes marcadas) à gravação e monta as partes da melodia com os nomes dela. Devolve uma frase de status.
+    async function alinharComLetra(letra) {
+      if (!E.est || !E.est.ok) return "";
+      const sl = secoesDaLetra(letra); if (!sl.total) return "";
+      const falha = (m) => { E.pelaLetra = null; E.msgLetra = m; render(); return "⚠️ " + m; };
+      if (!sl.temCabecalhos) return falha("Para montar as partes pela letra, marque cada parte com uma linha só com o nome entre colchetes, como [Verso 1] ou [Refrão]. Mantive as partes sugeridas pela melodia.");
+      if (sl.total < 4) return falha("A letra tem poucas linhas para montar as partes. Mantive as partes sugeridas pela melodia.");
+      if (!api.alinharLetra) return "";
+      E.msgLetra = "Alinhando a sua letra à gravação… (a IA ouve a gravação; pode levar um pouco)"; render();
+      let r; try { r = await api.alinharLetra(textoParaAlinhar(sl)); } catch (e) { return falha(`Não consegui alinhar a letra à gravação (${e && e.message ? e.message : "erro"}). Mantive as partes sugeridas pela melodia.`); }
+      const avisos = (r && r.avisos) || [], alin = ((r && r.linhas) || []).map((x) => ({ ini: x.ini, fim: x.fim }));
+      if (avisos.some((a) => /igualmente/.test(a))) return falha("A IA não deu os tempos das linhas com segurança, então mantive as partes sugeridas pela melodia.");
+      if (alin.length !== sl.planas.length) return falha("A IA devolveu um número de linhas diferente da sua letra, então mantive as partes sugeridas pela melodia.");
+      const cal = calibrar(E.est, alin); if (!cal) return falha("Não consegui casar o tempo da gravação com o da melodia. Mantive as partes sugeridas pela melodia.");
+      const res = partesPelaLetra(E.est, sl, alin, cal); if (!res.partes.length) return falha(res.avisos[0] || "Nenhuma parte da letra caiu em cima da melodia. Mantive as partes sugeridas.");
+      E.partes = res.partes; E.acoes = {}; E.trechos = []; E.abertos = {}; E.msgLetra = "";
+      E.pelaLetra = { sl, alin, cal, avisos: res.avisos.concat(avisos), duracao: r.duracao, aplicada: false, sug: sugerirAndamento(E.est, cal) };
+      render(); return `✅ Letra alinhada: ${res.partes.length} partes montadas pela sua letra (veja o mapa abaixo).`;
+    }
     return {
-      carregar,
+      carregar, alinharComLetra,
       aoEditarMelodia(valor) { if (!E.original) E.original = valor; recomecar(valor); },
       atualizarLetra,
       temEstrutura: () => !!(E.est && E.est.ok),
       temMarcasPendentes: () => !!(E.est && E.est.ok && (Object.keys(E.acoes).length > 0 || E.trechos.length > 0)),
-      avisoDeMetrica(letra) { if (!E.est || !E.est.ok) return ""; const c = conferirLetraPartes(E.est, E.partes, marcasAtuais(), letra); return c.nivel === "aviso" ? "⚠️ " + c.texto : ""; },
+      avisoDeMetrica(letra) { if (!E.est || !E.est.ok) return ""; const c = conferirEncaixe(E.est, E.partes, marcasAtuais(), letra); return c.nivel === "aviso" ? "⚠️ " + c.texto : ""; },
       _estado: E,
     };
   }
