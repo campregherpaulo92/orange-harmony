@@ -8,7 +8,7 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="styles.css?v=15">
 <link rel="stylesheet" href="identidade.css?v=12">
 <link rel="stylesheet" href="estudioDaw.css?v=25">
 <link rel="stylesheet" href="ambientes.css?v=2">
@@ -623,10 +623,11 @@
           <p class="oh-label-campo"><i class="oh-ic" data-ic="piano"></i> Melodia (ABC) — pode revisar e editar</p>
           <textarea id="songwriterAbcTexto" class="oh-textarea" rows="9" spellcheck="false" style="font-family:monospace; font-size:0.82rem;"></textarea>
           <p id="songwriterCoverDica" class="oh-hint"></p>
-          <div id="songwriterCoverModeloBox" hidden>
-            <p class="oh-label-campo" style="margin-top:14px;"><i class="oh-ic" data-ic="documento"></i> Letra reconhecida (use como modelo de quantos versos cabem na melodia)</p>
-            <textarea id="songwriterLetraModelo" class="oh-textarea" rows="5" readonly></textarea>
-          </div>
+          <div id="songwriterEstruturaBox" class="sw-estr-box" hidden></div>
+            <div id="songwriterCoverModeloBox" hidden>
+              <details class="sw-palavras"><summary>Palavras que o modelo ouviu na gravação (podem estar erradas; só ajudam a reconhecer cada parte)</summary>
+                <textarea id="songwriterLetraModelo" class="oh-textarea" rows="5" readonly></textarea></details>
+            </div>
           <p class="oh-label-campo" style="margin-top:14px;"><i class="oh-ic" data-ic="mix"></i> Estilo da nova versão (em inglês)</p>
           <textarea id="songwriterCoverEstilo" class="oh-textarea" rows="3" placeholder="Ex: pop rock, male vocal, drums, bass, keyboards, backing vocals, warm"></textarea>
           <div class="oh-row" style="margin-top:10px; align-items:flex-end;">
@@ -984,7 +985,8 @@
 <script src="estudioCifra.js?v=3"></script>
 <script src="estudioDaw.js?v=27"></script>
 <script src="abcjs-basic-min.js?v=12"></script>
-<script src="songwriter.js?v=13"></script>
+<script src="songwriterEstrutura.js?v=1"></script>
+<script src="songwriter.js?v=14"></script>
 <script src="partitura.js?v=12"></script>
 <script src="partituraModelo.js?v=12"></script>
 <script src="partituraAssistente.js?v=12"></script>

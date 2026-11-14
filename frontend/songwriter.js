@@ -308,6 +308,18 @@ function inicializarSongwriter() {
   const btnGerarCover = document.getElementById("btnGerarCover");
   let letraDaMelodia = "";    // a letra para a qual a melodia foi feita (reconhecida na gravação, ou usada ao gerar a música)
 
+  // Estrutura reconhecida: lê as seções e os blocos da melodia (ABC), deixa marcar o que sai e o que se repete, e aplica por edição de texto.
+  const estruturaBox = document.getElementById("songwriterEstruturaBox");
+  const estrutura = estruturaBox && window.SongwriterEstrutura ? window.SongwriterEstrutura.criar(estruturaBox, {
+    lerLetra: () => letraTexto.value,
+    aplicarAbc: (abc) => {
+      abcTexto.value = abc;
+      try { localStorage.setItem("oh-partitura-atual", abc); } catch (e) { /* navegador sem armazenamento */ }
+      coverDica.textContent = "Melodia ajustada pela estrutura (cortes e repetições aplicados).";
+    },
+    copiar: async (txt) => { try { await navigator.clipboard.writeText(txt); return true; } catch (e) { return false; } },
+  }) : null;
+
   function contarVersos(texto) {
     return (texto || "").split("\n").map((l) => l.trim())
       .filter((l) => l && !/^\[.*\]$/.test(l) && !l.startsWith("#")).length;
@@ -336,11 +348,13 @@ function inicializarSongwriter() {
     letraDaMelodia = letraModelo || "";
     letraModeloEl.value = letraDaMelodia;
     coverModeloBox.hidden = !letraDaMelodia.trim();
+    if (estrutura) estrutura.carregar(abc, { reenvio });
     if (!coverEstilo.value.trim() && promptTexto.value.trim()) coverEstilo.value = promptTexto.value;
     coverBloco.hidden = false;
   }
 
   function avisoDeMetrica(letra) {
+    if (estrutura && estrutura.temEstrutura()) return estrutura.avisoDeMetrica(letra);   // com a estrutura lida da melodia a conferência é por parte (Verso 2, Refrão…)
     const modelo = contarVersos(letraDaMelodia);
     const nova = contarVersos(letra);
     if (!modelo || !nova) return "";
@@ -349,6 +363,9 @@ function inicializarSongwriter() {
     }
     return "";
   }
+
+  abcTexto.addEventListener("input", () => { if (estrutura) estrutura.aoEditarMelodia(abcTexto.value); });
+  letraTexto.addEventListener("input", () => { if (estrutura) estrutura.atualizarLetra(); });
 
   if (btnExtrairMelodia) {
     btnExtrairMelodia.addEventListener("click", async () => {
@@ -400,6 +417,7 @@ function inicializarSongwriter() {
         statusCover.textContent = "Escreva ou cole a letra no campo \"Letra\" (cartão logo abaixo).";
         return;
       }
+      if (estrutura && estrutura.temMarcasPendentes() && !window.confirm("Você marcou cortes ou repetições na estrutura que ainda NÃO foram aplicados à melodia.\n\nGerar mesmo assim, com a melodia atual?")) return;
       const aviso = avisoDeMetrica(letra);
       btnGerarCover.disabled = true;
       const cancelamento = prepararCancelamento(btnGerarCover);
