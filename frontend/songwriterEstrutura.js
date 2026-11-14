@@ -426,26 +426,49 @@
   let somAtual = null;                                   // só uma prévia toca por vez
 
   function pararSom() { if (somAtual) { const s = somAtual; somAtual = null; s.parar(); } }
-  async function ouvirAbc(abc, aoFim) {
+  // A prévia NÃO baixa som nenhum da internet: a biblioteca da partitura (abcjs) entrega a lista de notas das duas vozes (altura, início e
+  // duração, em fração de compasso) e o app toca isso direto no aparelho, com um som simples. Serve para reconhecer a parte de ouvido.
+  function agendarNotas(ctx, destino, seq, msPorCompasso, t0) {
+    const seg = msPorCompasso / 1000; let fim = 0;
+    seq.tracks.forEach((trilha, ti) => trilha.forEach((e) => {
+      if (e.cmd !== "note" || !(e.duration > 0)) return;
+      const ini = t0 + e.start * seg, dur = Math.max(0.05, e.duration * seg * 0.96), freq = 440 * Math.pow(2, (e.pitch - 69) / 12);
+      const o = ctx.createOscillator(), g = ctx.createGain(), pico = (ti === 0 ? 0.3 : 0.16) * Math.min(1, (e.volume || 90) / 127);
+      o.type = ti === 0 ? "triangle" : "sine"; o.frequency.value = freq;                       // voz: triângulo; instrumental: senoide
+      g.gain.setValueAtTime(0.0001, ini); g.gain.linearRampToValueAtTime(pico, ini + 0.012);
+      g.gain.exponentialRampToValueAtTime(pico * 0.55, ini + Math.min(dur * 0.7, 0.5)); g.gain.linearRampToValueAtTime(0.0001, ini + dur + 0.05);
+      o.connect(g); g.connect(destino); o.start(ini); o.stop(ini + dur + 0.08);
+      fim = Math.max(fim, e.start * seg + dur + 0.08);
+    }));
+    return fim;                                                                                  // segundos até a última nota acabar
+  }
+  function prepararSom(abc) {
     const A = window.ABCJS;
-    if (!A || !A.synth || !A.synth.CreateSynth || (A.synth.supportsAudio && !A.synth.supportsAudio())) throw new Error("O som da prévia não está disponível neste navegador.");
+    if (!A || !A.renderAbc) throw new Error("A biblioteca da partitura não está carregada nesta página, então não dá para tocar a prévia.");
+    const visual = A.renderAbc("*", abc, {})[0];
+    if (!visual || !visual.setUpAudio) throw new Error("Esta versão da partitura não sabe preparar o som da prévia.");
+    try { if (visual.setTiming) visual.setTiming(); } catch (e) { /* já calculado */ }
+    return { seq: visual.setUpAudio({}), ms: visual.millisecondsPerMeasure() };
+  }
+  async function ouvirAbc(abc, aoFim) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) throw new Error("Este navegador não consegue tocar som pela página.");
     pararSom();
-    const visual = A.renderAbc("*", abc, {})[0], synth = new A.synth.CreateSynth();
-    let fim = false;
-    const terminar = () => { if (fim) return; fim = true; try { synth.stop(); } catch (e) { /* já parado */ } if (somAtual === ctrl) somAtual = null; if (aoFim) aoFim(); };
-    const ctrl = { parar() { try { if (timer) timer.stop(); } catch (e) { /* ok */ } terminar(); } };
-    let timer = null;
-    somAtual = ctrl;
-    await synth.init({ visualObj: visual }); await synth.prime();
-    if (fim) return;                                     // alguém mandou parar enquanto carregava
-    timer = new A.TimingCallbacks(visual, { eventCallback: (ev) => { if (ev === null) terminar(); return undefined; } });
-    synth.start(); timer.start();
+    const ctx = new AC();                                                                        // criado já no clique: o navegador libera o som
+    try { if (ctx.state === "suspended") ctx.resume(); } catch (e) { /* segue */ }
+    let som; try { som = prepararSom(abc); } catch (e) { try { ctx.close(); } catch (e2) { /* ok */ } throw e; }
+    const comp = ctx.createDynamicsCompressor(), mestre = ctx.createGain(); mestre.gain.value = 0.8; mestre.connect(comp); comp.connect(ctx.destination);
+    const dur = agendarNotas(ctx, mestre, som.seq, som.ms, ctx.currentTime + 0.1);
+    let fim = false, relogio = null;
+    const terminar = () => { if (fim) return; fim = true; clearTimeout(relogio); try { ctx.close(); } catch (e) { /* já fechado */ } if (somAtual === ctrl) somAtual = null; if (aoFim) aoFim(); };
+    const ctrl = { parar: terminar };
+    somAtual = ctrl; relogio = setTimeout(terminar, (dur + 0.4) * 1000);
   }
 
   function criar(el, api) {
     const E = { base: "", original: "", est: null, partes: [], acoes: {}, trechos: [], abertos: {}, tDe: "", tAte: "", msg: "", msgTrecho: "", tocando: null };
     el.innerHTML = `<p class="oh-label-campo"><i class="oh-ic" data-ic="mix"></i> Mapa da música: o que fica, o que sai e o que se copia</p>
-      <p class="oh-hint">O app lê a melodia e <b>sugere as partes</b> (a divisão é um palpite, feito pela repetição das melodias: confira ouvindo e corrija se precisar). Os tempos seguem o andamento escrito na melodia e podem não bater exatamente com o áudio original.</p>
+      <p class="oh-hint">O app lê a melodia e <b>sugere as partes</b> (a divisão é um palpite, feito pela repetição das melodias: confira ouvindo e corrija se precisar). O <b>▶ Ouvir</b> toca a melodia da partitura (voz e instrumental) com um som simples, feito no próprio aparelho, sem internet: <b>não é o áudio da gravação</b>, serve para reconhecer a parte. Os tempos seguem o andamento escrito na melodia e podem não bater exatamente com o áudio original.</p>
       <ol class="sw-partes" id="swPartes"></ol>
       <div class="sw-tempo-box" id="swTempoBox">
         <p class="sw-sub">Tirar um trecho por tempo</p>
@@ -588,5 +611,5 @@
       _estado: E,
     };
   }
-  raiz.SongwriterEstrutura = { criar, logica };
+  raiz.SongwriterEstrutura = { criar, logica, _som: { agendarNotas, prepararSom, ouvirAbc, pararSom } };
 })(typeof window !== "undefined" ? window : globalThis);
