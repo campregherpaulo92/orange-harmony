@@ -45,6 +45,7 @@ import transcricao
 import singergame
 import chats
 import songwriter
+import inspiracao
 
 @asynccontextmanager
 async def _ciclo_de_vida(_app):
@@ -373,10 +374,12 @@ def escalas_descrever(tonica: str = Form(...), tipo: str = Form(...)):
 
 
 # ── Separação de stems via Colab (fila no Firebase) ──
-# Link do notebook no Colab (abre direto do GitHub, da branch cloudrun, a mesma do deploy). Dá pra trocar pela variável
-# de ambiente COLAB_SEPARADOR_URL no Render, se você mover o notebook de lugar.
-# O padrão é a cópia do notebook que está no Drive do dono do app (já com o segredo FIREBASE_JSON liberado). O do GitHub (notebooks/separador_stems.ipynb) abre sempre como cópia nova.
-COLAB_SEPARADOR_URL_PADRAO = "https://colab.research.google.com/drive/1t3hGG4PRyDifL2pZGf0kNpCkAc8lZaQZ#scrollTo=JJ5tApkU9IyH"
+# Link do notebook no Colab. O padrão abre DIRETO DO GITHUB (branch cloudrun, a mesma do deploy): funciona em QUALQUER conta Google,
+# inclusive a pessoal, porque o repositório é público (o notebook não leva nenhuma chave; ela é escolhida na hora ou fica nos Segredos de quem usa).
+# Cada vez que abre é uma cópia nova (o acesso ao segredo precisa ser ligado de novo, ou escolher o arquivo .json quando o notebook pedir).
+# Dá pra trocar pela variável de ambiente COLAB_SEPARADOR_URL no Cloud Run, por exemplo para o link de uma cópia salva no seu Drive.
+# Atenção: se essa variável existir no Cloud Run, ela vale mais que o padrão do código.
+COLAB_SEPARADOR_URL_PADRAO = "https://colab.research.google.com/github/campregherpaulo92/orange-harmony/blob/cloudrun/notebooks/separador_stems.ipynb"
 COLAB_SEPARADOR_URL = os.environ.get("COLAB_SEPARADOR_URL", COLAB_SEPARADOR_URL_PADRAO)
 
 
@@ -922,12 +925,37 @@ def interpretar_edicao_rota(comando: str = Form(...)):
 # SONGWRITER (letra + referência sonora + prompt musical via Gemini,
 # música completa via gradio_client + YuE2-3B na Hugging Face)
 # ══════════════════════════════════════════════════════════════
+@app.get("/api/songwriter/inspiracao/opcoes")
+def songwriter_inspiracao_opcoes():
+    """Listas para os seletores de ângulo, vibe e ousadia da tela."""
+    return inspiracao.opcoes()
+
+
 @app.post("/api/songwriter/letra")
-def gerar_letra_rota(tema: str = Form(...), estilo: str = Form("Pop")):
-    letra, erro = songwriter.gerar_letra(tema, estilo)
-    if erro:
-        raise HTTPException(status_code=502, detail=erro)
-    return {"letra": letra}
+def gerar_letra_rota(
+    tema: str = Form(...), estilo: str = Form("Pop"),
+    diversificar: bool = Form(True), angulo: str = Form(""), vibe: str = Form(""),
+    ousadia: str = Form("media"), semente: int = Form(0), evitar: str = Form(""),
+):
+    """Escreve a letra. Com `diversificar` (padrão), o app sorteia uma DIREÇÃO CRIATIVA (ângulo, vibe, recurso narrativo, imagens, regra do
+    jogo) e uma lista de palavras a evitar (clichês + últimas composições + `evitar`, que o aparelho manda com as últimas letras geradas)."""
+    if not diversificar:
+        letra, erro = songwriter.gerar_letra(tema, estilo)
+        if erro:
+            raise HTTPException(status_code=502, detail=erro)
+        return {"letra": letra}
+    briefing = inspiracao.gerar_briefing(tema=tema, estilo=estilo, angulo=angulo, vibe=vibe, ousadia=ousadia, semente=semente, evitar=evitar,
+                                         recentes=inspiracao.recentes_das_composicoes(composicoes))
+    try:
+        contexto = str(songwriter._contexto_vocal() or "")       # perfil vocal, o mesmo que o Songwriter já usava
+    except Exception:
+        contexto = ""
+    letra, erro = inspiracao.escrever_letra(tema, estilo, briefing, contexto_vocal=contexto)
+    if erro or not letra:                                       # plano B: o caminho antigo, com a direção junto do tema
+        letra, erro = songwriter.gerar_letra(inspiracao.tema_com_direcao(tema, briefing), estilo)
+        if erro:
+            raise HTTPException(status_code=502, detail=erro)
+    return {"letra": letra, "briefing": inspiracao.resumo_publico(briefing), "palavras_usadas": inspiracao.palavras_marcantes(letra)}
 
 
 @app.post("/api/songwriter/referencia")
