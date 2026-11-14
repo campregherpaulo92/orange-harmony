@@ -1391,3 +1391,12 @@ body.oh-bib-aberta { overflow: hidden; }
 /* Mapa da música: estrutura montada pela letra */
 .sw-letra-info { margin: 10px 0; padding: 10px 12px; border: 1px solid rgba(249,115,22,0.45); border-radius: 12px; background: rgba(249,115,22,0.07); }
 .sw-letra-info .sw-sub { margin: 0 0 4px; } .sw-letra-info .oh-row { margin: 6px 0; flex-wrap: wrap; } .sw-letra-msg { color: #ffe3cf; }
+
+/* Songwriter: variedade das ideias */
+.sw-variedade { margin: 10px 0 6px; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; padding: 8px 12px; background: rgba(255,255,255,0.03); }
+.sw-variedade summary { cursor: pointer; font-weight: 700; color: #fff; }
+.sw-var-nota { font-weight: 400; font-size: 0.78rem; color: #cdbfb0; margin-left: 8px; }
+.sw-variedade[open] summary { margin-bottom: 8px; }
+.sw-variedade select:disabled { opacity: 0.5; }
+.sw-ideia { margin-top: 8px; padding: 8px 12px; border: 1px solid rgba(249,115,22,0.45); border-radius: 12px; background: rgba(249,115,22,0.07); }
+.sw-ideia .oh-hint { margin: 0 0 6px; color: #ffe3cf; }

@@ -553,8 +553,8 @@
   function colabOrigemTexto() {
     if (colabUrlEscolhida()) return "Abrindo o SEU link (guardado neste aparelho).";
     if (configEst && configEst.colab_url_origem === "variavel") return "Abrindo o link definido no servidor (variável COLAB_SEPARADOR_URL). Se ele é o notebook antigo, cole o seu link acima ou atualize essa variável no servidor.";
-    if (/\/github\//.test((configEst && configEst.colab_url) || "")) return "Abrindo o notebook do GitHub. Cada vez que ele abre é uma cópia nova: o acesso ao segredo precisa ser ligado de novo. Para não repetir isso, salve uma cópia no seu Drive e cole o link dela acima.";
-    return "Abrindo o notebook do app (a cópia que está no Drive, com o segredo FIREBASE_JSON já liberado).";
+    if (/\/github\//.test((configEst && configEst.colab_url) || "")) return "Abrindo o notebook do GitHub (abre em qualquer conta Google, inclusive a pessoal). Cada vez que ele abre é uma cópia nova: quando o notebook pedir, escolha o arquivo firebase_service_account.json, ou ligue de novo o acesso ao segredo FIREBASE_JSON. Para não repetir isso, no Colab use Arquivo → Salvar uma cópia no Drive e cole o link dela acima.";
+    return "Abrindo o notebook do app (uma cópia que está no Drive de quem configurou o servidor). Se ele não abrir na sua conta, cole acima o link do seu notebook.";
   }
   function atualizarColab() {
     const card = $("#dwColab"); if (!card || !configEst) return;

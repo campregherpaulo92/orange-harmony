@@ -126,24 +126,60 @@ function inicializarSongwriter() {
       : null);
   }
 
-  btnGerarLetra.addEventListener("click", async () => {
+  // ── Variedade das ideias: o servidor sorteia uma direção criativa (ângulo, vibe, recurso, imagens…) e a tela deixa guiar e pedir outra ──
+  const diversificarEl = document.getElementById("songwriterDiversificar"), anguloEl = document.getElementById("songwriterAngulo"), vibeEl = document.getElementById("songwriterVibe");
+  const ousadiaEl = document.getElementById("songwriterOusadia"), ideiaBox = document.getElementById("songwriterIdeia"), ideiaTexto = document.getElementById("songwriterIdeiaTexto");
+  const btnOutraIdeia = document.getElementById("btnOutraIdeia"), CHAVE_EVITAR = "oh_sw_evitar";
+  const OPCOES_PADRAO = {
+    angulos: [["poetico", "Poético"], ["historico", "Histórico"], ["cientifico", "Científico"], ["romantico", "Romântico"], ["humor", "Bem-humorado"], ["sombrio", "Sombrio"], ["nostalgico", "Nostálgico"], ["social", "Crônica social"],
+              ["filosofico", "Filosófico"], ["mitologico", "Mitos e lendas"], ["viagem", "Viagem e lugares"], ["espiritual", "Espiritual"], ["fantastico", "Fantasia e ficção científica"], ["cotidiano", "Cena do cotidiano"],
+              ["natureza", "Natureza específica"], ["corpo", "Corpo e pista"]],
+    vibes: [["boa", "Boa vibe"], ["ruim", "Má vibe"], ["agridoce", "Agridoce"], ["misteriosa", "Misteriosa"], ["epica", "Épica"], ["intima", "Íntima"], ["ironica", "Irônica"]],
+  };
+  function preencherOpcoes(o) {
+    const pares = (lista, padrao) => (Array.isArray(lista) && lista.length ? lista.map((x) => [x.id, x.nome]) : padrao);
+    [[anguloEl, pares(o && o.angulos, OPCOES_PADRAO.angulos)], [vibeEl, pares(o && o.vibes, OPCOES_PADRAO.vibes)]].forEach(([sel, itens]) => {
+      if (!sel) return;
+      sel.length = 1;                                              // mantém só o “Surpreenda-me”
+      itens.forEach(([id, nome]) => sel.appendChild(new Option(nome, id)));
+    });
+  }
+  preencherOpcoes(null);                                           // já usável antes de o servidor responder
+  fetch(`${API_BASE}/api/songwriter/inspiracao/opcoes`).then((r) => (r.ok ? r.json() : null)).then((o) => { if (o) preencherOpcoes(o); }).catch(() => { /* fica com as opções padrão */ });
+  function lerEvitar() { try { return [...new Set(JSON.parse(localStorage.getItem(CHAVE_EVITAR) || "[]").flat())].slice(0, 30); } catch (e) { return []; } }
+  function guardarEvitar(palavras) {                              // as palavras mais repetidas das últimas 4 letras, para o servidor não repetir
+    try { const l = JSON.parse(localStorage.getItem(CHAVE_EVITAR) || "[]"); l.unshift((palavras || []).slice(0, 10)); localStorage.setItem(CHAVE_EVITAR, JSON.stringify(l.slice(0, 4))); } catch (e) { /* sem armazenamento */ }
+  }
+  function atualizarVariedade() { const on = !diversificarEl || diversificarEl.checked; [anguloEl, vibeEl, ousadiaEl].forEach((s) => { if (s) s.disabled = !on; }); if (!on && ideiaBox) ideiaBox.hidden = true; }
+  if (diversificarEl) diversificarEl.addEventListener("change", atualizarVariedade);
+  atualizarVariedade();
+
+  async function gerarLetra() {
     const tema = (temaInput.value || "").trim();
     if (!tema) {
       statusLetra.textContent = "Escreva o tema da música primeiro.";
       return;
     }
-    btnGerarLetra.disabled = true;
-    statusLetra.textContent = "Escrevendo a letra…";
+    const diversificar = !diversificarEl || diversificarEl.checked;
+    btnGerarLetra.disabled = true; if (btnOutraIdeia) btnOutraIdeia.disabled = true;
+    statusLetra.textContent = diversificar ? "Sorteando uma ideia e escrevendo a letra…" : "Escrevendo a letra…";
     promptCard.hidden = true;
 
     const form = new FormData();
     form.append("tema", tema);
     form.append("estilo", estiloSelect.value);
+    form.append("diversificar", diversificar ? "true" : "false");
+    if (diversificar) {
+      form.append("angulo", anguloEl ? anguloEl.value : "");
+      form.append("vibe", vibeEl ? vibeEl.value : "");
+      form.append("ousadia", ousadiaEl ? ousadiaEl.value : "media");
+      form.append("evitar", lerEvitar().join(", "));
+    }
 
     try {
       const resp = await fetch(`${API_BASE}/api/songwriter/letra`, { method: "POST", body: form });
       if (!resp.ok) {
-        const erro = await resp.json();
+        const erro = await resp.json().catch(() => ({}));
         statusLetra.textContent = erro.detail || "Não foi possível gerar a letra.";
         return;
       }
@@ -151,12 +187,16 @@ function inicializarSongwriter() {
       letraTexto.value = dados.letra;
       letraCard.hidden = false;
       statusLetra.textContent = "";
+      if (dados.briefing && ideiaBox) { ideiaTexto.textContent = dados.briefing.resumo || ""; ideiaBox.hidden = false; guardarEvitar(dados.palavras_usadas); }
+      else if (ideiaBox) ideiaBox.hidden = true;
     } catch (err) {
       statusLetra.textContent = `Erro: ${err.message}`;
     } finally {
-      btnGerarLetra.disabled = false;
+      btnGerarLetra.disabled = false; if (btnOutraIdeia) btnOutraIdeia.disabled = false;
     }
-  });
+  }
+  btnGerarLetra.addEventListener("click", gerarLetra);
+  if (btnOutraIdeia) btnOutraIdeia.addEventListener("click", gerarLetra);
 
   btnSalvarComposicao.addEventListener("click", async () => {
     const form = new FormData();

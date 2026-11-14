@@ -8,7 +8,7 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=17">
+<link rel="stylesheet" href="styles.css?v=18">
 <link rel="stylesheet" href="identidade.css?v=12">
 <link rel="stylesheet" href="estudioDaw.css?v=25">
 <link rel="stylesheet" href="ambientes.css?v=2">
@@ -583,9 +583,23 @@
             <select id="songwriterEstilo"></select>
           </label>
         </div>
+        <details class="sw-variedade" id="songwriterVariedade">
+          <summary>🎲 Variedade das ideias <span class="sw-var-nota">o app já varia sozinho a cada letra; ajuste se quiser guiar</span></summary>
+          <label class="oh-radio"><input type="checkbox" id="songwriterDiversificar" checked> Diversificar a ideia (recomendado): sorteia ângulo, vibe e imagens e evita clichês</label>
+          <div class="oh-row">
+            <label>Ângulo <select id="songwriterAngulo"><option value="">Surpreenda-me</option></select></label>
+            <label>Vibe <select id="songwriterVibe"><option value="">Surpreenda-me</option></select></label>
+            <label>Ousadia <select id="songwriterOusadia"><option value="suave">Suave</option><option value="media" selected>Média</option><option value="ousada">Ousada</option></select></label>
+          </div>
+          <p class="oh-hint">Deixe “Surpreenda-me” para o app sortear. Fixe um ângulo ou uma vibe para guiar a ideia. “Ousada” junta mundos diferentes e traz mais regras do jogo.</p>
+        </details>
         <label class="oh-radio"><input type="checkbox" id="songwriterUsarContexto"> <i class="oh-ic" data-ic="estrela"></i> Usar tom da última análise no prompt musical</label>
         <button id="btnGerarLetra" class="oh-btn" style="margin-top:10px;">✍️ Gerar letra</button>
         <p id="songwriterStatusLetra" class="oh-status"></p>
+        <div id="songwriterIdeia" class="sw-ideia" hidden>
+          <p class="oh-hint"><b>💡 Ideia desta letra:</b> <span id="songwriterIdeiaTexto"></span></p>
+          <button id="btnOutraIdeia" class="oh-btn oh-btn-secundario" type="button">🎲 Outra ideia</button>
+        </div>
       </div>
 
       <div class="oh-card">
@@ -989,7 +1003,7 @@
 <script src="estudioDaw.js?v=27"></script>
 <script src="abcjs-basic-min.js?v=12"></script>
 <script src="songwriterEstrutura.js?v=4"></script>
-<script src="songwriter.js?v=15"></script>
+<script src="songwriter.js?v=16"></script>
 <script src="partitura.js?v=12"></script>
 <script src="partituraModelo.js?v=12"></script>
 <script src="partituraAssistente.js?v=12"></script>
