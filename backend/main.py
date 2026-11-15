@@ -933,29 +933,41 @@ def songwriter_inspiracao_opcoes():
 
 @app.post("/api/songwriter/letra")
 def gerar_letra_rota(
-    tema: str = Form(...), estilo: str = Form("Pop"),
+    tema: str = Form(...), estilo: str = Form("Pop"), estilos_extras: str = Form(""),
     diversificar: bool = Form(True), angulo: str = Form(""), vibe: str = Form(""),
     ousadia: str = Form("media"), semente: int = Form(0), evitar: str = Form(""),
 ):
-    """Escreve a letra. Com `diversificar` (padrão), o app sorteia uma DIREÇÃO CRIATIVA (ângulo, vibe, recurso narrativo, imagens, regra do
-    jogo) e uma lista de palavras a evitar (clichês + últimas composições + `evitar`, que o aparelho manda com as últimas letras geradas)."""
+    """Escreve a letra. `estilos_extras` (separados por |) são ritmos para MISTURAR com o principal (até 2). Com `diversificar` (padrão), o app
+    sorteia uma DIREÇÃO CRIATIVA (ângulo, vibe, recurso narrativo, imagens, regra do jogo) e uma lista de palavras a evitar (clichês + últimas
+    composições + `evitar`, que o aparelho manda com as últimas letras geradas)."""
+    principal, extras = inspiracao.normalizar_mistura(estilo, estilos_extras)
+    estilo_composto = inspiracao.compor_estilo(principal, extras)
     if not diversificar:
-        letra, erro = songwriter.gerar_letra(tema, estilo)
+        letra, erro = songwriter.gerar_letra(tema, estilo_composto)
         if erro:
             raise HTTPException(status_code=502, detail=erro)
         return {"letra": letra}
-    briefing = inspiracao.gerar_briefing(tema=tema, estilo=estilo, angulo=angulo, vibe=vibe, ousadia=ousadia, semente=semente, evitar=evitar,
+    briefing = inspiracao.gerar_briefing(tema=tema, estilo=principal, extras=extras, angulo=angulo, vibe=vibe, ousadia=ousadia, semente=semente, evitar=evitar,
                                          recentes=inspiracao.recentes_das_composicoes(composicoes))
     try:
         contexto = str(songwriter._contexto_vocal() or "")       # perfil vocal, o mesmo que o Songwriter já usava
     except Exception:
         contexto = ""
-    letra, erro = inspiracao.escrever_letra(tema, estilo, briefing, contexto_vocal=contexto)
+    letra, erro = inspiracao.escrever_letra(tema, estilo_composto, briefing, contexto_vocal=contexto)
     if erro or not letra:                                       # plano B: o caminho antigo, com a direção junto do tema
-        letra, erro = songwriter.gerar_letra(inspiracao.tema_com_direcao(tema, briefing), estilo)
+        letra, erro = songwriter.gerar_letra(inspiracao.tema_com_direcao(tema, briefing), estilo_composto)
         if erro:
             raise HTTPException(status_code=502, detail=erro)
     return {"letra": letra, "briefing": inspiracao.resumo_publico(briefing), "palavras_usadas": inspiracao.palavras_marcantes(letra)}
+
+
+@app.post("/api/songwriter/estilo-fusao")
+def songwriter_estilo_fusao(estilo: str = Form(...), estilos_extras: str = Form("")):
+    """O estilo em INGLÊS (etiquetas) de um ritmo ou de uma fusão de ritmos, para o campo “Estilo da nova versão” da versão com banda."""
+    if not estilo.strip():
+        raise HTTPException(status_code=400, detail="Escolha pelo menos um ritmo.")
+    principal, extras = inspiracao.normalizar_mistura(estilo, estilos_extras)
+    return {"estilo_en": inspiracao.estilo_em_ingles(principal, extras), "estilo": inspiracao.compor_estilo(principal, extras), "ritmos": [principal] + extras}
 
 
 @app.post("/api/songwriter/referencia")
@@ -973,8 +985,10 @@ def gerar_prompt_musical_rota(
     estilo: str = Form("Pop"),
     tema: str = Form(None),
     descricao_referencia: str = Form(None),
+    estilos_extras: str = Form(""),
 ):
-    prompt_texto, erro = songwriter.gerar_prompt_musical(letra, estilo, tema, descricao_referencia)
+    estilo_composto = inspiracao.compor_estilo(estilo, estilos_extras)       # ritmo principal + até 2 “com elementos de…”
+    prompt_texto, erro = songwriter.gerar_prompt_musical(letra, estilo_composto, tema, descricao_referencia)
     if erro:
         raise HTTPException(status_code=502, detail=erro)
     return {"prompt": prompt_texto}

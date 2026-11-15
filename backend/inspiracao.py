@@ -160,6 +160,39 @@ GENEROS = [
     {"id": "pop", "chaves": ["pop"], "nome": "pop", "temas": "variados; o hook manda", "vocabulario": "conversa de hoje, imagem estranha no verso", "estrutura": "refrão forte (hook) de poucas palavras, verso conversado", "fugir": "uma imagem estranha no verso e um hook simples e inesquecível"},
 ]
 
+# Etiquetas em INGLÊS de cada gênero (o modelo de música lê o estilo como etiquetas): usadas para montar o estilo de uma FUSÃO de ritmos.
+_EN = {
+    "pagode": ("Brazilian pagode", "banjo and tantã, hand-percussion groove, warm sing-along chorus"),
+    "samba": ("Brazilian samba", "cavaquinho and pandeiro, surdo bass drum, syncopated batucada groove, call-and-response chorus"),
+    "forro": ("Brazilian forró", "accordion, zabumba and triangle, danceable xote and baião rhythm"),
+    "brega": ("Brazilian brega and arrocha", "synth pads, slow danceable beat, emotional sung vocals"),
+    "sertanejo": ("Brazilian sertanejo", "acoustic guitar and viola caipira, tight vocal harmonies, catchy chorus"),
+    "funk": ("Brazilian funk carioca", "tamborzão drum-machine beat, deep bass, chanted hooks"),
+    "rap": ("hip hop", "boom bap drums, deep 808 bass, rhythmic rap verses with internal rhymes"),
+    "metal": ("heavy metal", "down-tuned distorted guitars, double bass drums, powerful vocals"),
+    "rock": ("rock", "driving distorted electric guitars, live drums, anthemic chorus"),
+    "latino": ("latin music", "percussion-driven rhythm, bright guitars and brass, catchy call-and-response chorus"),
+    "reggae": ("reggae", "offbeat guitar skank, deep round bass, laid-back groove"),
+    "axe": ("Brazilian axé", "carnival percussion, energetic electric guitar, big sing-along chorus"),
+    "regional": ("Brazilian folk rhythms", "alfaia drums and ganzá, toada call-and-response vocals"),
+    "choro": ("choro", "cavaquinho, bandolim and flute, fast conversational melodic lines"),
+    "bossa": ("bossa nova", "nylon-string guitar, soft brushed drums, intimate whispered vocals"),
+    "mpb": ("MPB", "acoustic guitar, poetic melodic vocals, subtle percussion"),
+    "blues": ("blues", "expressive electric guitar, shuffle groove, soulful vocals"),
+    "jazz": ("jazz", "upright bass, brushed drums, piano chords, improvised feel"),
+    "folk": ("folk", "acoustic guitar, warm storytelling vocals, harmonica"),
+    "gospel": ("gospel", "uplifting choir harmonies, organ and piano, heartfelt vocals"),
+    "infantil": ("children's music", "simple playful melody, light percussion, sing-along"),
+    "fado": ("fado", "Portuguese guitar, dramatic emotional vocals"),
+    "kpop": ("K-pop", "polished electronic production, tight vocal layers, dance beat, catchy hook"),
+    "eletronica": ("electronic music", "synthesizers, four-on-the-floor beat, build-up and drop"),
+    "trilha": ("cinematic music", "orchestral strings, epic crescendo"),
+    "pop": ("pop", "polished production, punchy drums, catchy hook"),
+}
+for _g in GENEROS:
+    _g["nome_en"], _g["en"] = _EN[_g["id"]]
+
+
 _STOP = set(_norm(p) for p in """
 a o as os um uma uns umas de do da dos das em no na nos nas por para pra com sem sob sobre entre ate que quem qual quais quando onde como porque pois mas
 e ou nem se so já ja não nao sim muito mais menos tão tao bem mal aqui ali lá la ai aí então entao também tambem ainda sempre nunca tudo nada todo toda todos
@@ -168,6 +201,64 @@ esse essa esses essas este esta estes estas isso isto aquilo aquele aquela está
 pode posso quer quero faz fazer deixa deixar vem vir ver vejo dar dá
 verso refrao ponte pre intro interludio final
 """.split())
+
+
+# ════════════════════════════════════════════════ MISTURA DE RITMOS ════════════════════════════════════════════════
+MAX_EXTRAS = 2        # um ritmo principal e até 2 "com elementos de…" (mais que isso vira ruído e a música perde a identidade)
+_SEPARADOR_ESTILOS = re.compile(r"\s*\|\s*|\s*\+\s*|\s*;\s*|\s*,\s*|\s+e\s+|\s+&\s+|\s+com elementos de\s+|\s+misturado com\s+", re.I)
+
+
+def parse_estilos(valor):
+    """Lê um ou vários estilos ('Rock | Hip Hop', 'rock e hip hop', ['Rock', 'Funk']) e devolve a lista sem repetição, na ordem."""
+    if not valor:
+        return []
+    itens = _SEPARADOR_ESTILOS.split(valor) if isinstance(valor, str) else [x for v in valor for x in parse_estilos(v)]
+    out, vistos = [], set()
+    for x in itens:
+        t = str(x or "").strip()
+        if t and _norm(t) not in vistos:
+            out.append(t)
+            vistos.add(_norm(t))
+    return out
+
+
+def normalizar_mistura(estilo, extras=None):
+    """(principal, extras): tira repetidos (inclusive o que for igual ao principal) e limita a MAX_EXTRAS."""
+    principal = (parse_estilos(estilo) or [str(estilo or "").strip() or "Pop"])[0] if estilo else "Pop"
+    lista = [e for e in parse_estilos(extras) if _norm(e) != _norm(principal)]
+    return principal, lista[:MAX_EXTRAS]
+
+
+def _lista_com_e(nomes, conj="e"):
+    return nomes[0] if len(nomes) == 1 else ", ".join(nomes[:-1]) + f" {conj} " + nomes[-1]
+
+
+def compor_estilo(principal, extras=None):
+    """O estilo como UMA frase (em português) para a letra e para o prompt musical. Sem extras, é o próprio estilo."""
+    principal, extras = normalizar_mistura(principal, extras)
+    if not extras:
+        return principal
+    return (f"{principal} (ritmo principal), com elementos de {_lista_com_e(extras)}: uma FUSÃO coerente em que {principal} define a estrutura e a "
+            f"atmosfera, e o(s) outro(s) entram no ritmo, nos instrumentos, no jeito de cantar e no vocabulário, sem virar colagem")
+
+
+def _etiquetas_en(nome):
+    """(nome em inglês, descritores) do gênero; estilo fora da biblioteca vale pelo próprio nome."""
+    g = achar_genero(nome)
+    return (g["nome_en"], g["en"]) if g else (str(nome), "")
+
+
+def estilo_em_ingles(principal, extras=None):
+    """O estilo em INGLÊS, pronto para o campo “Estilo da nova versão” (o modelo de música lê etiquetas). Sem extras, só o gênero."""
+    principal, extras = normalizar_mistura(principal, extras)
+    nome_p, desc_p = _etiquetas_en(principal)
+    if not extras:
+        return f"{nome_p}, {desc_p}" if desc_p else nome_p
+    pares = [_etiquetas_en(e) for e in extras]
+    outros = "; ".join(f"{n} ({d})" if d else n for n, d in pares)
+    lider = (nome_p[:1].upper() + nome_p[1:]) + " leads the structure and mood" + (f" ({desc_p})" if desc_p else "")
+    return (f"A fusion of {_lista_com_e([nome_p] + [n for n, _ in pares], 'and')}. {lider}, blended with {outros}. "
+            f"Cohesive, natural-sounding blend with {nome_p} as the main identity.")
 
 
 # ════════════════════════════════════════════════ ESCOLHAS, MEMÓRIA, BRIEFING ════════════════════════════════════════════════
@@ -273,7 +364,7 @@ def _escolher_angulos(rng, n, fixo, grupos_distintos):
     return escolhidos[:n]
 
 
-def gerar_briefing(tema="", estilo="", angulo="", vibe="", ousadia="media", semente=0, evitar=None, recentes=None):
+def gerar_briefing(tema="", estilo="", angulo="", vibe="", ousadia="media", semente=0, evitar=None, recentes=None, extras=None):
     """Sorteia a direção criativa. Mesma `semente` = mesma ideia (a semente usada volta no resultado, para repetir ou variar)."""
     cfg = OUSADIAS.get(ousadia) or OUSADIAS["media"]
     ousadia = ousadia if ousadia in OUSADIAS else "media"
@@ -301,13 +392,15 @@ def gerar_briefing(tema="", estilo="", angulo="", vibe="", ousadia="media", seme
     if ousadia == "ousada" and rng.random() < 0.3:
         extra = rng.choice([r for r in REGRAS if r != regra])
         regra = f"{regra}; e também: {extra}" if regra else extra
+    estilo, extras = normalizar_mistura(estilo, extras) if (estilo or extras) else (estilo, [])
     genero = achar_genero(estilo)
+    generos_extras = [g for g in (achar_genero(e) for e in extras) if g and (not genero or g["id"] != genero["id"])]
     b = {
         "semente": semente, "ousadia": ousadia, "temperatura": cfg["temperatura"],
         "angulos": [a["id"] for a in angulos], "angulos_nomes": [a["nome"] for a in angulos], "angulos_instrucoes": [a["instrucao"] for a in angulos],
         "vibe": vb["id"], "vibe_nome": vb["nome"], "vibe_instrucao": vb["instrucao"],
         "recurso": recurso, "familias": imagens, "detalhes": detalhes, "regra": regra,
-        "genero": genero["nome"] if genero else "", "genero_notas": genero,
+        "genero": genero["nome"] if genero else "", "genero_notas": genero, "extras": extras, "generos_extras": generos_extras,
         "evitar": palavras_para_evitar(recentes, evitar),
     }
     b["resumo"] = _resumo(b)
@@ -320,6 +413,8 @@ def _resumo(b):
     if b["recurso"]:
         partes.append("recurso: " + re.sub(r"\s*\(.*\)$", "", b["recurso"]))
     partes.append("imagens de " + " e ".join(b["familias"]))
+    if b.get("extras"):
+        partes.append("mistura de ritmos")
     if b["regra"]:
         partes.append("regra: " + b["regra"])
     return " · ".join(partes)
@@ -341,6 +436,10 @@ def _texto(b, estilo):
         L.append(f"- Sobre o gênero ({g['nome']}): temas clássicos: {g['temas']}. Vocabulário típico: {g['vocabulario']}. Estrutura: {g['estrutura']}. Para fugir do óbvio: {g['fugir']}.")
     elif estilo:
         L.append(f"- Respeite o jeito de escrever do estilo “{estilo}”, sem cair no estereótipo.")
+    for ge in b.get("generos_extras", []):
+        L.append(f"- Elemento de {ge['nome']} (entra por cima do gênero principal): temas: {ge['temas']}. Vocabulário: {ge['vocabulario']}. Estrutura: {ge['estrutura']}.")
+    if b.get("extras"):
+        L.append(f"- É uma FUSÃO de ritmos ({estilo} + {' + '.join(b['extras'])}): o principal ({estilo}) define a estrutura e o clima; dos outros pegue o vocabulário, o fraseado, o tipo de rima e a atitude, de forma natural e coerente, sem virar colagem de clichês.")
     L.append("- EVITE estas palavras e imagens (clichês ou já usadas nas últimas músicas), a menos que sejam essenciais e usadas de um jeito novo: " + ", ".join(b["evitar"]) + ".")
     L.append("- Troque abstrações (felicidade, liberdade, esperança, saudade) por imagens específicas: mostre em vez de dizer.")
     L.append("- Nada ofensivo; sem incentivo à violência, ao ódio ou à autoagressão.")
@@ -422,6 +521,7 @@ def ideias(args=None, modulo_composicoes=None):
     """Para a ferramenta da Laranjinha: devolve a direção criativa pronta para ela escrever a letra."""
     args = args or {}
     recentes = recentes_das_composicoes(modulo_composicoes) if modulo_composicoes is not None else []
-    b = gerar_briefing(tema=args.get("tema", ""), estilo=args.get("estilo", ""), angulo=args.get("angulo", ""), vibe=args.get("vibe", ""),
-                       ousadia=args.get("ousadia", "media"), semente=args.get("semente", 0), evitar=args.get("evitar"), recentes=recentes)
+    lista = parse_estilos(args.get("estilo", "")) + parse_estilos(args.get("estilos_extras", ""))
+    b = gerar_briefing(tema=args.get("tema", ""), estilo=lista[0] if lista else "", angulo=args.get("angulo", ""), vibe=args.get("vibe", ""),
+                       ousadia=args.get("ousadia", "media"), semente=args.get("semente", 0), evitar=args.get("evitar"), recentes=recentes, extras=lista[1:])
     return {"resumo": b["resumo"], "direcao": b["texto"], "semente": b["semente"], "evitar": b["evitar"]}
