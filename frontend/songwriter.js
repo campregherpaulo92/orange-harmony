@@ -7,6 +7,13 @@ function montarSelectEstiloSongwriter() {
   const select = document.getElementById("songwriterEstilo");
   if (!select || typeof ESTILOS_MUSICAIS === "undefined") return;
   preencherSelectEstilos(select);                    // mesma lista agrupada da Produção (vem de /api/estilos)
+  ["songwriterEstilo2", "songwriterEstilo3"].forEach((id) => {       // os ritmos para MISTURAR: a mesma lista, com “nenhum” na frente
+    const extra = document.getElementById(id);
+    if (!extra) return;
+    preencherSelectEstilos(extra);
+    extra.insertBefore(new Option("— nenhum —", ""), extra.firstChild);
+    extra.value = "";
+  });
 }
 
 // ── Atalhos sob a música gerada: salvar na Biblioteca e enviar para o Estúdio ──
@@ -154,6 +161,20 @@ function inicializarSongwriter() {
   if (diversificarEl) diversificarEl.addEventListener("change", atualizarVariedade);
   atualizarVariedade();
 
+  // ── Misturar ritmos: o principal (“Estilo”) + até 2 “com elementos de…” (sem repetir o principal nem um ao outro) ──
+  const estilo2El = document.getElementById("songwriterEstilo2"), estilo3El = document.getElementById("songwriterEstilo3"), misturaDica = document.getElementById("songwriterMisturaDica");
+  const DICA_MISTURA = misturaDica ? misturaDica.textContent : "";
+  function estilosExtras() {
+    const vistos = new Set([estiloSelect.value]);
+    return [estilo2El, estilo3El].map((s) => (s ? s.value : "")).filter((v) => v && !vistos.has(v) && vistos.add(v));
+  }
+  function atualizarMistura() {
+    if (!misturaDica) return;
+    const extras = estilosExtras();
+    misturaDica.textContent = extras.length ? `🎛️ Mistura: ${estiloSelect.value} (principal) + ${extras.join(" + ")}. Vale para a letra, o prompt musical e o botão “Montar o estilo…” da versão a partir da gravação.` : DICA_MISTURA;
+  }
+  [estiloSelect, estilo2El, estilo3El].forEach((s) => { if (s) s.addEventListener("change", atualizarMistura); });
+
   async function gerarLetra() {
     const tema = (temaInput.value || "").trim();
     if (!tema) {
@@ -168,6 +189,7 @@ function inicializarSongwriter() {
     const form = new FormData();
     form.append("tema", tema);
     form.append("estilo", estiloSelect.value);
+    form.append("estilos_extras", estilosExtras().join("|"));
     form.append("diversificar", diversificar ? "true" : "false");
     if (diversificar) {
       form.append("angulo", anguloEl ? anguloEl.value : "");
@@ -260,6 +282,7 @@ function inicializarSongwriter() {
     const form = new FormData();
     form.append("letra", letraTexto.value);
     form.append("estilo", estiloSelect.value);
+    form.append("estilos_extras", estilosExtras().join("|"));
     if (temaFinal) form.append("tema", temaFinal);
     if (descricaoReferenciaAtual) form.append("descricao_referencia", descricaoReferenciaAtual);
 
@@ -340,6 +363,25 @@ function inicializarSongwriter() {
   const coverModeloBox = document.getElementById("songwriterCoverModeloBox");
   const letraModeloEl = document.getElementById("songwriterLetraModelo");
   const coverEstilo = document.getElementById("songwriterCoverEstilo");
+  const btnEstiloFusao = document.getElementById("btnEstiloFusao");
+  if (btnEstiloFusao) {
+    btnEstiloFusao.addEventListener("click", async () => {
+      const dica = document.getElementById("songwriterFusaoDica");
+      const aviso = (t) => { if (dica) dica.textContent = t; };
+      if (!estiloSelect.value) { aviso("Escolha um ritmo em “Estilo”, lá em cima."); return; }
+      const extras = estilosExtras(), form = new FormData();
+      form.append("estilo", estiloSelect.value); form.append("estilos_extras", extras.join("|"));
+      btnEstiloFusao.disabled = true; aviso("Montando o estilo…");
+      try {
+        const resp = await fetch(`${API_BASE}/api/songwriter/estilo-fusao`, { method: "POST", body: form });
+        if (!resp.ok) { const e = await resp.json().catch(() => ({})); aviso(e.detail || "Não foi possível montar o estilo."); return; }
+        const dados = await resp.json(), atual = coverEstilo.value.trim();
+        if (atual.includes(dados.estilo_en)) { aviso("Esse estilo já está no campo abaixo."); return; }
+        coverEstilo.value = atual ? `${atual}\n${dados.estilo_en}` : dados.estilo_en;
+        aviso(`✅ Estilo montado: ${dados.ritmos.join(" + ")}. Está no campo abaixo; edite se quiser.`);
+      } catch (err) { aviso(`Erro: ${err.message}`); } finally { btnEstiloFusao.disabled = false; }
+    });
+  }
   const coverQualidade = document.getElementById("songwriterCoverQualidade");
   const coverIdioma = document.getElementById("songwriterCoverIdioma");
   const statusCover = document.getElementById("songwriterStatusCover");

@@ -1400,3 +1400,8 @@ body.oh-bib-aberta { overflow: hidden; }
 .sw-variedade select:disabled { opacity: 0.5; }
 .sw-ideia { margin-top: 8px; padding: 8px 12px; border: 1px solid rgba(249,115,22,0.45); border-radius: 12px; background: rgba(249,115,22,0.07); }
 .sw-ideia .oh-hint { margin: 0 0 6px; color: #ffe3cf; }
+
+/* Songwriter: misturar ritmos */
+.sw-mistura { margin-top: 2px; }
+#songwriterMisturaDica, #songwriterFusaoDica { margin-top: 4px; }
+.sw-fusao-linha { margin: 6px 0 2px; flex-wrap: wrap; }

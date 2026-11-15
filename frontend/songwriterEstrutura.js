@@ -720,6 +720,7 @@
     function atualizarLetra() {
       const p = $("#swEstrLetra"); if (!E.est || !E.est.ok) { p.textContent = ""; return; }
       const c = conferirEncaixe(E.est, E.partes, marcasAtuais(), api.lerLetra ? api.lerLetra() : "");
+      if (!c.nivel && !c.linhas.length) { p.className = "oh-hint sw-conf"; p.textContent = ""; return; }      // ainda sem letra: o resumo de cima já diz quantas notas há
       p.className = "oh-hint sw-conf " + (c.nivel || "");
       p.innerHTML = esc((c.nivel === "aviso" ? "⚠️ " : c.nivel === "ok" ? "✅ " : "") + c.texto) + (c.linhas.length ? `<br>${c.linhas.map((x) => esc(x.texto)).join("<br>")}` : "");
     }
