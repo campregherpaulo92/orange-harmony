@@ -434,6 +434,17 @@ def estudio_fila_apagar(job_id: str):
     return {"apagado": estudio_fila.apagar_job(job_id)}
 
 
+@app.post("/api/estudio/propor-edicao")
+def estudio_propor_edicao(mensagem: str = Form(...), contexto: str = Form(...)):
+    mensagem = mensagem.strip()
+    if not mensagem or len(mensagem) > 500 or len(contexto) > 30000:
+        raise HTTPException(status_code=400, detail="Comando ou contexto fora do limite.")
+    resultado = estudio_agente.propor_edicao(mensagem, contexto)
+    if resultado is None:
+        raise HTTPException(status_code=503, detail="O agente não conseguiu propor uma edição agora.")
+    return resultado
+
+
 @app.post("/api/estudio/comando")
 def estudio_comando_rota(
     mensagem: str = Form(...),
