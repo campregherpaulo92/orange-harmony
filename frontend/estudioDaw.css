@@ -326,3 +326,11 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 @media (max-width: 800px) { .cf-topo { position: static; box-shadow: none; } }
 .cf-transp { display: inline-flex; align-items: center; gap: 6px; } .cf-transp b { color: var(--dw-texto); min-width: 26px; text-align: center; display: inline-block; }
 .cf-topo .cf-agora { padding: 4px 12px; font-size: 14px; } .cf-topo .cf-chip { padding: 3px 11px; }
+
+/* Seleção de intervalo em uma faixa */
+.dw-trecho-barra:not([hidden]) { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 12px; background: var(--dw-painel2); border-bottom: 1px solid var(--dw-borda); }
+#dwTrechoInfo { flex: 1 1 250px; font-size: 12px; color: var(--dw-suave); }
+#dwFerr [data-f="trecho"].on { color: var(--dw-laranja); border-color: var(--dw-laranja); }
+.dw-selecionando-trecho .dw-linha[data-lf] { touch-action: none; user-select: none; }
+.dw-selecionando-trecho .dw-regiao, .dw-selecionando-trecho .dw-regiao .alca { cursor: crosshair; }
+.dw-trecho-selecao { position: absolute; top: 1px; bottom: 1px; z-index: 5; pointer-events: none; background: rgba(56, 189, 248, .25); border-inline: 1px solid #7dd3fc; }

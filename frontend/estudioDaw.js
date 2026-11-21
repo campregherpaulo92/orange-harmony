@@ -105,14 +105,14 @@
     if (n.cadeia) { try { n.cadeia.saida.disconnect(); } catch (e) { /* solto */ } n.cadeia.parar(); }
     n.entrada.connect(nova.entrada); nova.saida.connect(n.gain); n.cadeia = nova;
   }
-  function descartarNos() { nos.forEach((n) => { try { n.entrada.disconnect(); n.gain.disconnect(); n.pan.disconnect(); if (n.cadeia) { n.cadeia.saida.disconnect(); n.cadeia.parar(); } } catch (e) { /* solto */ } }); nos.clear(); }
+  function descartarNos() { nos.forEach((n) => { try { n.entrada.disconnect(); n.gain.disconnect(); n.pan.disconnect(); n.silencio.disconnect(); if (n.cadeia) { n.cadeia.saida.disconnect(); n.cadeia.parar(); } } catch (e) { /* solto */ } }); nos.clear(); }
   function noDe(f) {
     let n = nos.get(f.id);
     if (!n) {
-      const entrada = ctx.createGain(), gain = ctx.createGain(), pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain(), an = ctx.createAnalyser();
-      an.fftSize = 512; entrada.connect(gain); gain.connect(pan); pan.connect(an); pan.connect(mestre);
+      const entrada = ctx.createGain(), gain = ctx.createGain(), pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain(), an = ctx.createAnalyser(), silencio = ctx.createGain();
+      an.fftSize = 512; entrada.connect(gain); gain.connect(pan); pan.connect(silencio); silencio.connect(an); silencio.connect(mestre);
       gain.gain.value = audivel(f.id) ? f.vol : 0; if (pan.pan) pan.pan.value = f.pan;
-      n = { entrada, gain, pan, an, cadeia: null }; nos.set(f.id, n); montarCadeia(f, n);
+      n = { entrada, gain, pan, an, silencio, cadeia: null }; nos.set(f.id, n); montarCadeia(f, n);
     }
     return n;
   }
@@ -122,22 +122,65 @@
   }
   // Programa UMA região num contexto (ao vivo ou na exportação). t0 = ponto do projeto onde a reprodução começa.
   function programarRegiao(c, r, destino, t0, base) {
-    const buf = bufs.get(r.buf); if (!buf || r.ini + r.dur <= t0) return null;
+    const buf = bufs.get(r.buf); if (r.silenciada || !buf || r.ini + r.dur <= t0) return null;
     const dentro = Math.max(0, t0 - r.ini), quando = base + Math.max(0, r.ini - t0), dur = r.dur - dentro;
     if (dur <= 0.004) return null;
     const src = c.createBufferSource(), g = c.createGain(), vol = Math.pow(10, r.ganho / 20) * (buf.numberOfChannels === 1 ? Math.SQRT1_2 : 1); src.buffer = buf;   // áudio mono: −3 dB no centro (como a lei de panorâmica faz), já aqui, para o volume não depender de haver efeitos
     const pts = [[0, 1]];                                       // [segundos desde o início agendado, fator de volume]
     if (r.fi > 0 && dentro < r.fi) { pts[0] = [0, dentro / r.fi]; pts.push([r.fi - dentro, 1]); }
     if (r.fo > 0) { const inicioFo = (r.dur - r.fo) - dentro; if (inicioFo <= 0) { pts.length = 0; pts.push([0, Math.min(1, Math.max(0, (r.dur - dentro) / r.fo))]); pts.push([dur, 0]); } else { pts.push([inicioFo, 1]); pts.push([dur, 0]); } }
+    if (r.fadeTrecho) {
+      const { dur: total, fi, fo, off } = r.fadeTrecho;
+      const pos = off + dentro;
+      const nivelEm = (t) => {
+        if (fo > 0 && t >= total - fo) return Math.min(1, Math.max(0, (total - t) / fo));
+        return fi > 0 ? Math.max(0, Math.min(1, t / fi)) : 1;
+      };
+      const fim = pos + dur;
+      const meios = [fi, total - fo].filter((t) => t > pos && t < fim).sort((a, b) => a - b);
+      pts.length = 0;
+      for (const t of [pos, ...meios, fim]) pts.push([t - pos, nivelEm(t)]);
+    }
     g.gain.setValueAtTime(vol * Math.max(pts[0][1], 0.0001), quando);
     for (let i = 1; i < pts.length; i++) g.gain.linearRampToValueAtTime(vol * Math.max(pts[i][1], 0.0001), quando + Math.max(pts[i][0], 0.001));
     src.connect(g); g.connect(destino); src.start(quando, r.off + dentro, dur);
     return src;
   }
   function pararFontes() { fontes.forEach((s) => { try { s.stop(); } catch (e) { /* já terminou */ } }); fontes = []; }
+  // Corta também a cauda dos efeitos durante regiões silenciadas. Se uma região
+  // audível for movida para cima desse intervalo, ela pode tocar normalmente.
+  function agendarSilencio(gain, regioes, t0, base) {
+    gain.cancelScheduledValues(base);
+    gain.setValueAtTime(1, base);
+    if (!regioes.some((r) => r.silenciada)) return;
+    const limites = [];
+    for (const r of regioes) {
+      const fim = r.ini + r.dur;
+      if (fim <= t0) continue;
+      limites.push([Math.max(r.ini, t0), r.silenciada ? 1 : 0, 1], [fim, r.silenciada ? 1 : 0, -1]);
+    }
+    limites.sort((a, b) => a[0] - b[0]);
+    const ativos = [0, 0];
+    let valor = 1;
+    for (let i = 0; i < limites.length;) {
+      const t = limites[i][0];
+      do {
+        const [, tipo, delta] = limites[i++];
+        ativos[tipo] += delta;
+      } while (i < limites.length && limites[i][0] - t < EPS_TRECHO);
+      const novo = ativos[1] > 0 && ativos[0] === 0 ? 0 : 1;
+      if (novo !== valor) gain.setValueAtTime(novo, base + (t - t0));
+      valor = novo;
+    }
+  }
   function agendarRegioes(t0) {
     pararFontes();
-    S.regioes.forEach((r) => { const f = faixaPorId(r.f); if (!f) return; const s = programarRegiao(ctx, r, noDe(f).entrada, t0, ctx.currentTime); if (s) fontes.push(s); });
+    const base = ctx.currentTime;
+    S.faixas.forEach((f) => {
+      const regioes = S.regioes.filter((r) => r.f === f.id), n = noDe(f);
+      agendarSilencio(n.silencio.gain, regioes, t0, base);
+      regioes.forEach((r) => { const s = programarRegiao(ctx, r, n.entrada, t0, base); if (s) fontes.push(s); });
+    });
     proxBeat = Math.ceil(t0 / beatDur() - 1e-6);
   }
   let reagendando = null;
@@ -217,6 +260,7 @@
         <div class="dw-grupo" id="dwFerr">
           <button class="dw-fb on" data-f="sel" title="Selecionar e mover (V)">${ic("sel")}</button>
           <button class="dw-fb" data-f="tes" title="Dividir (C): clique numa região">${ic("tes")}</button>
+          <button class="dw-btn peq" data-f="trecho" aria-pressed="false" title="Clique e arraste em uma faixa">Selecionar trecho</button>
           <button class="dw-fb" data-f="mao" title="Mão (H): arraste para rolar">${ic("mao")}</button>
           <button class="dw-fb" data-f="lupa" title="Zoom (Z): clique aproxima; Alt + clique afasta">${ic("lupa")}</button>
         </div>
@@ -234,6 +278,12 @@
           <button class="dw-btn peq" id="dwCalibrar" title="Mede o atraso do seu equipamento: toca cliques e vê quanto eles demoram a aparecer na gravação">Calibrar</button>
           <label title="Como você ouve a música enquanto grava. Com fone de ouvido a voz sai limpa. Com caixa de som o navegador tenta cancelar o eco, mas parte da música pode vazar no microfone.">Ouço com <select id="dwMonitor"><option value="caixa">Caixa de som</option><option value="fone">Fone de ouvido</option></select></label>
         </div>
+      </div>
+      <div class="dw-trecho-barra" id="dwTrechoBarra" hidden>
+        <span id="dwTrechoInfo" role="status"></span>
+        <button class="dw-btn peq" id="dwTrechoDividir" disabled>Dividir trecho</button>
+        <button class="dw-btn peq" id="dwTrechoSilenciar" disabled>Silenciar trecho</button>
+        <button class="dw-btn peq" id="dwTrechoLimpar" disabled>Limpar seleção</button>
       </div>
       <div class="dw-area">
         <div class="dw-cab-col"><div class="dw-cab-topo"><span>FAIXAS</span><button class="dw-btn peq" id="dwAddFaixa">${ic("mais")} Faixa</button></div><div class="dw-cab-lista" id="dwCabLista"></div></div>
@@ -359,14 +409,15 @@
     $("#dwRegua").innerHTML = h;
     const linhas = S.faixas.map((f) => {
       const rs = S.regioes.filter((r) => r.f === f.id).map((r) => `
-        <div class="dw-regiao ${r.id === S.regiaoSel ? "sel" : ""} ${f.mudo ? "mudo" : ""} ${r.gravando ? "gravando" : ""}" data-r="${r.id}" style="left:${px(r.ini)}px;width:${px(r.dur)}px;background:${corA(f.cor, 0.16)};border-color:${corA(f.cor, 0.85)}">
-          <div class="rot" style="background:${corA(f.cor, 0.95)}">${esc(r.nome)}${r.limpo ? " · limpa" : ""}${r.afinada ? " · afinada" : ""}</div><canvas></canvas>
+        <div class="dw-regiao ${r.id === S.regiaoSel ? "sel" : ""} ${f.mudo || r.silenciada ? "mudo" : ""} ${r.gravando ? "gravando" : ""}" data-r="${r.id}" style="left:${px(r.ini)}px;width:${px(r.dur)}px;background:${corA(f.cor, 0.16)};border-color:${corA(f.cor, 0.85)}">
+          <div class="rot" style="background:${corA(f.cor, 0.95)}">${esc(r.nome)}${r.limpo ? " · limpa" : ""}${r.afinada ? " · afinada" : ""}${r.silenciada ? " · silenciada" : ""}</div><canvas></canvas>
           ${r.fi > 0.02 ? `<i class="fade i" style="width:${px(r.fi)}px"></i>` : ""}${r.fo > 0.02 ? `<i class="fade o" style="width:${px(r.fo)}px"></i>` : ""}
           <i class="alca e" data-alca="e"></i><i class="alca d" data-alca="d"></i></div>`).join("");
       return `<div class="dw-linha" data-lf="${f.id}">${rs}</div>`;
     }).join("") + '<div class="dw-linha vazia"></div>';
     $("#dwFaixas").innerHTML = linhas + `<div class="dw-grade-fundo" style="background-image:repeating-linear-gradient(90deg, rgba(255,255,255,.07) 0 1px, transparent 1px ${px(bar)}px)"></div>`;
     $$(".dw-regiao", $("#dwFaixas")).forEach((el) => { const r = regiaoPorId(+el.dataset.r), f = faixaPorId(r.f); desenharOnda($("canvas", el), r, f.cor, px(r.dur), el.clientHeight - 18 || 60); });
+    desenharTrecho();
     $("#dwVazio").hidden = S.faixas.length > 0;
     posicionar();
   }
@@ -384,7 +435,7 @@
     if (!r) { el.innerHTML = '<div class="dw-aviso-vazio">Clique numa região na linha do tempo para editar nome, volume e fades.</div>'; return; }
     el.innerHTML = `
       <div class="dw-bloco"><h4>Região</h4><input type="text" value="${esc(r.nome)}" data-rnome><div style="color:var(--dw-suave);font-size:11px">Início ${fmt(r.ini)} · duração ${fmt(r.dur)} · compasso ${(r.ini / BAR() + 1).toFixed(1)}</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="dw-btn peq" data-ra="dividir">Dividir no cursor</button><button class="dw-btn peq" data-ra="duplicar">Duplicar</button><button class="dw-btn peq" data-ra="excluir">Excluir</button></div></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="dw-btn peq" data-ra="dividir">Dividir no cursor</button><button class="dw-btn peq" data-ra="duplicar">Duplicar</button>${r.silenciada ? '<button class="dw-btn peq" data-ra="reativar">Reativar áudio</button>' : ""}<button class="dw-btn peq" data-ra="excluir">Excluir</button></div></div>
       <div class="dw-bloco"><h4>Volume</h4>
         <div class="dw-param"><span>Ganho</span><input type="range" min="-24" max="12" step="0.5" value="${r.ganho}" data-rg="ganho"><b>${r.ganho} dB</b></div>
         <div class="dw-param"><span>Fade in</span><input type="range" min="0" max="5" step="0.05" value="${r.fi}" data-rg="fi"><b>${r.fi.toFixed(2)}s</b></div>
@@ -644,7 +695,7 @@
   async function aplicarSeparacaoCompleta(res, arq) {
     if (S.regioes.length) novoProjeto();   // o projeto atual fica salvo: Arquivo → Abrir projeto
     const antes = foto();
-    S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
+    trechoSel = null; S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
     const nomes = Object.keys(res.stems).sort((a, b) => { const ia = ORDEM_FAIXAS.indexOf(a), ib = ORDEM_FAIXAS.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
     const feitas = [];
     for (let k = 0; k < nomes.length; k++) {
@@ -689,7 +740,7 @@
   function aplicarSeparacao(bv, bi, bo, res, arq) {
     if (S.regioes.length) novoProjeto();   // o projeto atual fica salvo: Arquivo → Abrir projeto
     const antes = foto();
-    S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
+    trechoSel = null; S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
     const voz = novaFaixa("Voz (stem vocal)", "#f97316", { vol: 0.9 }), inst = novaFaixa("Instrumental", "#14b8a6", { vol: 0.8 }), orig = novaFaixa("Original (referência)", "#94a3b8", { vol: 0.7, mudo: true });
     novaRegiao(voz, guardarAudio(bv, res.vozBlob), "Voz", 0, 0); novaRegiao(inst, guardarAudio(bi, res.instBlob), "Instrumental", 0, 0); novaRegiao(orig, guardarAudio(bo, arq), "Original (referência)", 0, 0);
     S.faixaSel = voz.id; S.nome = arq.name.replace(/\.[^.]+$/, "").slice(0, 40); $("#dwNome").value = S.nome;
@@ -711,9 +762,11 @@
     if (opc.semMestre) m.connect(off.destination); else { const lim = criarLimitador(off); m.connect(lim); lim.connect(off.destination); }   // faixas separadas: sem o volume geral e sem o limitador (a soma delas dá a mixagem)
     if (window.EstudioFx && audiveis.some((f) => EstudioFx.precisaWorklet(f.fx))) await EstudioFx.carregarWorklet(off);
     audiveis.forEach((f) => {
-      const g = off.createGain(); g.gain.value = f.vol; if (off.createStereoPanner) { const p = off.createStereoPanner(); p.pan.value = f.pan; g.connect(p); p.connect(m); } else g.connect(m);
+      const g = off.createGain(), silencio = off.createGain(); silencio.connect(m); g.gain.value = f.vol; if (off.createStereoPanner) { const p = off.createStereoPanner(); p.pan.value = f.pan; g.connect(p); p.connect(silencio); } else g.connect(silencio);
       const cad = window.EstudioFx ? EstudioFx.criarCadeia(off, f.fx || [], Object.assign(ambFx(), { origem: -t0 })) : null, alvo = cad ? cad.entrada : g; if (cad) cad.saida.connect(g);
-      S.regioes.filter((r) => r.f === f.id).forEach((r) => programarRegiao(off, r, alvo, t0, 0));
+      const regioes = S.regioes.filter((r) => r.f === f.id);
+      agendarSilencio(silencio.gain, regioes, t0, 0);
+      regioes.forEach((r) => programarRegiao(off, r, alvo, t0, 0));
     });
     return off.startRendering();
   }
@@ -821,18 +874,159 @@
   }
 
   // ══ EDIÇÃO DE REGIÕES ═════════════════════════════════════════════════
-  let areaCopia = null;
+  let areaCopia = null, trechoSel = null, arrastandoTrecho = false;
+  const MIN_TRECHO = 0.005, EPS_TRECHO = 1e-8;
+
+  function desenharTrecho() {
+    const barra = $("#dwTrechoBarra");
+    barra.hidden = S.ferr !== "trecho";
+    const camada = $(".dw-trecho-selecao");
+    if (camada) camada.remove();
+    const linha = trechoSel && $$(".dw-linha").find((el) => el.dataset.lf === trechoSel.faixa);
+    const ativo = !barra.hidden && !!linha && trechoSel.fim - trechoSel.ini >= MIN_TRECHO;
+    const pronto = ativo && !arrastandoTrecho;
+    $("#dwTrechoDividir").disabled = !pronto;
+    $("#dwTrechoSilenciar").disabled = !pronto;
+    $("#dwTrechoLimpar").disabled = !pronto;
+    if (!ativo) {
+      $("#dwTrechoInfo").textContent = "Clique e arraste em uma faixa para selecionar um intervalo.";
+      return;
+    }
+    const { ini, fim, faixa } = trechoSel;
+    const seg = (t) => t.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+    $("#dwTrechoInfo").textContent = `${faixaPorId(faixa).nome} · Início ${seg(ini)} s · Fim ${seg(fim)} s · Duração ${seg(fim - ini)} s`;
+    const el = document.createElement("div");
+    el.className = "dw-trecho-selecao";
+    el.style.left = px(ini) + "px";
+    el.style.width = px(fim - ini) + "px";
+    linha.appendChild(el);
+  }
+
+  function arrastarTrecho(e) {
+    const linha = e.target.closest(".dw-linha[data-lf]");
+    if (!linha || e.button !== 0 || !e.isPrimary || arrastandoTrecho) return;
+    e.preventDefault();
+    const faixas = $("#dwFaixas"), faixa = linha.dataset.lf, projeto = S.id;
+    const tempo = (ev) => Math.max(0, snap((ev.clientX - $("#dwTl").getBoundingClientRect().left) / S.pps, ev.altKey));
+    const inicio = tempo(e), anterior = trechoSel;
+    faixas.setPointerCapture(e.pointerId);
+    arrastandoTrecho = true;
+    const mover = (ev) => {
+      if (ev.pointerId !== e.pointerId || S.id !== projeto || S.ferr !== "trecho") return;
+      const fim = tempo(ev);
+      trechoSel = { faixa, ini: Math.min(inicio, fim), fim: Math.max(inicio, fim) };
+      desenharTrecho();
+    };
+    const soltar = (ev) => {
+      if (ev.pointerId !== e.pointerId) return;
+      faixas.removeEventListener("pointermove", mover);
+      faixas.removeEventListener("pointerup", soltar);
+      faixas.removeEventListener("lostpointercapture", soltar);
+      arrastandoTrecho = false;
+      if (S.id === projeto && S.ferr === "trecho") {
+        if (ev.type === "pointerup") {
+          mover(ev);
+          if (trechoSel.fim - trechoSel.ini < MIN_TRECHO) trechoSel = null;
+        } else trechoSel = anterior;
+        desenharTrecho();
+      }
+    };
+    faixas.addEventListener("pointermove", mover);
+    faixas.addEventListener("pointerup", soltar);
+    faixas.addEventListener("lostpointercapture", soltar);
+    mover(e);
+  }
+
+  function parteDoTrecho(r, ini, fim, id) {
+    const delta = ini - r.ini, dur = fim - ini;
+    const parte = { ...r, id, ini, dur, off: r.off + delta };
+    if (r.alt) parte.alt = { ...r.alt, off: r.alt.off + delta };
+    if (r.fi || r.fo || r.fadeTrecho) {
+      const fade = r.fadeTrecho || { dur: r.dur, fi: r.fi, fo: r.fo, off: 0 };
+      parte.fadeTrecho = { ...fade, off: fade.off + delta };
+      parte.fi = Math.min(dur, Math.max(0, fade.fi - parte.fadeTrecho.off));
+      parte.fo = Math.min(dur, Math.max(0, parte.fadeTrecho.off + dur - (fade.dur - fade.fo)));
+    }
+    if (r.afin && r.afin.cents && r.afin.cents.length) {
+      const buf = bufs.get(r.alt ? r.alt.buf : r.buf);
+      const sr = buf ? buf.sampleRate : 44100, taxa = sr / Math.max(1, Math.round(sr / 11025));
+      const hop = r.afin.hop || Math.round(0.010 * taxa) / taxa;
+      const origem = delta / hop, curva = r.afin.cents;
+      const cents = Array.from({ length: Math.min(curva.length, Math.ceil(dur / hop) + 1) }, (_, q) => {
+        const p = Math.min(curva.length - 1, origem + q), i = Math.floor(p);
+        return curva[i] + (curva[Math.min(i + 1, curva.length - 1)] - curva[i]) * (p - i);
+      });
+      parte.afin = { ...r.afin, hop, cents, n: cents.length };
+    }
+    return parte;
+  }
+
+  function bloqueioTrecho() {
+    if (S.gravando || S.contando || limpando || vozOcupado || prodOcupado || afinAplicando || sepRodando) {
+      dica("Finalize a gravação ou o processamento em andamento antes de editar o trecho.");
+      return true;
+    }
+    if (afin && afin.E.carregado && afin.pendente()) {
+      dica("Aplique ou reverta os ajustes pendentes na aba Afinação antes de editar o trecho.");
+      return true;
+    }
+    return false;
+  }
+
+  function editarTrecho(silenciar) {
+    if (!trechoSel || arrastandoTrecho || bloqueioTrecho()) return;
+    const { faixa, ini, fim } = trechoSel;
+    let primeira = null;
+    const regioes = S.regioes.flatMap((r) => {
+      const fimRegiao = r.ini + r.dur;
+      const a = ini - r.ini > EPS_TRECHO ? ini : r.ini;
+      const b = fimRegiao - fim > EPS_TRECHO ? fim : fimRegiao;
+      if (r.f !== faixa || b - a <= EPS_TRECHO || (silenciar && r.silenciada)) return [r];
+      if (!silenciar && a === r.ini && b === fimRegiao) return [r];
+      const partes = [];
+      if (a > r.ini) partes.push(parteDoTrecho(r, r.ini, a, r.id));
+      const centro = parteDoTrecho(r, a, b, partes.length ? proxId++ : r.id);
+      if (silenciar) centro.silenciada = true;
+      partes.push(centro);
+      if (b < fimRegiao) partes.push(parteDoTrecho(r, b, fimRegiao, proxId++));
+      if (!primeira || centro.ini < primeira.ini) primeira = centro;
+      return partes;
+    });
+    if (!primeira) return dica(silenciar ? "Não há áudio a silenciar nesse trecho." : "Nenhum limite da seleção divide áudio nessa faixa.");
+    mudar(() => { S.regioes = regioes; S.faixaSel = faixa; S.regiaoSel = primeira.id; });
+    dica(silenciar ? "Trecho silenciado. Use Desfazer ou Reativar áudio na aba Região." : "Áudio dividido nos limites da seleção.");
+  }
   function dividirRegiao(r, t) {
     if (t <= r.ini + 0.02 || t >= r.ini + r.dur - 0.02) return dica("Coloque o cursor (ou clique) dentro da região para dividir.");
-    mudar(() => { const fim = r.ini + r.dur; r.dur = t - r.ini; const n = { ...r, id: proxId++, ini: t, off: r.off + (t - r.ini), dur: fim - t, nome: r.nome + " (parte 2)" }; if (r.alt) n.alt = { buf: r.alt.buf, off: r.alt.off + (t - r.ini) }; if (r.afin) { delete r.afin; delete n.afin; } r.fo = 0.005; S.regioes.push(n); });
+    if (r.afin || r.fadeTrecho) {
+      if (bloqueioTrecho()) return;
+      mudar(() => {
+        const esquerda = parteDoTrecho(r, r.ini, t, r.id);
+        const direita = parteDoTrecho(r, t, r.ini + r.dur, proxId++);
+        direita.nome += " (parte 2)";
+        S.regioes = S.regioes.flatMap((outra) => outra === r ? [esquerda, direita] : [outra]);
+      });
+      return dica("Região dividida em duas.");
+    }
+    mudar(() => { const fim = r.ini + r.dur; r.dur = t - r.ini; const n = { ...r, id: proxId++, ini: t, off: r.off + (t - r.ini), dur: fim - t, nome: r.nome + " (parte 2)" }; if (r.alt) n.alt = { buf: r.alt.buf, off: r.alt.off + (t - r.ini) }; r.fo = 0.005; S.regioes.push(n); });
     dica("Região dividida em duas.");
   }
   function excluirRegiao(id) { mudar(() => { S.regioes = S.regioes.filter((x) => x.id !== id); S.regiaoSel = null; }); dica("Região excluída."); }
   function duplicarRegiao(r) { mudar(() => { const n = { ...r, id: proxId++, ini: r.ini + r.dur, nome: r.nome + " (cópia)" }; if (n.alt) n.alt = { ...n.alt }; S.regioes.push(n); S.regiaoSel = n.id; }); dica("Região duplicada logo depois da original."); }
-  function usarFerramenta(k) { S.ferr = k; $$("#dwFerr .dw-fb").forEach((b) => b.classList.toggle("on", b.dataset.f === k)); const tl = $("#dwTlScroll"); if (tl) tl.style.cursor = k === "mao" ? "grab" : k === "tes" ? "crosshair" : k === "lupa" ? "zoom-in" : ""; }
+  function usarFerramenta(k) {
+    if (k !== S.ferr) trechoSel = null;
+    S.ferr = k;
+    $$("#dwFerr [data-f]").forEach((b) => b.classList.toggle("on", b.dataset.f === k));
+    $('#dwFerr [data-f="trecho"]').setAttribute("aria-pressed", k === "trecho");
+    const tl = $("#dwTlScroll");
+    tl.style.cursor = k === "mao" ? "grab" : k === "tes" || k === "trecho" ? "crosshair" : k === "lupa" ? "zoom-in" : "";
+    $("#dwFaixas").classList.toggle("dw-selecionando-trecho", k === "trecho");
+    desenharTrecho();
+  }
   function linhaSob(y) { const sc = $("#dwTlScroll"), top = sc.getBoundingClientRect().top + 28 - sc.scrollTop, i = Math.floor((y - top) / (($(".dw-linha") || { offsetHeight: ALT }).offsetHeight)); return S.faixas[i] || null; }
 
   function aoPressionarFaixas(e) {
+    if (S.ferr === "trecho") return arrastarTrecho(e);
     const rg = e.target.closest(".dw-regiao"), tlc = $("#dwTlScroll");
     if (S.ferr === "mao") { const x0 = e.clientX, s0 = tlc.scrollLeft; const mv = (ev) => { tlc.scrollLeft = s0 - (ev.clientX - x0); }; const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); }; addEventListener("pointermove", mv); addEventListener("pointerup", up); return; }
     if (S.ferr === "lupa") { const t = (e.clientX - $("#dwTl").getBoundingClientRect().left) / S.pps; mudarZoom(S.pps * (e.altKey ? 0.8 : 1.25)); tlc.scrollLeft = Math.max(0, t * S.pps - (e.clientX - tlc.getBoundingClientRect().left)); return; }
@@ -840,11 +1034,11 @@
     const r = regiaoPorId(+rg.dataset.r); if (!r || r.gravando) return;
     if (S.ferr === "tes") { dividirRegiao(r, snap((e.clientX - $("#dwTl").getBoundingClientRect().left) / S.pps, e.altKey)); return; }
     S.faixaSel = r.f; S.regiaoSel = r.id;
-    const antes = foto(), alca = e.target.dataset.alca, x0 = e.clientX, ini0 = r.ini, dur0 = r.dur, off0 = r.off, altOff0 = r.alt ? r.alt.off : 0, f0 = r.f, buf = bufs.get(r.buf), bufAlt = r.alt ? bufs.get(r.alt.buf) : null; let mexeu = false;
+    const antes = foto(), alca = e.target.dataset.alca, x0 = e.clientX, ini0 = r.ini, dur0 = r.dur, off0 = r.off, altOff0 = r.alt ? r.alt.off : 0, fade0 = r.fadeTrecho, f0 = r.f, buf = bufs.get(r.buf), bufAlt = r.alt ? bufs.get(r.alt.buf) : null; let mexeu = false;
     $$(".dw-regiao", $("#dwFaixas")).forEach((el) => el.classList.toggle("sel", +el.dataset.r === r.id)); $$(".dw-cab").forEach((el) => el.classList.toggle("sel", el.dataset.f === r.f)); renderRegiao(); selStatus();
     const mv = (ev) => {
       const dx = (ev.clientX - x0) / S.pps; mexeu = true;
-      if (alca === "e") { const novo = Math.max(ini0 - (r.alt ? Math.min(off0, altOff0) : off0), Math.min(ini0 + dur0 - 0.05, snap(ini0 + dx, ev.altKey))); r.dur = dur0 - (novo - ini0); r.off = off0 + (novo - ini0); if (r.alt) r.alt.off = altOff0 + (novo - ini0); if (r.afin) delete r.afin; r.ini = novo; }
+      if (alca === "e") { const novo = Math.max(ini0 - (r.alt ? Math.min(off0, altOff0) : off0), Math.min(ini0 + dur0 - 0.05, snap(ini0 + dx, ev.altKey))); r.dur = dur0 - (novo - ini0); r.off = off0 + (novo - ini0); if (r.alt) r.alt.off = altOff0 + (novo - ini0); if (r.fadeTrecho) r.fadeTrecho = { ...fade0, off: fade0.off + (novo - ini0) }; if (r.afin) delete r.afin; r.ini = novo; }
       else if (alca === "d") { r.dur = Math.max(0.05, Math.min(buf ? buf.duration - r.off : 1e9, bufAlt ? bufAlt.duration - r.alt.off : 1e9, snap(ini0 + dur0 + dx, ev.altKey) - ini0)); }
       else { r.ini = Math.max(0, snap(ini0 + dx, ev.altKey)); const alvo = linhaSob(ev.clientY); if (alvo && alvo.id !== r.f) { r.f = alvo.id; const dest = $(`.dw-linha[data-lf="${alvo.id}"]`); const el0 = $(`.dw-regiao[data-r="${r.id}"]`); if (dest && el0) dest.appendChild(el0); } }
       const el = $(`.dw-regiao[data-r="${r.id}"]`); if (el) { el.style.left = px(r.ini) + "px"; el.style.width = px(r.dur) + "px"; el.style.cursor = "grabbing"; }
@@ -882,6 +1076,9 @@
     $("#dwLat").addEventListener("change", (e) => { S.latencia = Math.max(0, Math.min(500, +e.target.value || 0)); e.target.value = S.latencia; localStorage.setItem("oh-dw-lat", S.latencia); dica(`Atraso de gravação: ${S.latencia} ms (as próximas gravações começam esse tanto mais adiantadas).`); });
     // faixas
     $("#dwFaixas").addEventListener("pointerdown", aoPressionarFaixas);
+    $("#dwTrechoDividir").addEventListener("click", () => editarTrecho(false));
+    $("#dwTrechoSilenciar").addEventListener("click", () => editarTrecho(true));
+    $("#dwTrechoLimpar").addEventListener("click", () => { trechoSel = null; desenharTrecho(); });
     $("#dwRegua").addEventListener("pointerdown", (e) => {
       const rg = $("#dwRegua"), tDe = (ev) => snap(Math.max(0, (ev.clientX - rg.getBoundingClientRect().left) / S.pps), ev.altKey);
       if (!e.shiftKey) return void ir(tDe(e));
@@ -916,12 +1113,13 @@
       if (t.dataset.nome) { faixaPorId(t.dataset.nome).nome = t.value; delete catFxMap[t.dataset.nome]; agendarSalvar(); }   // renomear a faixa refaz a sugestão de instrumento
       if (t.id === "dwLimpaInt") limpaInt = +t.value;
       if (t.id === "dwMestreVol") { S.mestreVol = +t.value; if (mestre) mestre.gain.value = S.mestreVol; }
-      if (t.dataset.rg) { const r = regiaoPorId(S.regiaoSel); r[t.dataset.rg] = +t.value; const b = t.parentElement.querySelector("b"); b.textContent = t.dataset.rg === "ganho" ? t.value + " dB" : (+t.value).toFixed(2) + "s"; if (t.dataset.rg !== "ganho") renderLinhas(); agendarSalvar(); if (S.tocando) reagendar(); }
+      if (t.dataset.rg) { const r = regiaoPorId(S.regiaoSel); r[t.dataset.rg] = +t.value; if (t.dataset.rg !== "ganho") delete r.fadeTrecho; const b = t.parentElement.querySelector("b"); b.textContent = t.dataset.rg === "ganho" ? t.value + " dB" : (+t.value).toFixed(2) + "s"; if (t.dataset.rg !== "ganho") renderLinhas(); agendarSalvar(); if (S.tocando) reagendar(); }
       if (t.hasAttribute("data-rnome")) { const r = regiaoPorId(S.regiaoSel); r.nome = t.value; const rot = $(`.dw-regiao[data-r="${r.id}"] .rot`); if (rot) rot.textContent = t.value; agendarSalvar(); }
     });
     $("#dwRegp").addEventListener("click", (e) => { const rs = e.target.closest("[data-rs]"); if (rs) { const r0 = regiaoPorId(S.regiaoSel); if (r0) acaoSinc(r0, rs.dataset.rs); return; } const b = e.target.closest("[data-ra]"); const r = regiaoPorId(S.regiaoSel); if (!b || !r) return; const acao = b.dataset.ra;
       if (acao === "excluir") excluirRegiao(r.id); else if (acao === "duplicar") duplicarRegiao(r); else if (acao === "dividir") dividirRegiao(r, S.tAtual);
       else if (acao === "limpar") limparRegiao(r); else if (acao === "cancelar") limpezaCancelada = true;
+      else if (acao === "reativar") { mudar(() => { delete r.silenciada; }); dica("Áudio da região reativado."); }
       else if (acao === "alternar") alternarLimpeza(r); else if (acao === "manter") manterVersao(r); });
     // abas do editor
     $$(".dw-aba").forEach((a) => a.addEventListener("click", () => abrirAba(a.dataset.aba)));
@@ -1011,7 +1209,7 @@
       else if (!meta && k === "l") { e.preventDefault(); alternarLoop(); }
       else if (!meta && ["v", "c", "h", "z"].includes(k)) usarFerramenta({ v: "sel", c: "tes", h: "mao", z: "lupa" }[k]);
       else if (e.key === "Home") { ir(0); $("#dwTlScroll").scrollLeft = 0; }
-      else if (e.key === "Escape") { S.regiaoSel = null; renderTudo(); }
+      else if (e.key === "Escape") { trechoSel = null; S.regiaoSel = null; renderTudo(); }
     });
     // clicar num botão solta o foco: a barra de espaço sempre toca/pausa
     $("#dwRaiz").addEventListener("click", (e) => { const b = e.target.closest("button, input[type=checkbox]"); if (b) setTimeout(() => b.blur(), 0); });
@@ -1027,7 +1225,7 @@
   function novoProjeto() {
     salvarProjeto();                                   // o projeto atual fica guardado (Arquivo → Abrir projeto)
     if (S.tocando) pausar(); pararFontes(); descartarNos();
-    S.id = "p" + Date.now().toString(36); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0; S.nome = "Meu projeto"; S.tom = ""; S.bpm = 100; S.sujo = false;
+    trechoSel = null; S.id = "p" + Date.now().toString(36); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0; S.nome = "Meu projeto"; S.tom = ""; S.bpm = 100; S.sujo = false;
     bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); pilha.length = 0; refaz.length = 0;
     try { localStorage.removeItem("oh-dw-ultimo"); } catch (e) { /* sem armazenamento */ }
     $("#dwNome").value = S.nome; $("#dwBpm").value = S.bpm; $("#dwTom").textContent = "—"; mostrarSalvo(""); renderTudo(); dica("Projeto novo. O anterior ficou salvo em Arquivo → Abrir projeto.");
@@ -1098,7 +1296,7 @@
     if (S.tocando) pausar(); pararFontes(); descartarNos();
     bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); novosBufs.forEach((v, k) => { bufs.set(k, v); picos.set(k, novosPicos.get(k)); blobs.set(k, novosBlobs.get(k)); noBanco.add(k); });
     const faltaram = proj.regioes.filter((r) => !bufs.has(r.buf)).length;
-    S.id = proj.id; S.nome = proj.nome; S.faixas = proj.faixas; S.regioes = proj.regioes.filter((r) => bufs.has(r.buf)); S.regioes.forEach((r) => { if (r.alt && !bufs.has(r.alt.buf)) { r.alt = null; } }); S.bpm = proj.bpm; S.compasso = proj.compasso; S.tom = proj.tom || ""; S.mestreVol = proj.mestreVol == null ? 0.9 : proj.mestreVol;
+    trechoSel = null; S.id = proj.id; S.nome = proj.nome; S.faixas = proj.faixas; S.regioes = proj.regioes.filter((r) => bufs.has(r.buf)); S.regioes.forEach((r) => { if (r.alt && !bufs.has(r.alt.buf)) { r.alt = null; } }); S.bpm = proj.bpm; S.compasso = proj.compasso; S.tom = proj.tom || ""; S.mestreVol = proj.mestreVol == null ? 0.9 : proj.mestreVol;
     proxId = Math.max(proxId, proj.proxId || 0) + 1; S.faixaSel = S.faixas[0] ? S.faixas[0].id : null; S.regiaoSel = null; S.tAtual = 0; S.sujo = false; pilha.length = 0; refaz.length = 0;
     $("#dwNome").value = S.nome; $("#dwBpm").value = S.bpm; $("#dwComp").value = S.compasso; $("#dwTom").textContent = S.tom || "—";
     try { localStorage.setItem("oh-dw-ultimo", S.id); } catch (e) { /* sem armazenamento */ }
@@ -1156,7 +1354,7 @@
   function manterVersao(r) { if (!r.alt) return; const tipo = r.afin ? "afinação" : "limpeza", ativa = r.afin ? r.afinada : r.limpo; mudar(() => { r.alt = null; if (r.afin) delete r.afin; }); dica(ativa ? `Mantive a versão com ${tipo} e descartei a outra desta região.` : `Mantive a versão sem ${tipo} e descartei a outra.`); }
 
   // ══ AFINAÇÃO (aba Afinação: editor de linha contínua; o resultado é gravado na região e a versão sem afinação fica guardada) ═══
-  let afin = null, abaAtiva = "mix", afinTutVisto = false;
+  let afin = null, afinAplicando = false, abaAtiva = "mix", afinTutVisto = false;
   function baseDaRegiao(r) {   // o áudio ANTES da afinação (se a região já foi afinada, é a versão guardada em alt)
     const ref = r.afinada && r.alt ? r.alt : { buf: r.buf, off: r.off }, buf = bufs.get(ref.buf); if (!buf) return null;
     const sr = buf.sampleRate, ini = Math.max(0, Math.round(ref.off * sr)), fim = Math.min(buf.length, ini + Math.round(r.dur * sr));
@@ -1174,6 +1372,9 @@
     const base = baseDaRegiao(r); if (!base) { a.limpar("Esta região ainda não tem áudio."); return; }
     const chave = `${base.ref.buf}:${base.ref.off.toFixed(3)}:${r.dur.toFixed(3)}`, comp = COMPASSOS[S.compasso];
     const dados = { chave, cents: r.afin ? r.afin.cents : null, origemTempo: r.ini, batidaSeg: beatDur(), porCompasso: comp.n, tonica: S.tom, nome: r.nome };
+    if (a.E.carregado && a.E.chave === chave && dados.cents && dados.cents.length !== a.E.det.n) {
+      dados.cents = Array.from({ length: a.E.det.n }, (_, q) => dados.cents[q] || 0);
+    }
     if (!(a.E.carregado && a.E.chave === chave)) {
       const nc = base.buf.numberOfChannels, n = base.fim - base.ini, mono = new Float32Array(n);
       for (let c = 0; c < nc; c++) { const d = base.buf.getChannelData(c); for (let i = 0; i < n; i++) mono[i] += d[base.ini + i] / nc; }
@@ -1190,15 +1391,17 @@
       else dica("Não há nada para aplicar: a linha não foi mexida. Puxe pontos ou use “Corrigir tudo” primeiro.");
       return;
     }
+    afinAplicando = true;
     dica("Aplicando a afinação… (isso leva alguns segundos)"); await new Promise((ok) => setTimeout(ok, 40));
     try {
       garantirAudio(); const nc = base.buf.numberOfChannels, n = base.fim - base.ini, novo = ctx.createBuffer(nc, n, base.sr);
       for (let c = 0; c < nc; c++) novo.copyToChannel(EstudioAfinacao.corrigirAltura(base.buf.getChannelData(c).slice(base.ini, base.fim), base.sr, det, cents), c);
       const blob = audioBufferParaWavBlob(novo), guardar = Array.from(cents, (v) => Math.round(v * 10) / 10);
-      mudar(() => { const id = guardarAudio(novo, blob); if (!r.afinada) r.alt = { buf: r.buf, off: r.off }; r.buf = id; r.off = 0; r.dur = Math.min(r.dur, novo.duration); r.afinada = true; r.limpo = false; r.afin = { cents: guardar, n: det.n }; });
+      mudar(() => { const id = guardarAudio(novo, blob); if (!r.afinada) r.alt = { buf: r.buf, off: r.off }; r.buf = id; r.off = 0; r.dur = Math.min(r.dur, novo.duration); r.afinada = true; r.limpo = false; r.afin = { cents: guardar, n: det.n, hop: det.hop }; });
       if (afin) afin.zerarHistorico();
       dica("Afinação aplicada ✓. Ouça a região; em Região você compara com “Ouvir a versão sem afinação”. Ctrl+Z desfaz.");
     } catch (e) { dica("Não consegui aplicar a afinação: " + ((e && e.message) || "erro inesperado") + "."); }
+    finally { afinAplicando = false; }
   }
 
   // ══ EFEITOS POR FAIXA (aba Efeitos: os cartões são gerados a partir do registro de efeitos) ═══
