@@ -265,7 +265,7 @@
         <div class="dw-vu-mestre" title="Volume geral"><i id="dwVuMestre"></i></div>
         <div class="dw-esp"></div>
         <button class="dw-btn cheio" id="dwSeparar">${ic("divide")} Separar música</button>
-        <button type="button" class="dw-btn" id="dwLaranjinha" title="Abrir o chat da Laranjinha">Laranjinha</button>
+        <button type="button" class="dw-btn" id="dwLaranjinha" aria-haspopup="dialog" title="Abrir o agente de edição do Studio">Agente do Studio</button>
         <button class="dw-btn" id="dwArquivo">Arquivo ${ic("seta")}</button>
       </header>
       <div class="dw-ferr">
@@ -373,6 +373,17 @@
       </div>
       <input type="file" id="dwArqSample" accept="audio/*" hidden>
       <input type="file" id="dwArqProj" accept=".ohstudio,.zip" hidden>
+      <dialog id="dwAgentePainel" class="dw-agente" aria-labelledby="dwAgenteTitulo">
+        <div class="dw-modal-topo"><b id="dwAgenteTitulo">Laranjinha · Agente do Studio</b><button type="button" id="dwAgenteFechar" aria-label="Fechar agente">×</button></div>
+        <p class="dw-dica" id="dwAgenteContexto"></p>
+        <form id="dwAgenteForm">
+          <label for="dwAgentePedido">O que você quer ajustar?</label>
+          <textarea id="dwAgentePedido" rows="3" maxlength="500" placeholder="Ex.: atrase a região selecionada em 25 ms" required></textarea>
+          <div class="dw-acoes"><button class="dw-btn" id="dwAgentePropor" type="submit">Propor edição</button></div>
+        </form>
+        <p class="dw-dica" id="dwAgenteStatus" role="status"></p>
+        <div class="dw-acoes"><button class="dw-btn cheio" type="button" id="dwAgenteAplicar" hidden>Aplicar edição</button></div>
+      </dialog>
       <div class="dw-modal" id="dwModalExp" hidden>
         <div class="dw-modal-cartao">
           <div class="dw-modal-topo"><b>Exportar</b><button id="dwExpFechar" aria-label="Fechar">×</button></div>
@@ -1008,15 +1019,15 @@
     return false;
   }
 
-  function editarTrecho(silenciar) {
-    if (!trechoSel || arrastandoTrecho || bloqueioTrecho()) return;
-    const { faixa, ini, fim } = trechoSel, todas = $("#dwTrechoTodas").checked;
+  function editarTrecho(silenciar, selecao = trechoSel, todas = $("#dwTrechoTodas").checked) {
+    if (!selecao || arrastandoTrecho || bloqueioTrecho()) return;
+    const { faixa, ini, fim } = selecao;
     let primeira = null;
     const regioes = S.regioes.flatMap((r) => {
       const fimRegiao = r.ini + r.dur;
       const a = ini - r.ini > EPS_TRECHO ? ini : r.ini;
       const b = fimRegiao - fim > EPS_TRECHO ? fim : fimRegiao;
-      if ((!todas && r.f !== faixa) || b - a <= EPS_TRECHO || (silenciar && r.silenciada)) return [r];
+      if ((selecao.regiao != null ? r.id !== selecao.regiao : !todas && r.f !== faixa) || b - a <= EPS_TRECHO || (silenciar && r.silenciada)) return [r];
       if (!silenciar && a === r.ini && b === fimRegiao) return [r];
       const partes = [];
       if (a > r.ini) partes.push(parteDoTrecho(r, r.ini, a, r.id));
@@ -1133,12 +1144,7 @@
     $("#dwFerr").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (b) usarFerramenta(b.dataset.f); });
     $("#dwUndo").addEventListener("click", desfazer); $("#dwRedo").addEventListener("click", refazer);
     $("#dwMutarTodas").addEventListener("click", mutarTodas);
-    $("#dwLaranjinha").addEventListener("click", () => {
-      const painel = $("#laranjinhaPainel"), botao = $("#fabLaranjinha");
-      if (!painel || !botao) return dica("A Laranjinha não está disponível agora.");
-      if (painel.hidden) botao.click();
-      else $("#laranjinhaInput")?.focus();
-    });
+    ligarAgenteStudio();
     $("#dwSnap").addEventListener("change", (e) => { S.snap = e.target.value; dica("Grade: " + e.target.options[e.target.selectedIndex].text); });
     $("#dwZoom").addEventListener("input", (e) => mudarZoom(+e.target.value));
     $("#dwAjustar").addEventListener("click", () => { const fim = Math.max(fimProjeto(), 10), w = $("#dwTlScroll").clientWidth - 60; mudarZoom(w / fim); $("#dwTlScroll").scrollLeft = 0; });
@@ -1271,7 +1277,7 @@
     document.addEventListener("keydown", (e) => {
       const pag = $("#page-estudio"); if (!pag || !pag.classList.contains("oh-page-ativa")) return;
       if ((/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !(e.target.tagName === "INPUT" && e.target.type === "range" && (e.ctrlKey || e.metaKey))) || e.target.isContentEditable) return;
-      if (!$("#dwModalSep").hidden || !$("#dwModalProj").hidden || !$("#dwModalCal").hidden || !$("#dwModalExp").hidden) return;
+      if ($("#dwAgentePainel").open || !$("#dwModalSep").hidden || !$("#dwModalProj").hidden || !$("#dwModalCal").hidden || !$("#dwModalExp").hidden) return;
       if (abaAtiva === "afin") {
         if (afin && afin.tecla(e)) return;
         if (e.code === "Space") { if (!/^(BUTTON|A)$/.test(e.target.tagName)) { e.preventDefault(); const p = document.getElementById("afPlay"); if (p) p.click(); } return; }
@@ -1409,6 +1415,7 @@
     if (S.gravando || S.contando) return dica("Pare a gravação antes de limpar o ruído.");
     if (!window.EstudioDsp) return msgLimpa("O módulo de limpeza não carregou. Atualize a página.");
     const buf = bufs.get(r.buf); if (!buf) return msgLimpa("Esta região ainda não tem áudio gravado.");
+    const projeto = S.id, origem = [r.buf, r.off, r.dur];
     limpando = true; limpezaCancelada = false; renderRegiao();
     const sr = buf.sampleRate, ini = Math.max(0, Math.round(r.off * sr)), fim = Math.min(buf.length, Math.round((r.off + r.dur) * sr));
     const canais = []; for (let c = 0; c < buf.numberOfChannels; c++) canais.push(buf.getChannelData(c).slice(ini, fim));
@@ -1417,7 +1424,9 @@
       msgLimpa(`Limpando o ruído (${nome})… 0%`);
       let ultimo = -1;
       const res = await EstudioDsp.limparRuido(canais, sr, { intensidade: limpaInt }, (p) => { const pct = Math.round(p * 100); if (pct !== ultimo) { ultimo = pct; const e = $("#dwLimpaStatus"); if (e) e.textContent = `Limpando o ruído (${nome})… ${pct}%`; } }, () => limpezaCancelada);
-      if (res.cancelado) return msgLimpa("Limpeza cancelada. Nada foi alterado.");
+      if (res.cancelado || S.id !== projeto || regiaoPorId(r.id) !== r || r.buf !== origem[0] || r.off !== origem[1] || r.dur !== origem[2]) {
+        return msgLimpa("Limpeza cancelada. A edição não foi aplicada.");
+      }
       if (res.aviso === "sem_pausas") return msgLimpa("Não achei uma pausa só com ruído nesta região, então não dá para medir o ruído (e eu não mexo no áudio sem isso). Dica: deixe uns 2 segundos em silêncio no começo da gravação, ou use uma região que tenha pausas.");
       if (res.aviso === "silencio") return msgLimpa("Esta região está em silêncio: não há o que limpar.");
       if (res.aviso === "curto") return msgLimpa("A região é curta demais (menos de 1 segundo) para medir o ruído.");
@@ -1829,6 +1838,147 @@
       regiaoSel: () => regiaoPorId(S.regiaoSel), nomeFaixa: (r) => { const f = faixaPorId(r.f); return f ? f.nome : ""; }, renderRegiao: (r) => renderizarRegiao(r, false), wavBlob: (buf) => audioBufferParaWavBlob(buf),
       persistir: () => agendarSalvar(), dica, apiBase: API_BASE, studioTocando: () => S.tocando, pausarStudio: () => { if (S.tocando) pausar(); } });
     cifraUI.render(false);
+  }
+
+  // ══ LARANJINHA DO STUDIO: interpreta texto e propõe edições locais ══
+  function contextoAgenteStudio() {
+    const faixaAtiva = faixaPorId(trechoSel?.faixa || S.faixaSel);
+    const regiaoAtiva = regiaoPorId(S.regiaoSel);
+    const faixas = [faixaAtiva, ...S.faixas.filter((f) => f !== faixaAtiva)].filter(Boolean).slice(0, 60);
+    const ids = new Set(faixas.map((f) => f.id));
+    const regioes = [regiaoAtiva, ...S.regioes.filter((r) => r !== regiaoAtiva)]
+      .filter((r) => r && ids.has(r.f) && !r.gravando).slice(0, 100);
+    return {
+      faixaSelecionada: faixaAtiva?.id, regiaoSelecionada: regiaoAtiva?.id,
+      trecho: trechoSel && { ...trechoSel, todas: $("#dwTrechoTodas").checked },
+      cursor: S.tAtual,
+      faixas: faixas.map((f) => ({ id: f.id, nome: f.nome.slice(0, 80), mudo: !!f.mudo })),
+      regioes: regioes.map((r) => ({ id: r.id, faixa: r.f, nome: r.nome.slice(0, 80), inicio: r.ini, fim: r.ini + r.dur, ganho: r.ganho })),
+    };
+  }
+
+  function prepararPlanoAgente(plano, contexto) {
+    const erro = (msg) => { throw new Error(msg); };
+    const tempo = (t) => t.toLocaleString("pt-BR", { maximumFractionDigits: 3 }) + " s";
+    const limite = (v, min, max) => Number.isFinite(v) && v >= min && v <= max;
+    if (plano?.acao === "esclarecer") return erro(typeof plano.mensagem === "string" ? plano.mensagem.slice(0, 400) : "Preciso de mais detalhes.");
+    if (plano?.acao === "mudo_faixa") {
+      const faixa = contexto.faixas.find((f) => f.id === plano.faixa);
+      const f = faixa && faixaPorId(faixa.id);
+      if (!f || typeof plano.mudo !== "boolean") return erro("Indique qual faixa quer mutar ou reativar.");
+      if (!!f.mudo === plano.mudo) return erro(`A faixa “${f.nome}” já está ${plano.mudo ? "muda" : "reativada"}.`);
+      return {
+        descricao: `${plano.mudo ? "Mutar" : "Reativar"} a faixa “${f.nome}”.`,
+        executar: () => mudarFx(() => { f.mudo = plano.mudo; }),
+      };
+    }
+    const obter = (id) => contexto.regioes.some((r) => r.id === id) ? regiaoPorId(id) : null;
+    const r = obter(plano?.regiao);
+    if (!r) return erro("Selecione a região na linha do tempo e tente de novo.");
+    const alvo = `“${r.nome}” na faixa “${faixaPorId(r.f)?.nome}”`;
+    switch (plano.acao) {
+      case "mover":
+      case "alinhar_inicio": {
+        const ref = plano.acao === "alinhar_inicio" ? obter(plano.referencia) : null;
+        if (plano.acao === "alinhar_inicio" && (!ref || ref === r)) return erro("Indique uma região de referência distinta.");
+        if (!ref && !limite(plano.ms, -60000, 60000)) return erro("Indique um deslocamento entre −60.000 e +60.000 ms.");
+        const inicio = ref ? ref.ini : Math.round((r.ini + plano.ms / 1000) * 1000) / 1000;
+        if (inicio < 0 || inicio === r.ini) return erro("O deslocamento precisa mudar o início e deixar a região dentro da linha do tempo.");
+        const referencia = ref ? ` para coincidir com “${ref.nome}” na faixa “${faixaPorId(ref.f)?.nome}”` : "";
+        return {
+          descricao: `Mover ${alvo} de ${tempo(r.ini)} para ${tempo(inicio)}${referencia}.`,
+          executar: () => mudar(() => { r.ini = inicio; }),
+        };
+      }
+      case "ganho": {
+        if (!limite(plano.db, -36, 36) || plano.db === 0) return erro("Indique quantos dB quer aumentar ou baixar.");
+        const ganho = Math.round((r.ganho + plano.db) * 10) / 10;
+        if (!limite(ganho, -24, 12)) return erro("Esse ajuste deixaria o ganho fora do intervalo de −24 a +12 dB.");
+        return {
+          descricao: `Ajustar o ganho de ${alvo} de ${r.ganho} para ${ganho} dB.`,
+          executar: () => mudar(() => { r.ganho = ganho; }),
+        };
+      }
+      case "silenciar": {
+        const fimRegiao = r.ini + r.dur, inteira = plano.inicio == null && plano.fim == null;
+        const ini = inteira ? r.ini : plano.inicio, fim = inteira ? fimRegiao : plano.fim;
+        if (!limite(ini, r.ini - EPS_TRECHO, fimRegiao) || !limite(fim, r.ini, fimRegiao + EPS_TRECHO) || fim - ini < MIN_TRECHO) {
+          return erro("Informe um intervalo dentro da região ou peça para silenciar a região inteira.");
+        }
+        if (r.silenciada) return erro("Essa região já está silenciada.");
+        return {
+          descricao: `Silenciar ${alvo} de ${tempo(ini)} a ${tempo(fim)}, mantendo o tempo na música.`,
+          executar: () => editarTrecho(true, { faixa: r.f, regiao: r.id, ini, fim }, false),
+        };
+      }
+      case "limpar_ruido":
+        if (r.afin || r.limpo || r.dur < 1 || !bufs.has(r.buf)) return erro("A limpeza precisa de uma região de áudio com pelo menos 1 s, sem afinação ou limpeza aplicada.");
+        return {
+          descricao: `Reduzir o ruído de fundo em ${alvo}. A limpeza precisa detectar uma pausa com ruído.`,
+          executar: async () => { if (!garantirAudio()) throw new Error("O navegador não liberou o áudio."); await limparRegiao(r); },
+        };
+      default:
+        return erro("Esse tipo de edição ainda não está disponível no agente.");
+    }
+  }
+
+  function ligarAgenteStudio() {
+    const painel = $("#dwAgentePainel"), pedido = $("#dwAgentePedido"), status = $("#dwAgenteStatus");
+    const propor = $("#dwAgentePropor"), aplicar = $("#dwAgenteAplicar");
+    let proposta = null, consulta = null;
+    const descartar = () => { proposta = null; aplicar.hidden = true; };
+    $("#dwLaranjinha").addEventListener("click", () => {
+      const c = contextoAgenteStudio(), r = regiaoPorId(c.regiaoSelecionada), f = faixaPorId(c.faixaSelecionada);
+      const trecho = c.trecho && c.trecho.fim - c.trecho.ini >= MIN_TRECHO
+        ? ` · Trecho: ${c.trecho.ini.toFixed(3)}–${c.trecho.fim.toFixed(3)} s` : "";
+      $("#dwAgenteContexto").textContent = `${r ? `Região: ${r.nome} · ${faixaPorId(r.f)?.nome}` : f ? `Faixa: ${f.nome}` : "Selecione uma região para dar contexto ao pedido."}${trecho}`;
+      descartar(); status.textContent = "";
+      painel.showModal(); pedido.focus();
+    });
+    $("#dwAgenteFechar").addEventListener("click", () => painel.close());
+    painel.addEventListener("close", () => { consulta?.abort(); descartar(); });
+    pedido.addEventListener("input", () => { if (proposta) { descartar(); status.textContent = ""; } });
+    $("#dwAgenteForm").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (consulta) return;
+      const mensagem = pedido.value.trim();
+      if (!mensagem) return;
+      const contexto = contextoAgenteStudio();
+      if (!contexto.faixas.length) { status.textContent = "Adicione uma faixa antes de pedir uma edição."; return; }
+      descartar();
+      const controller = new AbortController(); consulta = controller;
+      const projeto = S.id, estado = foto();
+      const form = new FormData(); form.append("mensagem", mensagem); form.append("contexto", JSON.stringify(contexto));
+      propor.disabled = true; status.textContent = "Preparando proposta…";
+      const timer = setTimeout(() => controller.abort(), 35000);
+      try {
+        const resp = await fetch(`${API_BASE}/api/estudio/propor-edicao`, { method: "POST", body: form, signal: controller.signal });
+        if (!resp.ok) throw new Error(resp.status === 503 ? "O agente está indisponível agora. Tente novamente." : "Não consegui consultar o agente do Studio.");
+        const plano = await resp.json();
+        if (!painel.open || pedido.value.trim() !== mensagem) return;
+        if (projeto !== S.id || estado !== foto()) throw new Error("O projeto mudou. Peça uma proposta nova.");
+        const operacao = prepararPlanoAgente(plano, contexto);
+        proposta = { ...operacao, estado, projeto };
+        status.textContent = operacao.descricao; aplicar.hidden = false;
+      } catch (e) {
+        if (painel.open) status.textContent = e.name === "AbortError" ? "A consulta foi interrompida." : e.message;
+      } finally {
+        clearTimeout(timer); consulta = null; propor.disabled = false;
+        if (painel.open && status.textContent === "Preparando proposta…") status.textContent = "";
+      }
+    });
+    aplicar.addEventListener("click", async () => {
+      if (!proposta) return;
+      const operacao = proposta; descartar();
+      if (operacao.projeto !== S.id || operacao.estado !== foto()) { status.textContent = "O projeto mudou. Peça uma proposta nova."; return; }
+      if (bloqueioTrecho()) { status.textContent = $("#dwStatus").textContent; return; }
+      painel.close();
+      try {
+        const antes = pilha.at(-1), estado = foto();
+        await operacao.executar();
+        if (estado !== foto() && pilha.at(-1) !== antes) dica("Edição do agente aplicada. Ctrl+Z desfaz.");
+      } catch (e) { dica(e.message); }
+    });
   }
 
   // ══ SINCRONIA FINA DA REGIÃO ═══
