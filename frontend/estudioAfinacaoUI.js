@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════════════════════
 // estudioAfinacaoUI.js — editor de afinação por linha contínua (o mesmo componente vale para o protótipo e para o Estúdio).
 //
-//   const ed = EstudioAfinacaoUI.criar(elemento, { modo: "estudio" | "prototipo", aoAplicar(cents, det) {...}, aoAmpliar() {...} });
+//   const ed = EstudioAfinacaoUI.criar(elemento, { modo: "estudio" | "prototipo", aoAplicar(cents, det, ignorados) {...}, aoAmpliar() {...} });
 //   await ed.carregar({ mono, sr, nome, chave, cents, origemTempo, batidaSeg, porCompasso, tonica });
 //
 // A voz vira uma LINHA (laranja). Onde você mexeu, a linha fica TURQUESA; a voz de antes fica como um traço claro fino.
@@ -25,7 +25,7 @@
 .af button:hover { background:rgba(249,115,22,.16); box-shadow:0 0 14px rgba(249,115,22,.3); } .af button:active { transform:translateY(1px) scale(.98); }
 .af button.cheio { background:linear-gradient(145deg,#ff9a4d,#ec5a0c); color:#1a0c02; border-color:#ff9a4d; } .af button.cheio:hover { box-shadow:0 0 18px rgba(255,138,42,.6); }
 .af button.on { background:var(--af-laranja); color:#1a0c02; } .af button:disabled { opacity:.4; cursor:not-allowed; box-shadow:none; }
-.af-esp { flex:1; } .af-g1 { order:1; } .af-dir { order:2; margin-left:auto; display:flex; gap:7px; align-items:center; flex-wrap:wrap; } .af-quebra { order:3; flex-basis:100%; height:0; } .af-g2 { order:4; } .af-g3 { order:5; } .af-tempo { font-variant-numeric:tabular-nums; min-width:44px; font-weight:700; }
+.af-esp { flex:1; } .af-g1 { order:1; } .af-dir { order:2; margin-left:auto; display:flex; gap:7px; align-items:center; flex-wrap:wrap; } .af-quebra { order:3; flex-basis:100%; height:0; } .af-g2 { order:4; } .af-g3 { order:6; } .af-g-pontos { order:5; } .af-tempo { font-variant-numeric:tabular-nums; min-width:44px; font-weight:700; }
 .af-painel { display:none; padding:6px 10px; background:#110d09; border-bottom:1px solid var(--af-borda); gap:8px; flex-wrap:wrap; align-items:center; flex:0 0 auto; } .af-painel.on { display:flex; }
 .af-vp { position:relative; overflow:auto; flex:1; min-height:150px; background:var(--af-fundo); scrollbar-color:rgba(249,115,22,.5) var(--af-fundo); }
 .af-cv { position:sticky; left:0; top:0; display:block; touch-action:none; } .af-espaco { position:absolute; left:0; top:0; pointer-events:none; }
@@ -83,6 +83,10 @@
         <div class="af-grupo af-g2"><b>Corrigir</b><label>Tom <select id="afTom"></select></label>
           <label title="0% não mexe; 100% leva a nota ao centro">Força <input type="range" id="afForca" min="0" max="100" value="100"><span id="afForcaV">100%</span></label>
           <button id="afCorrigir">Corrigir tudo</button><button id="afCorrigirSel" disabled>Corrigir seleção</button></div>
+        <div class="af-grupo af-g-pontos">
+          <button id="afSelecionarPontos" aria-pressed="false" title="Clique num ponto ou arraste um retângulo por tempo e altura">Selecionar pontos</button>
+          <button id="afIgnorarPontos" disabled title="Exclui os pontos selecionados da correção de afinação">Ignorar pontos</button>
+        </div>
         <div class="af-grupo af-g3"><button id="afDesfazer" disabled>Desfazer</button><button id="afRefazer" disabled>Refazer</button><button id="afReverter">Reverter tudo</button></div>
         <div class="af-dir"><button id="afTut">Como usar</button><button id="afAjustes">Ajustes ▾</button>
         ${modo === "estudio" ? '<button id="afAmpliar" title="Ocupa a tela toda para ver melhor">Ampliar ⤢</button><button id="afAplicar" class="cheio" title="Grava a afinação no áudio da região (a versão sem afinação fica guardada)">Aplicar na região</button>' : '<button id="afBaixar" class="cheio" title="Baixa a voz afinada em WAV">Baixar WAV</button>'}</div><div class="af-quebra"></div>
@@ -103,8 +107,8 @@
       <div class="af-tut" id="afTutModal"><div class="cartao"><div class="passo" id="afTutPasso"></div><h2 id="afTutTitulo"></h2><div id="afTutSvg"></div><p id="afTutTexto"></p>
         <div class="nav"><button id="afTutVoltar">Voltar</button><div class="pontos" id="afTutPontos"></div><button id="afTutProx" class="cheio">Próximo</button></div></div></div>
     </div>`;
-    const $ = (id) => host.querySelector("#" + id), vp = $("afVp"), cv = $("afCv"), status = (t) => { $("afStatus").textContent = t + (opc.modo !== "prototipo" && E && E.det && E.cents && E.aplicado && Array.from(E.cents).some((v, q) => Math.abs(v - (q < E.aplicado.length ? E.aplicado[q] : 0)) > 0.05) ? "  ·  Ainda não aplicado: o play do Estúdio toca o original até você clicar em “Aplicar na região”." : ""); };
-    const E = { sr: 44100, mono: null, dur: 0, det: null, midi: null, cents: null, trans: null, nts: null, sel: null, pps: 110, ph: 22, minM: 48, maxM: 72, tom: "cromatica", bpm: 100, beat: 0.6, porComp: 4, origem: 0, alcance: 0.2, encaixe: "semitom", nomes: true, undo: [], redo: [], sujo: true, afinado: null, urlO: null, urlA: null, tocando: false, ocupado: false, pos: 0, ouvir: "original", vel: 1, loop: false, voltas: 0, nTocadas: 0, hover: -1, drag: null, nome: "voz", chave: null, carregado: false };
+    const $ = (id) => host.querySelector("#" + id), vp = $("afVp"), cv = $("afCv"), status = (t) => { $("afStatus").textContent = t + (modo === "estudio" && E.det && pendente() ? "  ·  Ainda não aplicado: o play do Estúdio usa a versão anterior até você clicar em “Aplicar na região”." : ""); };
+    const E = { sr: 44100, mono: null, dur: 0, det: null, midi: null, cents: null, trans: null, nts: null, sel: null, modoPontos: false, caixaPontos: null, pontos: [], ignorados: null, aplicadoIgnorados: null, pps: 110, ph: 22, minM: 48, maxM: 72, tom: "cromatica", bpm: 100, beat: 0.6, porComp: 4, origem: 0, alcance: 0.2, encaixe: "semitom", nomes: true, undo: [], redo: [], sujo: true, afinado: null, urlO: null, urlA: null, tocando: false, ocupado: false, pos: 0, ouvir: "original", vel: 1, loop: false, voltas: 0, nTocadas: 0, hover: -1, drag: null, nome: "voz", chave: null, carregado: false };
     $("afTom").innerHTML = TONS.map(([v, n]) => `<option value="${v}">${n}</option>`).join("");
 
     // ── escala e encaixe ──
@@ -115,6 +119,8 @@
     // ── coordenadas ──
     const X = (t) => LEFT + t * E.pps - vp.scrollLeft, Y = (m) => TOP + (E.maxM + 0.5 - m) * E.ph - vp.scrollTop;
     const tempoEm = (x) => (x - LEFT + vp.scrollLeft) / E.pps, midiEm = (y) => E.maxM + 0.5 - (y - TOP + vp.scrollTop) / E.ph;
+    let analiseAtual = 0;
+    const vozAtiva = (q) => E.det.voz[q] && !E.ignorados?.[q];
     const tq = (q) => E.det.t0 + q * E.det.hop, mcorr = (q) => E.midi[q] + E.cents[q] / 100;
     function dimensionar() {
       const w = vp.clientWidth, h = vp.clientHeight, dpr = window.devicePixelRatio || 1; if (!w || !h) return;
@@ -126,12 +132,12 @@
     function notas() {   // separa a linha em notas (trechos estáveis); trechos curtos (< 80 ms) são "passagens" e não são corrigidos
       const d = E.det, out = []; let q = 0;
       while (q < d.n) {
-        if (!d.voz[q]) { q++; continue; }
+        if (!vozAtiva(q)) { q++; continue; }
         const q0 = q; let jan = [E.midi[q]], centro = E.midi[q]; q++;
-        while (q < d.n && d.voz[q]) {
+        while (q < d.n && vozAtiva(q)) {
           const m = E.midi[q];
           if (Math.abs(m - centro) <= 0.8) { jan.push(m); if (jan.length > 25) jan.shift(); centro = med(jan); q++; }
-          else { let troca = true; for (let k = 0; k < 3; k++) { const i = q + k; if (i >= d.n || !d.voz[i] || Math.abs(E.midi[i] - centro) <= 0.8) { troca = false; break; } } if (troca) break; jan.push(m); q++; }
+          else { let troca = true; for (let k = 0; k < 3; k++) { const i = q + k; if (i >= d.n || !vozAtiva(i) || Math.abs(E.midi[i] - centro) <= 0.8) { troca = false; break; } } if (troca) break; jan.push(m); q++; }
         }
         const todos = []; for (let i = q0; i < q; i++) todos.push(E.midi[i]);
         out.push({ q0, q1: q - 1, centro: med(todos), curta: q - q0 < 8 });
@@ -142,7 +148,7 @@
       if (!E.det || !E.nts) return []; const out = [];
       for (const n of E.nts) {
         if (n.curta || tq(n.q1) < ini || tq(n.q0) > fim) continue;
-        const v = []; for (let q = n.q0; q <= n.q1; q++) if (E.det.voz[q]) v.push(mcorr(q)); const c = med(v), nota = notaMaisPerto(c), dev = (c - nota) * 100, fora = Math.abs(dev) > 25;
+        const v = []; for (let q = n.q0; q <= n.q1; q++) if (vozAtiva(q)) v.push(mcorr(q)); const c = med(v), nota = notaMaisPerto(c), dev = (c - nota) * 100, fora = Math.abs(dev) > 25;
         out.push({ q0: n.q0, q1: n.q1, nota, dev, fora, texto: nomeNota(nota) + (fora ? (dev < 0 ? " ▼" : " ▲") + Math.round(Math.abs(dev)) : ""), y: c });
       }
       return out;
@@ -165,10 +171,10 @@
         const q0 = Math.max(0, Math.floor((tIni - E.det.t0) / E.det.hop) - 60), q1 = Math.min(E.det.n - 1, Math.ceil((tFim - E.det.t0) / E.det.hop) + 60);
         g.lineCap = "round"; g.lineJoin = "round";
         const trechos = [];                                                  // trechos contínuos de voz
-        for (let q = q0; q <= q1;) { if (!E.det.voz[q]) { q++; continue; } const a = q; while (q <= q1 && E.det.voz[q]) q++; trechos.push([a, q - 1]); }
-        const caminho = (a, b, corrigida) => { g.beginPath(); for (let q = a; q <= b; q++) { const x = X(tq(q)), y = Y(corrigida ? mcorr(q) : E.midi[q]); q === a ? g.moveTo(x, y) : g.lineTo(x, y); } };
+        for (let q = q0; q <= q1;) { if (!vozAtiva(q)) { q++; continue; } const a = q; while (q <= q1 && vozAtiva(q)) q++; trechos.push([a, q - 1]); }
+        const caminho = (a, b, corrigida) => { g.beginPath(); for (let q = a; q <= b; q++) { const x = X(tq(q)), y = Y(corrigida ? mcorr(q) : E.midi[q]); q === a ? g.moveTo(x, y) : g.lineTo(x, y); if (a === b) g.lineTo(x + 1, y); } };
         for (let i = 0; i + 1 < trechos.length; i++) {                       // pausas curtas (consoante, respiro): a linha continua, pontilhada
-          const b = trechos[i][1], a2 = trechos[i + 1][0]; if (a2 - b - 1 > 55 || Math.abs(mcorr(a2) - mcorr(b)) > 12) continue;
+          const b = trechos[i][1], a2 = trechos[i + 1][0]; if (a2 - b - 1 > 55 || E.ignorados.subarray(b + 1, a2).some(Boolean) || Math.abs(mcorr(a2) - mcorr(b)) > 12) continue;
           const xa = X(tq(b)), ya = Y(mcorr(b)), xb = X(tq(a2)), yb = Y(mcorr(a2)), xm = (xa + xb) / 2;   // curva em "S": sai e chega na horizontal, sem diagonal íngreme
           g.save(); g.setLineDash([2, 7]); g.strokeStyle = "rgba(255,138,42,.55)"; g.lineWidth = 3; g.beginPath(); g.moveTo(xa, ya); g.bezierCurveTo(xm, ya, xm, yb, xb, yb); g.stroke(); g.restore();
         }
@@ -198,7 +204,7 @@
           }
           g.textAlign = "left";
         }
-        if (E.hover >= 0 && E.det.voz[E.hover]) { g.fillStyle = "#fff"; g.strokeStyle = "#f97316"; g.lineWidth = 3; g.shadowColor = "rgba(249,115,22,.9)"; g.shadowBlur = 14; g.beginPath(); g.arc(X(tq(E.hover)), Y(mcorr(E.hover)), 7, 0, 7); g.fill(); g.stroke(); g.shadowBlur = 0; }
+        if (E.hover >= 0 && vozAtiva(E.hover)) { g.fillStyle = "#fff"; g.strokeStyle = "#f97316"; g.lineWidth = 3; g.shadowColor = "rgba(249,115,22,.9)"; g.shadowBlur = 14; g.beginPath(); g.arc(X(tq(E.hover)), Y(mcorr(E.hover)), 7, 0, 7); g.fill(); g.stroke(); g.shadowBlur = 0; }
       }
       if (E.sel) {                                                           // SELEÇÃO: moldura laranja, alças nas pontas e etiqueta com a duração
         const a = X(E.sel[0]), b = X(E.sel[1]);
@@ -209,6 +215,23 @@
         const n = notasNaSelecao(), tx = `Selecionado · ${(E.sel[1] - E.sel[0]).toFixed(2).replace(".", ",")} s · ${n} ${n === 1 ? "nota" : "notas"}`;
         g.font = "700 11px 'Bricolage Grotesque', system-ui"; const w = g.measureText(tx).width + 18, cx = Math.max(LEFT + w / 2 + 4, (a + b) / 2);
         rr(g, cx - w / 2, TOP + 6, w, 20, 10); g.fillStyle = "#f97316"; g.fill(); g.fillStyle = "#1a0c02"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(tx, cx, TOP + 16.5); g.textAlign = "left";
+      }
+      if (E.modoPontos && E.det) {
+        g.save();
+        g.beginPath(); g.rect(LEFT, TOP, Math.max(0, W - LEFT), Math.max(0, H - TOP)); g.clip();
+        if (E.caixaPontos) {
+          const [t0, t1, m0, m1] = E.caixaPontos;
+          const x = X(t0), y = Y(m1), w = X(t1) - x, h = Y(m0) - y;
+          g.fillStyle = "rgba(45,212,191,.16)"; g.fillRect(x, y, w, h);
+          g.strokeStyle = "#2dd4bf"; g.lineWidth = 1.5; g.strokeRect(x, y, w, h);
+        }
+        g.fillStyle = "#ccfbf1";
+        for (const q of E.pontos) {
+          const x = X(tq(q)), y = Y(mcorr(q));
+          if (x < LEFT || x > W || y < TOP || y > H) continue;
+          g.beginPath(); g.arc(x, y, 3, 0, 2 * Math.PI); g.fill();
+        }
+        g.restore();
       }
       g.fillStyle = "#14100b"; g.fillRect(0, 0, W, TOP); g.fillRect(0, 0, LEFT, H);                         // régua de tempo (topo) e teclado (esquerda)
       for (let m = m0; m <= m1; m++) {
@@ -224,63 +247,133 @@
       const xp = X(E.pos); if (xp >= LEFT) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.shadowColor = "rgba(255,255,255,.8)"; g.shadowBlur = 8; g.beginPath(); g.moveTo(xp, 0); g.lineTo(xp, H); g.stroke(); g.shadowBlur = 0; g.fillStyle = "#fff"; g.beginPath(); g.moveTo(xp - 6, 0); g.lineTo(xp + 6, 0); g.lineTo(xp, 9); g.fill(); }
     }
     function atualizarInfo() { if (!E.det) { $("afInfo").textContent = ""; return; } const r = rotulos(0, E.dur); $("afInfo").textContent = `${r.length} notas · ${r.filter((x) => x.fora).length} fora do tom (> 25 cents)`; }
-    function suavizar() { const c = E.cents, d = E.det, o = Float32Array.from(c); for (let q = 0; q < d.n; q++) { if (!d.voz[q]) continue; let s = 0, w = 0; for (let k = -2; k <= 2; k++) { const i = q + k; if (i < 0 || i >= d.n || !d.voz[i]) continue; const p = 3 - Math.abs(k); s += c[i] * p; w += p; } o[q] = s / w; } c.set(o); }
+    function suavizar() { const c = E.cents, d = E.det, o = Float32Array.from(c); for (let q = 0; q < d.n; q++) { if (!vozAtiva(q)) continue; let s = 0, w = 0; for (let k = -2; k <= 2; k++) { const i = q + k; if (i < 0 || i >= d.n || !vozAtiva(i)) continue; const p = 3 - Math.abs(k); s += c[i] * p; w += p; } o[q] = s / w; } c.set(o); }
 
     // ── edição ──
     // "pendente" = a curva de ajuste é diferente da que já está gravada no áudio da região (só o botão "Aplicar na região" grava)
-    const pendente = () => { if (!E.cents) return false; const ap = E.aplicado; for (let q = 0; q < E.cents.length; q++) if (Math.abs(E.cents[q] - (ap && q < ap.length ? ap[q] : 0)) > 0.05) return true; return false; };
+    const pendente = () => { if (!E.cents) return false; const ap = E.aplicado; for (let q = 0; q < E.cents.length; q++) if (E.ignorados[q] !== E.aplicadoIgnorados[q] || Math.abs(E.cents[q] - (ap && q < ap.length ? ap[q] : 0)) > 0.05) return true; return false; };
     function marcarPendente() { const p = !!E.det && pendente(), b = $("afAplicar"); if (b) b.classList.toggle("pendente", p); if (opc.aoPendente) opc.aoPendente(p); return p; }
     function ouvirAfinado() { if (E.ouvir === "afinado") return; E.ouvir = "afinado"; $("afAfin").classList.add("on"); $("afOrig").classList.remove("on"); trocarFonte(); }
-    function mudou() { E.sujo = true; if (E.cents && E.cents.some((v) => Math.abs(v) > 0.5)) ouvirAfinado(); /* depois de editar, o "Tocar" já toca o AFINADO */ marcarPendente(); if (opc.aoMudar) opc.aoMudar(); }
+    function mudou() { E.sujo = true; if (E.cents && (E.ouvir === "afinado" || E.ignorados.some(Boolean) || E.cents.some((v) => Math.abs(v) > 0.5))) ouvirAfinado(); /* depois de editar, o "Tocar" já toca o AFINADO */ marcarPendente(); if (opc.aoMudar) opc.aoMudar(); }
     function empilhar(antes) { E.undo.push(antes); if (E.undo.length > 60) E.undo.shift(); E.redo.length = 0; botoes(); mudou(); }
-    function botoes() { $("afDesfazer").disabled = !E.undo.length; $("afRefazer").disabled = !E.redo.length; $("afCorrigirSel").disabled = !E.sel; }
+    const fotoEdicao = () => ({ cents: E.cents.slice(), ignorados: E.ignorados.slice() });
+    function recalcularNotas() {
+      E.nts = notas();
+      E.trans = new Uint8Array(E.det.n);
+      for (const n of E.nts) if (n.curta) E.trans.fill(1, n.q0, n.q1 + 1);
+    }
+    function limparPontos() { E.pontos = []; E.caixaPontos = null; }
+    function ignorarPontos() {
+      if (!E.det || !E.pontos.length || E.drag) return;
+      const antes = fotoEdicao();
+      for (const q of E.pontos) { E.ignorados[q] = 1; E.cents[q] = 0; }
+      limparPontos();
+      E.hover = -1;
+      recalcularNotas();
+      parar(); empilhar(antes);
+      desenhar(); atualizarInfo();
+      status("Pontos ignorados na correção. Toque em “Afinado” para comparar ou use “Desfazer”.");
+    }
+    function detParaCorrecao() {
+      if (!E.ignorados.some(Boolean)) return E.det;
+      const voz = E.det.voz.slice(), f0 = E.det.f0.slice();
+      for (let q = 0; q < voz.length; q++) {
+        if (E.ignorados[q]) { voz[q] = 0; f0[q] = 0; }
+      }
+      return { ...E.det, voz, f0 };
+    }
+    function botoes() { $("afSelecionarPontos").disabled = !E.carregado; $("afIgnorarPontos").disabled = !E.pontos.length || !!E.drag; $("afDesfazer").disabled = !E.undo.length; $("afRefazer").disabled = !E.redo.length; $("afCorrigirSel").disabled = !E.sel; }
     function corrigir(F, V, so) {
-      if (!E.det) return; const antes = Float32Array.from(E.cents);
+      if (!E.det) return; const antes = fotoEdicao();
       for (const n of notas()) {
         if (n.curta) continue; const ti = tq(n.q0), tf = tq(n.q1); if (so && !(tf >= so[0] && ti <= so[1])) continue;
         const T = notaMaisPerto(n.centro), Tb = n.centro + F * (T - n.centro);
-        for (let q = n.q0; q <= n.q1; q++) if (E.det.voz[q]) E.cents[q] = ((Tb - n.centro) - V * (E.midi[q] - n.centro)) * 100;
+        for (let q = n.q0; q <= n.q1; q++) if (vozAtiva(q)) E.cents[q] = ((Tb - n.centro) - V * (E.midi[q] - n.centro)) * 100;
       }
       suavizar(); empilhar(antes); desenhar(); atualizarInfo();
     }
-    function acharPonto(mx, my) { if (!E.det || mx < LEFT || my < TOP) return -1; const t = tempoEm(mx), qc = Math.round((t - E.det.t0) / E.det.hop); let best = -1, bd = 15; for (let q = qc - 3; q <= qc + 3; q++) { if (q < 0 || q >= E.det.n || !E.det.voz[q]) continue; const d = Math.hypot(X(tq(q)) - mx, Y(mcorr(q)) - my); if (d < bd) { bd = d; best = q; } } return best; }
+    function acharPonto(mx, my) { if (!E.det || mx < LEFT || my < TOP) return -1; const t = tempoEm(mx), qc = Math.round((t - E.det.t0) / E.det.hop); let best = -1, bd = 15; for (let q = qc - 3; q <= qc + 3; q++) { if (q < 0 || q >= E.det.n || !vozAtiva(q)) continue; const d = Math.hypot(X(tq(q)) - mx, Y(mcorr(q)) - my); if (d < bd) { bd = d; best = q; } } return best; }
     function acharBorda(mx, my) { if (!E.sel || my < TOP || acharPonto(mx, my) >= 0) return -1; const a = X(E.sel[0]), b = X(E.sel[1]); if (Math.abs(mx - a) <= 7) return 0; if (Math.abs(mx - b) <= 7) return 1; return -1; }
     function puxar(dr, my, alt) {
-      const alvo = alvoDeEncaixe(midiEm(my), alt), delta = (alvo - (E.midi[dr.q0] + dr.base[dr.q0] / 100)) * 100, t0 = tq(dr.q0), R = E.alcance;
+      const alvo = alvoDeEncaixe(midiEm(my), alt), delta = (alvo - (E.midi[dr.q0] + dr.base.cents[dr.q0] / 100)) * 100, t0 = tq(dr.q0), R = E.alcance;
       for (let q = 0; q < E.det.n; q++) {
-        if (!E.det.voz[q]) continue; const dt = Math.abs(tq(q) - t0); let w;
+        if (!vozAtiva(q)) continue; const dt = Math.abs(tq(q) - t0); let w;
         if (dr.rigido) { const t = tq(q), a = E.sel[0], b = E.sel[1]; w = t >= a && t <= b ? 1 : Math.max(0, 1 - (t < a ? a - t : t - b) / (R / 2)); } else w = Math.max(0, 1 - dt / R);
-        E.cents[q] = w > 0 ? dr.base[q] + delta * w : dr.base[q];
+        E.cents[q] = w > 0 ? dr.base.cents[q] + delta * w : dr.base.cents[q];
       }
       desenhar();
     }
+    function selecionarCaixa(d, mx, my) {
+      const t = Math.max(0, Math.min(E.dur, tempoEm(Math.max(LEFT, mx))));
+      const m = midiEm(Math.max(TOP, my));
+      const [a, b] = [Math.min(t, d.t), Math.max(t, d.t)];
+      const [lo, hi] = [Math.min(m, d.m), Math.max(m, d.m)];
+      E.caixaPontos = [a, b, lo, hi];
+      E.pontos = [];
+      const q0 = Math.max(0, Math.ceil((a - E.det.t0) / E.det.hop));
+      const q1 = Math.min(E.det.n - 1, Math.floor((b - E.det.t0) / E.det.hop));
+      for (let q = q0; q <= q1; q++) {
+        if (vozAtiva(q) && mcorr(q) >= lo && mcorr(q) <= hi) E.pontos.push(q);
+      }
+    }
     cv.addEventListener("pointerdown", (e) => {
-      if (!E.det) return; cv.setPointerCapture(e.pointerId); const mx = e.offsetX, my = e.offsetY;
+      if (!E.det || !E.carregado || e.button !== 0 || E.drag) return; cv.setPointerCapture(e.pointerId); const mx = e.offsetX, my = e.offsetY;
       if (my < TOP) { definirPos(Math.max(0, tempoEm(mx))); E.drag = { tipo: "regua" }; return; }
+      if (E.modoPontos && mx >= LEFT) {
+        limparPontos();
+        E.drag = { tipo: "pontos", id: e.pointerId, x: mx, y: my, t: Math.max(0, Math.min(E.dur, tempoEm(mx))), m: midiEm(my) };
+        E.hover = -1; botoes(); desenhar(); return;
+      }
       const lado = acharBorda(mx, my); if (lado >= 0) { E.drag = { tipo: "borda", lado }; return; }
       const q = acharPonto(mx, my);
-      if (q >= 0) { const t = tq(q), rigido = !!(E.sel && t >= E.sel[0] && t <= E.sel[1]); E.drag = { tipo: "puxar", q0: q, base: Float32Array.from(E.cents), rigido }; }
+      if (q >= 0) { const t = tq(q), rigido = !!(E.sel && t >= E.sel[0] && t <= E.sel[1]); E.drag = { tipo: "puxar", q0: q, base: fotoEdicao(), rigido }; }
       else { E.drag = { tipo: "sel", t0: Math.max(0, tempoEm(mx)) }; E.sel = null; botoes(); desenhar(); }
     });
     cv.addEventListener("pointermove", (e) => {
       const mx = e.offsetX, my = e.offsetY, d = E.drag;
+      if (d?.tipo === "pontos") {
+        if (d.id === e.pointerId) { selecionarCaixa(d, mx, my); desenhar(); }
+        return;
+      }
+      if (!d && E.modoPontos) { cv.style.cursor = "crosshair"; return; }
       if (!d) { const q = acharPonto(mx, my), lado = acharBorda(mx, my); if (q !== E.hover) { E.hover = q; desenhar(); } cv.style.cursor = lado >= 0 ? "ew-resize" : q >= 0 ? "ns-resize" : "crosshair"; return; }
       if (d.tipo === "regua") definirPos(Math.max(0, tempoEm(mx)));
       else if (d.tipo === "sel") { const t1 = Math.max(0, Math.min(E.dur, tempoEm(mx))); E.sel = Math.abs(t1 - d.t0) > 0.03 ? [Math.min(d.t0, t1), Math.max(d.t0, t1)] : null; botoes(); desenhar(); }
       else if (d.tipo === "borda") { const t = Math.max(0, Math.min(E.dur, tempoEm(mx))), o = 1 - d.lado; if (Math.abs(t - E.sel[o]) > 0.03) { E.sel[d.lado] = t; if (E.sel[0] > E.sel[1]) { E.sel.reverse(); d.lado = 1 - d.lado; } } desenhar(); }
       else puxar(d, my, e.altKey);
     });
-    cv.addEventListener("pointerup", () => { const d = E.drag; E.drag = null; if (d && d.tipo === "puxar") { let mexeu = false; for (let q = 0; q < E.cents.length; q++) if (E.cents[q] !== d.base[q]) { mexeu = true; break; } if (mexeu) { empilhar(d.base); atualizarInfo(); status("Linha ajustada (o trecho ajustado ficou turquesa). Toque em “Afinado” para ouvir."); } } });
+    cv.addEventListener("pointerup", (e) => {
+      const d = E.drag;
+      if (d?.tipo === "pontos") {
+        if (d.id !== e.pointerId) return;
+        E.drag = null;
+        if (Math.hypot(e.offsetX - d.x, e.offsetY - d.y) < 4) {
+          const q = acharPonto(e.offsetX, e.offsetY);
+          E.caixaPontos = null; E.pontos = q < 0 ? [] : [q];
+        } else selecionarCaixa(d, e.offsetX, e.offsetY);
+        botoes(); desenhar();
+        status(E.pontos.length ? `${E.pontos.length} ponto(s) selecionado(s). Use “Ignorar pontos”.` : "Nenhum ponto nessa seleção.");
+        return;
+      }
+      E.drag = null; if (d && d.tipo === "puxar") { let mexeu = false; for (let q = 0; q < E.cents.length; q++) if (E.cents[q] !== d.base.cents[q]) { mexeu = true; break; } if (mexeu) { empilhar(d.base); atualizarInfo(); status("Linha ajustada (o trecho ajustado ficou turquesa). Toque em “Afinado” para ouvir."); } } });
+    cv.addEventListener("lostpointercapture", (e) => {
+      if (E.drag?.tipo !== "pontos" || E.drag.id !== e.pointerId) return;
+      E.drag = null; limparPontos(); botoes(); desenhar();
+    });
     cv.addEventListener("pointerleave", () => { if (!E.drag && E.hover >= 0) { E.hover = -1; desenhar(); } });
     vp.addEventListener("scroll", desenhar); if (window.ResizeObserver) new ResizeObserver(() => dimensionar()).observe(vp); else window.addEventListener("resize", dimensionar);
     vp.addEventListener("wheel", (e) => { if (e.ctrlKey) { e.preventDefault(); $("afZoomT").value = Math.max(30, Math.min(400, E.pps * (e.deltaY < 0 ? 1.12 : 0.89))); $("afZoomT").dispatchEvent(new Event("input")); } }, { passive: false });
-    function desfazer() { if (!E.undo.length) return; E.redo.push(Float32Array.from(E.cents)); E.cents.set(E.undo.pop()); botoes(); desenhar(); atualizarInfo(); mudou(); }
-    function refazer() { if (!E.redo.length) return; E.undo.push(Float32Array.from(E.cents)); E.cents.set(E.redo.pop()); botoes(); desenhar(); atualizarInfo(); mudou(); }
+    function restaurarEdicao(estado) {
+      E.cents.set(estado.cents); E.ignorados.set(estado.ignorados);
+      limparPontos(); recalcularNotas(); botoes(); desenhar(); atualizarInfo(); mudou();
+    }
+    function desfazer() { if (E.det && E.undo.length) { E.redo.push(fotoEdicao()); restaurarEdicao(E.undo.pop()); } }
+    function refazer() { if (E.det && E.redo.length) { E.undo.push(fotoEdicao()); restaurarEdicao(E.redo.pop()); } }
 
     // ── áudio de prévia: um <audio> do navegador, que muda a velocidade SEM mudar o tom ──
     const au = new Audio(); au.preload = "auto"; au.preservesPitch = true; au.webkitPreservesPitch = true;
     au.addEventListener("ended", () => { if (!E.ocupado) { E.tocando = false; $("afPlay").textContent = "▶ Tocar"; } });
-    function renderizar() { if (!E.det) return; E.afinado = AF.corrigirAltura(E.mono, E.sr, E.det, E.cents); E.sujo = false; if (E.urlA) { URL.revokeObjectURL(E.urlA); E.urlA = null; } }
+    function renderizar() { if (!E.det) return; E.afinado = AF.corrigirAltura(E.mono, E.sr, detParaCorrecao(), E.cents); E.sujo = false; if (E.urlA) { URL.revokeObjectURL(E.urlA); E.urlA = null; } }
     function urlDe(m) {
       if (m === "original") { if (!E.urlO) E.urlO = URL.createObjectURL(wav(E.mono, E.sr)); return E.urlO; }
       if (E.sujo || !E.afinado) renderizar(); if (!E.urlA) E.urlA = URL.createObjectURL(wav(E.afinado, E.sr)); return E.urlA;
@@ -307,15 +400,40 @@
     // ── carregar uma voz ──
     function vazio(txt) { const v = $("afVazio"); v.textContent = txt || ""; v.classList.toggle("on", !!txt); }
     function sugestaoDeTom(t) { const i = NOMES.indexOf(String(t || "").toUpperCase().replace("♯", "#")); const sel = $("afTom"); sel.querySelectorAll("option[data-sug]").forEach((o) => o.remove()); if (i >= 0) { const o = document.createElement("option"); o.value = "M" + i; o.dataset.sug = "1"; o.textContent = `Sugestão do app: ${NOMES[i]} maior (o app só estima a nota-base)`; sel.insertBefore(o, sel.options[1]); } }
-    function limpar(msg) { parar(); E.det = null; E.mono = null; E.carregado = false; E.chave = null; E.sel = null; vazio(msg || "Selecione uma região de voz na linha do tempo para ver e ajustar a afinação."); status(msg ? "" : "Selecione uma região de voz."); $("afInfo").textContent = ""; desenhar(); }
+    function limpar(msg) { analiseAtual++; $("afCarregando").classList.remove("on"); parar(); E.drag = null; E.hover = -1; limparPontos(); E.undo = []; E.redo = []; E.cents = null; E.ignorados = null; E.det = null; E.mono = null; E.carregado = false; E.chave = null; E.sel = null; vazio(msg || "Selecione uma região de voz na linha do tempo para ver e ajustar a afinação."); status(msg ? "" : "Selecione uma região de voz."); $("afInfo").textContent = ""; botoes(); marcarPendente(); desenhar(); }
+    function carregarEdicao(d) {
+      E.cents = new Float32Array(E.det.n);
+      E.ignorados = new Uint8Array(E.det.n);
+      for (let q = 0; q < E.det.n; q++) {
+        E.ignorados[q] = d.ignorados?.[q] ? 1 : 0;
+        E.cents[q] = E.ignorados[q] ? 0 : d.cents?.[q] || 0;
+      }
+      E.aplicado = E.cents.slice();
+      E.aplicadoIgnorados = E.ignorados.slice();
+      E.sujo = true; E.undo = []; E.redo = [];
+      limparPontos(); recalcularNotas(); botoes(); marcarPendente();
+    }
     async function carregar(d) {
       E.beat = d.batidaSeg || 60 / (d.bpm || E.bpm); E.porComp = d.porCompasso || 4; E.origem = d.origemTempo || 0; E.nome = d.nome || "voz"; sugestaoDeTom(d.tonica);
-      if (E.carregado && d.chave && d.chave === E.chave && E.det) { if (d.cents && d.cents.length === E.cents.length) E.cents.set(d.cents); desenhar(); atualizarInfo(); return true; }
+      if (E.carregado && d.chave && d.chave === E.chave && E.det) {
+        const mudouAplicado = E.aplicado.some((v, q) => {
+          const ignorado = d.ignorados?.[q] ? 1 : 0;
+          return ignorado !== E.aplicadoIgnorados[q] || Math.abs((ignorado ? 0 : d.cents?.[q] || 0) - v) > 0.05;
+        });
+        if (mudouAplicado) { parar(); carregarEdicao(d); }
+        desenhar(); atualizarInfo(); return true;
+      }
+      const analise = ++analiseAtual;
+      E.det = null; E.cents = null; E.undo = []; E.redo = []; E.hover = -1; E.drag = null; limparPontos();
       parar(); au.removeAttribute("src"); au.dataset.url = ""; if (E.urlO) { URL.revokeObjectURL(E.urlO); E.urlO = null; } if (E.urlA) { URL.revokeObjectURL(E.urlA); E.urlA = null; }
-      E.mono = d.mono; E.sr = d.sr; E.dur = d.mono.length / d.sr; E.chave = d.chave || null; E.carregado = false; vazio("");
+      E.mono = d.mono; E.sr = d.sr; E.dur = d.mono.length / d.sr; E.chave = d.chave || null; E.carregado = false; vazio(""); botoes(); marcarPendente();
       $("afCarregandoTxt").textContent = "Analisando a voz…"; $("afCarregando").classList.add("on");
       try {
-        E.det = await AF.detectarAltura(d.mono, d.sr, {}, (p) => { $("afCarregandoTxt").textContent = `Analisando a voz… ${Math.round(p * 100)}%`; });
+        const det = await AF.detectarAltura(d.mono, d.sr, {}, (p) => {
+          if (analise === analiseAtual) $("afCarregandoTxt").textContent = `Analisando a voz… ${Math.round(p * 100)}%`;
+        });
+        if (analise !== analiseAtual) return false;
+        E.det = det;
         E.midi = new Float32Array(E.det.n); let mn = 1e9, mx = -1e9; for (let q = 0; q < E.det.n; q++) if (E.det.voz[q]) { E.midi[q] = AF.hzParaMidi(E.det.f0[q]); mn = Math.min(mn, E.midi[q]); mx = Math.max(mx, E.midi[q]); }
         if (mn > mx) { E.det = null; vazio("Não encontrei voz cantada ou falada nesta região. Selecione uma região com voz."); status("Sem voz nesta região."); return false; }
         const vals = []; for (let q = 0; q < E.det.n; q++) if (E.det.voz[q]) vals.push(E.midi[q]); vals.sort((p, r) => p - r);
@@ -323,13 +441,12 @@
         const lo = Math.floor(Math.max(mn, p01 - 3)), hi = Math.ceil(Math.min(mx, p99 + 3));
         E.minM = lo - 4; E.maxM = hi + 4; while (E.maxM - E.minM < 24) { E.minM--; E.maxM++; }
         const visH = vp.clientHeight - TOP; if (visH > 60) { E.ph = Math.max(12, Math.min(22, Math.floor(visH / (hi - lo + 3)))); const zv = $("afZoomV"); if (zv) zv.value = E.ph; }   // ajusta o zoom para a voz caber na tela (sem deixar as notas ilegíveis)
-        E.cents = new Float32Array(E.det.n); if (d.cents && d.cents.length) for (let q = 0; q < E.det.n && q < d.cents.length; q++) E.cents[q] = d.cents[q]; E.aplicado = Float32Array.from(E.cents);
-        E.nts = notas(); E.trans = new Uint8Array(E.det.n); for (const n of E.nts) if (n.curta) for (let q = n.q0; q <= n.q1; q++) E.trans[q] = 1;
-        E.undo = []; E.redo = []; E.sel = null; E.pos = 0; E.sujo = true; E.afinado = null; E.carregado = true; vp.scrollLeft = 0;
+        E.sel = null; E.pos = 0; E.afinado = null; E.carregado = true; vp.scrollLeft = 0;
+        carregarEdicao(d);
         dimensionar();
         const centrar = () => { const vis = (vp.clientHeight - TOP) / E.ph; vp.scrollTop = vis > 4 ? Math.max(0, (E.maxM + 0.5 - (mediana + vis / 2)) * E.ph) : Math.max(0, TOP + (E.maxM + 0.5 - (p99 + 3)) * E.ph - 10); }; centrar(); requestAnimationFrame(centrar); botoes(); atualizarInfo(); $("afTempo").textContent = fmt(0); const confs = []; for (let q = 0; q < E.det.n; q++) if (E.det.voz[q]) confs.push(E.det.conf[q]); confs.sort((p, r) => p - r); const confMediana = confs.length ? confs[confs.length >> 1] : 1;
         status(`Voz analisada (${fmt(E.dur)}). Arraste um ponto da linha para puxá-la, ou use “Corrigir tudo”.` + (confMediana < 0.8 ? " Atenção: a detecção ficou incerta, talvez haja música ou ruído junto com a voz. Para uma linha limpa, grave com fone de ouvido." : "")); return true;
-      } finally { $("afCarregando").classList.remove("on"); }
+      } finally { if (analise === analiseAtual) $("afCarregando").classList.remove("on"); }
     }
 
     // ── tutorial ──
@@ -348,8 +465,17 @@
     $("afForca").oninput = (e) => { $("afForcaV").textContent = e.target.value + "%"; }; $("afVib").oninput = (e) => { $("afVibV").textContent = e.target.value + "%"; };
     $("afCorrigir").onclick = () => { corrigir($("afForca").value / 100, $("afVib").value / 100, null); status("Corrigi todas as notas (a linha corrigida ficou turquesa). Compare em “Original” e “Afinado”."); };
     $("afCorrigirSel").onclick = () => { if (E.sel) { corrigir($("afForca").value / 100, $("afVib").value / 100, E.sel); status("Corrigi as notas da seleção."); } };
+    $("afSelecionarPontos").onclick = () => {
+      E.modoPontos = !E.modoPontos;
+      E.sel = null; E.hover = -1; limparPontos();
+      $("afSelecionarPontos").setAttribute("aria-pressed", E.modoPontos);
+      $("afSelecionarPontos").classList.toggle("on", E.modoPontos);
+      botoes(); desenhar();
+      status(E.modoPontos ? "Clique num ponto ou arraste um retângulo por tempo e altura." : "Seleção por intervalo de tempo.");
+    };
+    $("afIgnorarPontos").onclick = ignorarPontos;
     $("afDesfazer").onclick = desfazer; $("afRefazer").onclick = refazer;
-    $("afReverter").onclick = () => { if (!E.det) return; const antes = Float32Array.from(E.cents); E.cents.fill(0); empilhar(antes); desenhar(); atualizarInfo(); status("Voltou tudo para a voz como foi cantada."); };
+    $("afReverter").onclick = () => { if (!E.det) return; const antes = fotoEdicao(); E.cents.fill(0); E.ignorados.fill(0); limparPontos(); recalcularNotas(); empilhar(antes); desenhar(); atualizarInfo(); status("Voltou tudo para a voz como foi cantada."); };
     $("afOrig").onclick = () => { E.ouvir = "original"; $("afOrig").classList.add("on"); $("afAfin").classList.remove("on"); trocarFonte(); };
     $("afAfin").onclick = () => { E.ouvir = "afinado"; $("afAfin").classList.add("on"); $("afOrig").classList.remove("on"); trocarFonte(); };
     $("afPlay").onclick = () => { if (E.tocando) parar(); else tocar(); };
@@ -358,21 +484,23 @@
     $("afAjustes").onclick = () => { const on = $("afPainel").classList.toggle("on"); $("afAjustes").textContent = on ? "Ajustes ▴" : "Ajustes ▾"; dimensionar(); };
     $("afZoomT").oninput = (e) => { E.pps = +e.target.value; dimensionar(); }; $("afZoomV").oninput = (e) => { E.ph = +e.target.value; dimensionar(); };
     const baixar = $("afBaixar"); if (baixar) baixar.onclick = () => { if (!E.det) return; if (E.sujo || !E.afinado) renderizar(); const a = document.createElement("a"); a.href = URL.createObjectURL(wav(E.afinado, E.sr)); a.download = E.nome + "_afinado.wav"; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); };
-    const aplicar = $("afAplicar"); if (aplicar) aplicar.onclick = () => { if (!E.det) return status("Selecione uma região com voz primeiro."); parar(); if (opc.aoAplicar) opc.aoAplicar(Float32Array.from(E.cents), E.det); };
+    const aplicar = $("afAplicar"); if (aplicar) aplicar.onclick = () => { if (!E.det) return status("Selecione uma região com voz primeiro."); parar(); if (opc.aoAplicar) opc.aoAplicar(E.cents.slice(), detParaCorrecao(), E.ignorados.slice()); };
     const ampliar = $("afAmpliar"); if (ampliar) ampliar.onclick = () => { if (opc.aoAmpliar) opc.aoAmpliar(); };
     function tecla(e) {   // atalhos locais do editor (o Estúdio chama isto quando a aba está ativa)
       if ($("afTutModal").classList.contains("on")) { if (e.key === "Escape") fecharTut(); else if (e.key === "ArrowRight") $("afTutProx").click(); else if (e.key === "ArrowLeft") $("afTutVoltar").click(); return true; }
       const meta = e.ctrlKey || e.metaKey;
       if (meta && e.key.toLowerCase() === "z" && E.undo.length && !e.shiftKey) { e.preventDefault(); desfazer(); return true; }
       if (meta && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey)) && E.redo.length) { e.preventDefault(); refazer(); return true; }
+      if ((e.key === "Delete" || e.key === "Backspace") && E.modoPontos && E.pontos.length) { e.preventDefault(); ignorarPontos(); return true; }
+      if (e.key === "Escape" && E.modoPontos && (E.pontos.length || E.caixaPontos)) { limparPontos(); botoes(); desenhar(); return true; }
       if (e.key === "Escape" && E.sel) { E.sel = null; botoes(); desenhar(); return true; }
       return false;
     }
     const __p = { E, au, notas, rotulos, corrigir, renderizar, desenhar, X, Y, tq, mcorr, acharPonto, notaMaisPerto, alvoDeEncaixe, abrirTut, definirPos, notasNaSelecao };
     limpar();
-    const ctrl = { pendente: () => marcarPendente(), fonte: () => ({ ouvir: E.ouvir, src: au.currentSrc, urlA: E.urlA }), zerarHistorico: () => { E.undo = []; E.redo = []; E.aplicado = Float32Array.from(E.cents || []); botoes(); marcarPendente(); }, E, carregar, limpar, parar, dimensionar, tecla, abrirTut, __p,
+    const ctrl = { pendente: () => marcarPendente(), fonte: () => ({ ouvir: E.ouvir, src: au.currentSrc, urlA: E.urlA }), zerarHistorico: () => { E.undo = []; E.redo = []; E.aplicado = Float32Array.from(E.cents || []); E.aplicadoIgnorados = Uint8Array.from(E.ignorados || []); botoes(); marcarPendente(); }, E, carregar, limpar, parar, dimensionar, tecla, abrirTut, __p,
       ponto: (q) => ({ x: X(tq(q)), y: Y(mcorr(q)) }), vista: () => ({ topo: TOP, esq: LEFT, altura: vp.clientHeight, largura: vp.clientWidth, minM: E.minM, maxM: E.maxM, ph: E.ph }), canvas: () => cv,
-      obterCents: () => Float32Array.from(E.cents || []), obterDet: () => E.det, temEdicao: () => !!(E.cents && E.cents.some((v) => Math.abs(v) > 0.5)), tocando: () => E.tocando, definirModoAmpliado: (on) => { const b = $("afAmpliar"); if (b) b.textContent = on ? "Reduzir ⤡" : "Ampliar ⤢"; dimensionar(); }, definirTutorialAuto: () => { let visto = false; try { visto = localStorage.getItem("oh-afin-tut") === "1"; } catch (e) { /* sem armazenamento */ } if (!visto) abrirTut(); }, status };
+      obterCents: () => Float32Array.from(E.cents || []), obterDet: () => E.det, temEdicao: () => !!(E.cents && (E.ignorados.some(Boolean) || E.cents.some((v) => Math.abs(v) > 0.5))), tocando: () => E.tocando, definirModoAmpliado: (on) => { const b = $("afAmpliar"); if (b) b.textContent = on ? "Reduzir ⤡" : "Ampliar ⤢"; dimensionar(); }, definirTutorialAuto: () => { let visto = false; try { visto = localStorage.getItem("oh-afin-tut") === "1"; } catch (e) { /* sem armazenamento */ } if (!visto) abrirTut(); }, status };
     return ctrl;
   }
   raiz.EstudioAfinacaoUI = { criar };

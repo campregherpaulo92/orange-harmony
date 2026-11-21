@@ -957,6 +957,11 @@
         return curva[i] + (curva[Math.min(i + 1, curva.length - 1)] - curva[i]) * (p - i);
       });
       parte.afin = { ...r.afin, hop, cents, n: cents.length };
+      if (r.afin.ignorados) {
+        const ignorados = cents.map((_, q) => r.afin.ignorados[Math.round(origem + q)] || 0);
+        if (ignorados.some(Boolean)) parte.afin.ignorados = ignorados;
+        else delete parte.afin.ignorados;
+      }
     }
     return parte;
   }
@@ -1370,11 +1375,8 @@
     const r = regiaoPorId(S.regiaoSel);
     if (!r || r.gravando) { a.limpar("Selecione uma região de voz na linha do tempo (clique nela) para ver e ajustar a afinação."); return; }
     const base = baseDaRegiao(r); if (!base) { a.limpar("Esta região ainda não tem áudio."); return; }
-    const chave = `${base.ref.buf}:${base.ref.off.toFixed(3)}:${r.dur.toFixed(3)}`, comp = COMPASSOS[S.compasso];
-    const dados = { chave, cents: r.afin ? r.afin.cents : null, origemTempo: r.ini, batidaSeg: beatDur(), porCompasso: comp.n, tonica: S.tom, nome: r.nome };
-    if (a.E.carregado && a.E.chave === chave && dados.cents && dados.cents.length !== a.E.det.n) {
-      dados.cents = Array.from({ length: a.E.det.n }, (_, q) => dados.cents[q] || 0);
-    }
+    const chave = `${r.id}:${base.ref.buf}:${base.ini}:${base.fim}`, comp = COMPASSOS[S.compasso];
+    const dados = { chave, cents: r.afin?.cents, ignorados: r.afin?.ignorados, origemTempo: r.ini, batidaSeg: beatDur(), porCompasso: comp.n, tonica: S.tom, nome: r.nome };
     if (!(a.E.carregado && a.E.chave === chave)) {
       const nc = base.buf.numberOfChannels, n = base.fim - base.ini, mono = new Float32Array(n);
       for (let c = 0; c < nc; c++) { const d = base.buf.getChannelData(c); for (let i = 0; i < n; i++) mono[i] += d[base.ini + i] / nc; }
@@ -1383,10 +1385,12 @@
     a.carregar(dados).then((okk) => { if (okk && !afinTutVisto) { afinTutVisto = true; a.definirTutorialAuto(); } }).catch(() => {});
   }
   function ampliarAfin() { const ed = $("#dwEditor"), on = ed.classList.toggle("ampliado"); if (afin) afin.definirModoAmpliado(on); }
-  async function aplicarAfinacao(cents, det) {
+  async function aplicarAfinacao(cents, det, ignorados) {
+    if (afinAplicando) return;
+    const temIgnorados = !!ignorados?.some(Boolean);
     const r = regiaoPorId(S.regiaoSel); if (!r) return dica("Selecione uma região com voz primeiro.");
     const base = baseDaRegiao(r); if (!base) return;
-    if (!cents.some((v) => Math.abs(v) > 0.5)) {
+    if (!temIgnorados && !cents.some((v) => Math.abs(v) > 0.5)) {
       if (r.afin && r.alt) { mudar(() => { if (r.afinada) { r.buf = r.alt.buf; r.off = r.alt.off; } r.alt = null; r.afinada = false; delete r.afin; }); if (afin) afin.zerarHistorico(); dica("Afinação desfeita: a região voltou ao áudio sem afinação."); }
       else dica("Não há nada para aplicar: a linha não foi mexida. Puxe pontos ou use “Corrigir tudo” primeiro.");
       return;
@@ -1394,11 +1398,15 @@
     afinAplicando = true;
     dica("Aplicando a afinação… (isso leva alguns segundos)"); await new Promise((ok) => setTimeout(ok, 40));
     try {
+      const atual = baseDaRegiao(r);
+      if (regiaoPorId(r.id) !== r || !atual || atual.buf !== base.buf || atual.ini !== base.ini || atual.fim !== base.fim) {
+        return dica("A região mudou enquanto a afinação era preparada. Aplique novamente.");
+      }
       garantirAudio(); const nc = base.buf.numberOfChannels, n = base.fim - base.ini, novo = ctx.createBuffer(nc, n, base.sr);
       for (let c = 0; c < nc; c++) novo.copyToChannel(EstudioAfinacao.corrigirAltura(base.buf.getChannelData(c).slice(base.ini, base.fim), base.sr, det, cents), c);
       const blob = audioBufferParaWavBlob(novo), guardar = Array.from(cents, (v) => Math.round(v * 10) / 10);
-      mudar(() => { const id = guardarAudio(novo, blob); if (!r.afinada) r.alt = { buf: r.buf, off: r.off }; r.buf = id; r.off = 0; r.dur = Math.min(r.dur, novo.duration); r.afinada = true; r.limpo = false; r.afin = { cents: guardar, n: det.n, hop: det.hop }; });
-      if (afin) afin.zerarHistorico();
+      mudar(() => { const id = guardarAudio(novo, blob); if (!r.afinada) r.alt = { buf: r.buf, off: r.off }; r.buf = id; r.off = 0; r.dur = Math.min(r.dur, novo.duration); r.afinada = true; r.limpo = false; r.afin = { cents: guardar, n: det.n, hop: det.hop }; if (temIgnorados) r.afin.ignorados = Array.from(ignorados); });
+      if (afin && S.regiaoSel === r.id && abaAtiva === "afin") afin.zerarHistorico();
       dica("Afinação aplicada ✓. Ouça a região; em Região você compara com “Ouvir a versão sem afinação”. Ctrl+Z desfaz.");
     } catch (e) { dica("Não consegui aplicar a afinação: " + ((e && e.message) || "erro inesperado") + "."); }
     finally { afinAplicando = false; }
