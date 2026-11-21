@@ -62,18 +62,29 @@
 
   // ── desfazer / refazer ──
   const pilha = [], refaz = [];
-  const foto = () => JSON.stringify({ faixas: S.faixas, regioes: S.regioes, bpm: S.bpm, compasso: S.compasso, nome: S.nome, tom: S.tom });
-  function restaurar(js) {
+  const foto = (comTransporte = false) => JSON.stringify({
+    faixas: S.faixas, regioes: S.regioes, bpm: S.bpm, compasso: S.compasso, nome: S.nome, tom: S.tom,
+    transporte: comTransporte ? { loop: S.loop, tAtual: S.tAtual } : undefined,
+  });
+  function restaurar(js, inversa) {
     const o = JSON.parse(js);
+    inversa.push(foto(!!o.transporte));
     S.faixas = o.faixas; S.regioes = o.regioes; S.bpm = o.bpm; S.compasso = o.compasso; S.nome = o.nome; S.tom = o.tom;
     if (!regiaoPorId(S.regiaoSel)) S.regiaoSel = null;
     if (!faixaPorId(S.faixaSel)) S.faixaSel = S.faixas[0] ? S.faixas[0].id : null;
     $("#dwBpm").value = S.bpm; $("#dwComp").value = S.compasso; $("#dwNome").value = S.nome; $("#dwTom").textContent = S.tom || "—";
-    renderTudo(); atualizarNos(); if (S.tocando) reagendar(); agendarSalvar();
+    if (o.transporte) { S.loop = o.transporte.loop; trechoSel = null; }
+    renderTudo(); atualizarNos();
+    if (o.transporte) {
+      if (!S.regioes.length && S.tocando) pausar();
+      ir(o.transporte.tAtual);
+    }
+    else if (S.tocando) reagendar();
+    agendarSalvar();
   }
   function empilhar(antes) { pilha.push(antes); if (pilha.length > 80) pilha.shift(); refaz.length = 0; agendarSalvar(); atualizarUndo(); }
-  function desfazer() { if (S.gravando || S.contando) return dica("Pare a gravação antes de desfazer."); if (!pilha.length) return dica("Nada para desfazer."); refaz.push(foto()); restaurar(pilha.pop()); atualizarUndo(); dica("Desfeito."); }
-  function refazer() { if (!refaz.length) return dica("Nada para refazer."); pilha.push(foto()); restaurar(refaz.pop()); atualizarUndo(); dica("Refeito."); }
+  function desfazer() { if (S.gravando || S.contando) return dica("Pare a gravação antes de desfazer."); if (!pilha.length) return dica("Nada para desfazer."); restaurar(pilha.pop(), refaz); atualizarUndo(); dica("Desfeito."); }
+  function refazer() { if (S.gravando || S.contando) return dica("Pare a gravação antes de refazer."); if (!refaz.length) return dica("Nada para refazer."); restaurar(refaz.pop(), pilha); atualizarUndo(); dica("Refeito."); }
   function atualizarUndo() { const u = $("#dwUndo"), r = $("#dwRedo"); if (u) u.disabled = !pilha.length; if (r) r.disabled = !refaz.length; }
   function mudar(fn) { const antes = foto(); fn(); empilhar(antes); renderTudo(); if (S.tocando) reagendar(); }
 
@@ -254,6 +265,7 @@
         <div class="dw-vu-mestre" title="Volume geral"><i id="dwVuMestre"></i></div>
         <div class="dw-esp"></div>
         <button class="dw-btn cheio" id="dwSeparar">${ic("divide")} Separar música</button>
+        <button type="button" class="dw-btn" id="dwLaranjinha" title="Abrir o chat da Laranjinha">Laranjinha</button>
         <button class="dw-btn" id="dwArquivo">Arquivo ${ic("seta")}</button>
       </header>
       <div class="dw-ferr">
@@ -265,6 +277,7 @@
           <button class="dw-fb" data-f="lupa" title="Zoom (Z): clique aproxima; Alt + clique afasta">${ic("lupa")}</button>
         </div>
         <div class="dw-grupo"><button class="dw-fb" id="dwUndo" title="Desfazer (Ctrl+Z)">${ic("undo")}</button><button class="dw-fb" id="dwRedo" title="Refazer (Ctrl+Y)">${ic("redo")}</button></div>
+        <button type="button" class="dw-btn peq" id="dwMutarTodas" title="Ativa o M de todas as faixas. Use o M de cada faixa para reativá-la." disabled>Mutar todas</button>
         <div class="dw-sep"></div>
         <label>Grade <select id="dwSnap"><option value="off" selected>Livre</option><option value="bar">Compasso</option><option value="beat">Tempo</option><option value="half">Meio tempo</option></select></label>
         <label>Zoom <input type="range" id="dwZoom" min="8" max="120" value="40"></label>
@@ -281,8 +294,11 @@
       </div>
       <div class="dw-trecho-barra" id="dwTrechoBarra" hidden>
         <span id="dwTrechoInfo" role="status"></span>
+        <label><input type="checkbox" id="dwTrechoTodas"> Todas as faixas</label>
+        <button class="dw-btn peq" id="dwTrechoProjeto" disabled>Selecionar projeto</button>
         <button class="dw-btn peq" id="dwTrechoDividir" disabled>Dividir trecho</button>
         <button class="dw-btn peq" id="dwTrechoSilenciar" disabled>Silenciar trecho</button>
+        <button class="dw-btn peq" id="dwTrechoExcluir" title="Remove o intervalo em todas as faixas e puxa o que vem depois para a esquerda" disabled>Excluir e fechar espaço</button>
         <button class="dw-btn peq" id="dwTrechoLimpar" disabled>Limpar seleção</button>
       </div>
       <div class="dw-area">
@@ -391,7 +407,13 @@
     ligarEventos();
   }
 
+  function mutarTodas() {
+    if (S.faixas.every((f) => f.mudo)) return;
+    mudarFx(() => { S.faixas.forEach((f) => { f.mudo = true; }); });
+    dica("Todas as faixas mudas. Use M para reativar cada faixa ou Desfazer para voltar à mixagem anterior.");
+  }
   function renderCab() {
+    $("#dwMutarTodas").disabled = S.faixas.every((f) => f.mudo);
     $("#dwCabLista").innerHTML = S.faixas.map((f) => `
       <div class="dw-cab ${f.id === S.faixaSel ? "sel" : ""} ${f.vazia ? "vazia" : ""}" data-f="${f.id}" ${f.vazia ? 'title="Esta faixa quase não tem som nesta música (deixei muda)"' : ""}>
         <i class="cor" style="background:${f.cor}"></i>
@@ -882,24 +904,32 @@
     barra.hidden = S.ferr !== "trecho";
     const camada = $(".dw-trecho-selecao");
     if (camada) camada.remove();
-    const linha = trechoSel && $$(".dw-linha").find((el) => el.dataset.lf === trechoSel.faixa);
-    const ativo = !barra.hidden && !!linha && trechoSel.fim - trechoSel.ini >= MIN_TRECHO;
+    const todas = $("#dwTrechoTodas").checked, fimMusica = fimProjeto();
+    const faixa = trechoSel && faixaPorId(trechoSel.faixa);
+    const alvo = todas && S.faixas.length ? $("#dwFaixas") : faixa && $(`.dw-linha[data-lf="${faixa.id}"]`);
+    const ativo = !barra.hidden && !!trechoSel && !!alvo && trechoSel.fim - trechoSel.ini >= MIN_TRECHO;
     const pronto = ativo && !arrastandoTrecho;
     $("#dwTrechoDividir").disabled = !pronto;
     $("#dwTrechoSilenciar").disabled = !pronto;
     $("#dwTrechoLimpar").disabled = !pronto;
+    $("#dwTrechoTodas").disabled = arrastandoTrecho || !S.faixas.length;
+    $("#dwTrechoProjeto").disabled = arrastandoTrecho || fimMusica < MIN_TRECHO;
+    $("#dwTrechoExcluir").disabled = !pronto || !todas || Math.min(trechoSel.fim, fimMusica) - trechoSel.ini < MIN_TRECHO;
     if (!ativo) {
-      $("#dwTrechoInfo").textContent = "Clique e arraste em uma faixa para selecionar um intervalo.";
+      $("#dwTrechoInfo").textContent = todas
+        ? "Arraste o intervalo na linha do tempo para selecionar todas as faixas."
+        : "Arraste em uma faixa para selecionar um intervalo. Marque Todas as faixas para fechar espaços.";
       return;
     }
-    const { ini, fim, faixa } = trechoSel;
+    const { ini, fim } = trechoSel;
     const seg = (t) => t.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-    $("#dwTrechoInfo").textContent = `${faixaPorId(faixa).nome} · Início ${seg(ini)} s · Fim ${seg(fim)} s · Duração ${seg(fim - ini)} s`;
+    $("#dwTrechoInfo").textContent = `${todas ? "Todas as faixas" : faixa.nome} · Início ${seg(ini)} s · Fim ${seg(fim)} s · Duração ${seg(fim - ini)} s`;
     const el = document.createElement("div");
     el.className = "dw-trecho-selecao";
     el.style.left = px(ini) + "px";
     el.style.width = px(fim - ini) + "px";
-    linha.appendChild(el);
+    if (todas) el.style.bottom = "calc(var(--dw-alt-faixa) + 1px)";
+    alvo.appendChild(el);
   }
 
   function arrastarTrecho(e) {
@@ -980,13 +1010,13 @@
 
   function editarTrecho(silenciar) {
     if (!trechoSel || arrastandoTrecho || bloqueioTrecho()) return;
-    const { faixa, ini, fim } = trechoSel;
+    const { faixa, ini, fim } = trechoSel, todas = $("#dwTrechoTodas").checked;
     let primeira = null;
     const regioes = S.regioes.flatMap((r) => {
       const fimRegiao = r.ini + r.dur;
       const a = ini - r.ini > EPS_TRECHO ? ini : r.ini;
       const b = fimRegiao - fim > EPS_TRECHO ? fim : fimRegiao;
-      if (r.f !== faixa || b - a <= EPS_TRECHO || (silenciar && r.silenciada)) return [r];
+      if ((!todas && r.f !== faixa) || b - a <= EPS_TRECHO || (silenciar && r.silenciada)) return [r];
       if (!silenciar && a === r.ini && b === fimRegiao) return [r];
       const partes = [];
       if (a > r.ini) partes.push(parteDoTrecho(r, r.ini, a, r.id));
@@ -998,8 +1028,40 @@
       return partes;
     });
     if (!primeira) return dica(silenciar ? "Não há áudio a silenciar nesse trecho." : "Nenhum limite da seleção divide áudio nessa faixa.");
-    mudar(() => { S.regioes = regioes; S.faixaSel = faixa; S.regiaoSel = primeira.id; });
+    mudar(() => { S.regioes = regioes; S.faixaSel = primeira.f; S.regiaoSel = primeira.id; });
     dica(silenciar ? "Trecho silenciado. Use Desfazer ou Reativar áudio na aba Região." : "Áudio dividido nos limites da seleção.");
+  }
+  function excluirTrechoGlobal() {
+    if (!trechoSel || arrastandoTrecho || !$("#dwTrechoTodas").checked || bloqueioTrecho()) return;
+    const { ini } = trechoSel, fim = Math.min(trechoSel.fim, fimProjeto()), dur = fim - ini;
+    if (dur < MIN_TRECHO) return;
+    // O mesmo deslocamento vale para todas as faixas e para as marcas do transporte.
+    const reencaixar = (t) => t <= ini ? t : t < fim ? ini : t - dur;
+    const antes = foto(true);
+    S.regioes = S.regioes.flatMap((r) => {
+      const fimRegiao = r.ini + r.dur;
+      if (fimRegiao <= ini + EPS_TRECHO) return [r];
+      if (r.ini >= fim - EPS_TRECHO) return [{ ...r, ini: Math.max(ini, r.ini - dur) }];
+      const partes = [];
+      if (r.ini < ini - EPS_TRECHO) partes.push(parteDoTrecho(r, r.ini, ini, r.id));
+      if (fimRegiao > fim + EPS_TRECHO) {
+        const direita = parteDoTrecho(r, fim, fimRegiao, partes.length ? proxId++ : r.id);
+        direita.ini = ini;
+        partes.push(direita);
+      }
+      return partes;
+    });
+    if (!regiaoPorId(S.regiaoSel)) S.regiaoSel = null;
+    const loopIni = reencaixar(S.loop.ini), loopFim = reencaixar(S.loop.fim);
+    S.loop = loopFim - loopIni >= 0.1
+      ? { on: S.loop.on, ini: loopIni, fim: loopFim }
+      : { on: false, ini: 0, fim: 0 };
+    trechoSel = null;
+    empilhar(antes);
+    renderTudo();
+    if (!S.regioes.length && S.tocando) pausar();
+    ir(Math.min(ini, fimProjeto()));
+    dica(`Intervalo de ${dur.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} s removido em todas as faixas. Ctrl+Z desfaz o corte.`);
   }
   function dividirRegiao(r, t) {
     if (t <= r.ini + 0.02 || t >= r.ini + r.dur - 0.02) return dica("Coloque o cursor (ou clique) dentro da região para dividir.");
@@ -1070,6 +1132,13 @@
     $("#dwNome").addEventListener("change", (e) => { S.nome = e.target.value.trim() || "Meu projeto"; agendarSalvar(); });
     $("#dwFerr").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (b) usarFerramenta(b.dataset.f); });
     $("#dwUndo").addEventListener("click", desfazer); $("#dwRedo").addEventListener("click", refazer);
+    $("#dwMutarTodas").addEventListener("click", mutarTodas);
+    $("#dwLaranjinha").addEventListener("click", () => {
+      const painel = $("#laranjinhaPainel"), botao = $("#fabLaranjinha");
+      if (!painel || !botao) return dica("A Laranjinha não está disponível agora.");
+      if (painel.hidden) botao.click();
+      else $("#laranjinhaInput")?.focus();
+    });
     $("#dwSnap").addEventListener("change", (e) => { S.snap = e.target.value; dica("Grade: " + e.target.options[e.target.selectedIndex].text); });
     $("#dwZoom").addEventListener("input", (e) => mudarZoom(+e.target.value));
     $("#dwAjustar").addEventListener("click", () => { const fim = Math.max(fimProjeto(), 10), w = $("#dwTlScroll").clientWidth - 60; mudarZoom(w / fim); $("#dwTlScroll").scrollLeft = 0; });
@@ -1081,6 +1150,15 @@
     $("#dwLat").addEventListener("change", (e) => { S.latencia = Math.max(0, Math.min(500, +e.target.value || 0)); e.target.value = S.latencia; localStorage.setItem("oh-dw-lat", S.latencia); dica(`Atraso de gravação: ${S.latencia} ms (as próximas gravações começam esse tanto mais adiantadas).`); });
     // faixas
     $("#dwFaixas").addEventListener("pointerdown", aoPressionarFaixas);
+    $("#dwTrechoTodas").addEventListener("change", desenharTrecho);
+    $("#dwTrechoProjeto").addEventListener("click", () => {
+      const fim = fimProjeto();
+      if (arrastandoTrecho || fim < MIN_TRECHO) return;
+      $("#dwTrechoTodas").checked = true;
+      trechoSel = { faixa: S.faixaSel || S.faixas[0].id, ini: 0, fim };
+      desenharTrecho();
+    });
+    $("#dwTrechoExcluir").addEventListener("click", excluirTrechoGlobal);
     $("#dwTrechoDividir").addEventListener("click", () => editarTrecho(false));
     $("#dwTrechoSilenciar").addEventListener("click", () => editarTrecho(true));
     $("#dwTrechoLimpar").addEventListener("click", () => { trechoSel = null; desenharTrecho(); });
