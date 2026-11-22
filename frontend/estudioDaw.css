@@ -356,3 +356,34 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-agente-proposta p { margin: 0; overflow-wrap: anywhere; }
 .dw-agente-proposta .dw-acoes:has(button:not([hidden])) { margin-top: 8px; }
 .dw-agente [hidden] { display: none; }
+
+/* Controles e gravação do Studio */
+.dw-topo { background: linear-gradient(110deg, #20160e, #14110e 56%); }
+.dw-ferr { background: #17130f; gap: 7px; }
+.dw-ferr .dw-ic, .dw-topo .dw-btn .dw-ic { width: 15px; height: 15px; }
+.dw button:focus-visible, .dw-largura-faixas:focus-visible { outline: 2px solid #ffb177; outline-offset: -2px; }
+.dw-area { position: relative; grid-template-columns: var(--dw-cab) 8px minmax(0, 1fr) auto; }
+.dw-largura-faixas { position: relative; z-index: 21; touch-action: none; cursor: col-resize; background: #161310; }
+.dw-largura-faixas::after { content: ""; position: absolute; inset: 0 2px; background: rgba(248, 164, 99, .18); }
+.dw-largura-faixas:hover::after, .dw-largura-faixas:focus-visible::after { background: var(--dw-laranja); }
+.dw-cab { background: linear-gradient(90deg, #201a14, #171411 72%); }
+.dw-cab .excl { display: inline-grid; place-items: center; }
+.dw-cab .excl .dw-ic { width: 13px; height: 13px; }
+.dw .dw-entrada-trigger[aria-expanded="true"] { background: #432412; color: #ffc494; border-color: #ffac6b; }
+.dw-painel-entrada { width: 302px; min-height: 0; overflow: auto; display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 14px; border-left: 1px solid var(--dw-borda-forte); background: linear-gradient(155deg, #251b12, var(--dw-painel) 58%); }
+.dw-painel-entrada header, .dw-entrada-nivel { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dw-painel-entrada h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; color: #ffb073; }
+.dw-painel-entrada > label { display: grid; gap: 5px; font-size: 12px; color: var(--dw-suave); }
+.dw-painel-entrada output { font-variant-numeric: tabular-nums; color: #b5f3de; }
+.dw-painel-entrada meter { width: 100%; height: 18px; accent-color: #35b788; }
+.dw-painel-entrada meter::-webkit-meter-optimum-value { background: #35b788; }
+.dw-painel-entrada meter.pico::-webkit-meter-optimum-value { background: #ef6262; }
+.dw-painel-entrada meter::-moz-meter-bar { background: #35b788; }
+.dw-painel-entrada meter.pico::-moz-meter-bar { background: #ef6262; }
+.dw-painel-entrada audio { width: 100%; }
+.dw-entrada-botoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.dw-painel-entrada > p { margin: 0; overflow-wrap: anywhere; }
+.dw-painel-entrada > button { justify-content: center; }
+@media (max-width: 860px) {
+  .dw-painel-entrada { position: absolute; inset: 0 0 0 auto; z-index: 24; width: min(302px, 100%); box-shadow: -14px 0 28px #0009; }
+}

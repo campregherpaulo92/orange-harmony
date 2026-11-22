@@ -26,8 +26,12 @@
     mais: '<path d="M12 5v14M5 12h14"/>', seta: '<path d="M6 9l6 6 6-6"/>', onda: '<path d="M4 12h2v4H4zm4-4h2v12H8zm4-4h2v16h-2zm4 6h2v8h-2zm4 2h2v4h-2z"/>',
     mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/>', pasta: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
     divide: '<path d="M12 3v18M5 8l-3 4 3 4M19 8l3 4-3 4"/>', metro: '<path d="M8 21h8l-1.6-15h-4.8zM12 15l4.5-8"/>', baixar: '<path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>',
+    bot: '<rect x="5" y="7" width="14" height="12" rx="4"/><path d="M12 3v4M9 12h.01M15 12h.01M9 16h6"/>',
+    intervalo: '<path d="M8 5H4v14h4M16 5h4v14h-4"/><path d="M9 12h6"/>',
+    mudo: '<path d="M3 10v4h4l5 4V6l-5 4H3zM16 10l5 5m0-5-5 5"/>',
+    lixeira: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v6m4-6v6"/>',
   };
-  const TRACADOS = new Set(["loop", "metro", "tes", "mao", "lupa", "undo", "redo", "mais", "seta", "mic", "pasta", "divide", "baixar"]);
+  const TRACADOS = new Set(["loop", "metro", "tes", "mao", "lupa", "undo", "redo", "mais", "seta", "mic", "pasta", "divide", "baixar", "bot", "intervalo", "mudo", "lixeira"]);
   const ic = (n) => `<svg class="dw-ic ${TRACADOS.has(n) ? "tr" : ""}" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
   const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const corA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
@@ -264,20 +268,21 @@
         <div class="dw-campo">Tom<b id="dwTom">—</b></div>
         <div class="dw-vu-mestre" title="Volume geral"><i id="dwVuMestre"></i></div>
         <div class="dw-esp"></div>
+        <button type="button" class="dw-btn dw-entrada-trigger" id="dwAbrirEntrada" aria-expanded="false" aria-controls="dwPainelEntrada">${ic("mic")} Entrada de áudio</button>
         <button class="dw-btn cheio" id="dwSeparar">${ic("divide")} Separar música</button>
-        <button type="button" class="dw-btn" id="dwLaranjinha" aria-haspopup="dialog" title="Abrir o agente de edição do Studio">Agente do Studio</button>
-        <button class="dw-btn" id="dwArquivo">Arquivo ${ic("seta")}</button>
+        <button type="button" class="dw-btn" id="dwLaranjinha" aria-haspopup="dialog" title="Abrir o agente de edição do Studio">${ic("bot")} Agente do Studio</button>
+        <button class="dw-btn" id="dwArquivo">${ic("pasta")} Arquivo ${ic("seta")}</button>
       </header>
       <div class="dw-ferr">
         <div class="dw-grupo" id="dwFerr">
           <button class="dw-fb on" data-f="sel" title="Selecionar e mover (V)">${ic("sel")}</button>
           <button class="dw-fb" data-f="tes" title="Dividir (C): clique numa região">${ic("tes")}</button>
-          <button class="dw-btn peq" data-f="trecho" aria-pressed="false" title="Clique e arraste em uma faixa">Selecionar trecho</button>
+          <button class="dw-btn peq" data-f="trecho" aria-pressed="false" title="Clique e arraste em uma faixa">${ic("intervalo")} Selecionar trecho</button>
           <button class="dw-fb" data-f="mao" title="Mão (H): arraste para rolar">${ic("mao")}</button>
           <button class="dw-fb" data-f="lupa" title="Zoom (Z): clique aproxima; Alt + clique afasta">${ic("lupa")}</button>
         </div>
         <div class="dw-grupo"><button class="dw-fb" id="dwUndo" title="Desfazer (Ctrl+Z)">${ic("undo")}</button><button class="dw-fb" id="dwRedo" title="Refazer (Ctrl+Y)">${ic("redo")}</button></div>
-        <button type="button" class="dw-btn peq" id="dwMutarTodas" title="Ativa o M de todas as faixas. Use o M de cada faixa para reativá-la." disabled>Mutar todas</button>
+        <button type="button" class="dw-btn peq" id="dwMutarTodas" title="Ativa o M de todas as faixas. Use o M de cada faixa para reativá-la." disabled>${ic("mudo")} Mutar todas</button>
         <div class="dw-sep"></div>
         <label>Grade <select id="dwSnap"><option value="off" selected>Livre</option><option value="bar">Compasso</option><option value="beat">Tempo</option><option value="half">Meio tempo</option></select></label>
         <label>Zoom <input type="range" id="dwZoom" min="8" max="120" value="40"></label>
@@ -303,6 +308,7 @@
       </div>
       <div class="dw-area">
         <div class="dw-cab-col"><div class="dw-cab-topo"><span>FAIXAS</span><button class="dw-btn peq" id="dwAddFaixa">${ic("mais")} Faixa</button></div><div class="dw-cab-lista" id="dwCabLista"></div></div>
+        <div id="dwLarguraFaixas" class="dw-largura-faixas" role="separator" tabindex="0" aria-label="Largura da coluna de faixas" aria-orientation="vertical" title="Arraste para redimensionar. Use as setas ou dê dois cliques para voltar ao tamanho padrão."></div>
         <div class="dw-tl-scroll" id="dwTlScroll"><div class="dw-tl" id="dwTl"><div class="dw-regua" id="dwRegua"></div><div class="dw-loop" id="dwLoopBand" hidden></div><div class="dw-faixas" id="dwFaixas"></div><div class="dw-playhead" id="dwPlayhead"></div></div>
           <div class="dw-vazio" id="dwVazio" hidden>
             <h2>Comece o seu projeto</h2><p>Traga uma música, grave a sua voz ou importe um áudio. Depois é só mexer: cortar, mover, ajustar volume e exportar.</p>
@@ -313,6 +319,18 @@
             </div>
           </div>
         </div>
+        <aside id="dwPainelEntrada" class="dw-painel-entrada" aria-labelledby="dwEntradaTitulo" hidden>
+          <header><h2 id="dwEntradaTitulo">${ic("mic")} Entrada de áudio</h2><button type="button" class="dw-fb" id="dwEntradaFechar" aria-label="Fechar entrada de áudio">×</button></header>
+          <label>Dispositivo <select id="dwEntradaDispositivo"><option value="">Padrão do sistema</option></select></label>
+          <label>Faixa armada <select id="dwEntradaFaixa"></select></label>
+          <div class="dw-entrada-nivel"><label for="dwEntradaMedidor">Nível de entrada</label><output id="dwEntradaDb">−∞ dBFS</output></div>
+          <meter id="dwEntradaMedidor" min="0" max="60" value="0" aria-label="Nível de entrada"></meter>
+          <button type="button" class="dw-btn" id="dwEntradaAtivar">${ic("onda")} Ativar sinal</button>
+          <div class="dw-entrada-botoes"><button type="button" class="dw-btn peq" id="dwEntradaTestar" disabled>Testar 5 s</button><button type="button" class="dw-btn peq" id="dwEntradaOuvir" disabled>${ic("play")} Ouvir teste</button></div>
+          <audio id="dwEntradaPlayer" controls preload="none" hidden></audio>
+          <p class="dw-dica" id="dwEntradaEstado" role="status"></p>
+          <button type="button" class="dw-btn cheio" id="dwEntradaGravar">${ic("rec")} Gravar na faixa</button>
+        </aside>
       </div>
       <section class="dw-editor" id="dwEditor">
         <div class="dw-ed-redim" id="dwEdRedim" title="Arraste para mudar a altura deste painel (duplo clique volta ao padrão)"></div>
@@ -448,7 +466,7 @@
         <div class="l1"><input class="nome" value="${esc(f.nome)}" data-nome="${f.id}">
           <button class="dw-mini m ${f.mudo ? "on" : ""}" data-m="${f.id}" title="Mudo">M</button><button class="dw-mini s ${f.solo ? "on" : ""}" data-s="${f.id}" title="Solo">S</button><button class="dw-mini r ${f.arm ? "on" : ""}" data-r="${f.id}" title="Armar para gravar">R</button></div>
         <div class="l2"><span>Vol</span><input type="range" min="0" max="1.5" step="0.01" value="${f.vol}" data-vol="${f.id}"><span>Pan</span><input type="range" min="-1" max="1" step="0.1" value="${f.pan}" data-pan="${f.id}" style="max-width:46px"></div>
-        <div class="l3"><div class="medidor"><i data-vu="${f.id}"></i></div><button class="excl" data-fxabrir="${f.id}" title="Efeitos desta faixa">FX${(f.fx || []).filter((x) => x.ligado).length ? " " + (f.fx || []).filter((x) => x.ligado).length : ""}</button><button class="excl" data-del="${f.id}" title="Excluir a faixa e as regiões dela">Excluir</button></div>
+        <div class="l3"><div class="medidor"><i data-vu="${f.id}"></i></div><button class="excl" data-fxabrir="${f.id}" title="Efeitos desta faixa">FX${(f.fx || []).filter((x) => x.ligado).length ? " " + (f.fx || []).filter((x) => x.ligado).length : ""}</button><button class="excl" data-del="${f.id}" title="Excluir a faixa e as regiões dela" aria-label="Excluir faixa">${ic("lixeira")}</button></div>
       </div>`).join("");
   }
   function renderLinhas() {
@@ -511,6 +529,7 @@
   }
   function renderTudo() {
     renderCab(); renderLinhas(); renderMixer(); renderRegiao();
+    if (!$("#dwPainelEntrada").hidden) mostrarFaixaEntrada();
     selStatus(); atualizarUndo(); if (abaAtiva === "fx") renderFx(); if (abaAtiva === "sm") renderSm(); if (abaAtiva === "voz") renderVoz(); if (abaAtiva === "prod") renderProd(); if (abaAtiva === "cifra") renderCifra(); desenharLoop();
   }
   function selStatus() { const r = regiaoPorId(S.regiaoSel), e = $("#dwStatusSel"); if (e) e.textContent = r ? `Região: ${r.nome}` : ""; if (abaAtiva === "afin") prepararAfinacao(); }
@@ -548,6 +567,234 @@
   function ir(t) { if (S.gravando) return; S.tAtual = Math.max(0, t); posicionar(); if (S.tocando) { base0 = S.tAtual; baseCtx = ctx.currentTime; agendarRegioes(S.tAtual); atualizarNos(); } }
   function mudarZoom(v) { S.pps = Math.max(8, Math.min(120, v)); $("#dwZoom").value = S.pps; renderLinhas(); desenharLoop(); }
 
+  // ══ ENTRADA DE ÁUDIO ═══════════════════════════════════════════════════
+  let entradaId = "", escutaEntrada = null, testeUrl = "", solicitandoGravacao = false;
+  const pararStream = (stream) => stream?.getTracks().forEach((track) => track.stop());
+  function pedirEntrada(echoCancellation = S.monitor === "caixa") {
+    const audio = { echoCancellation, noiseSuppression: false, autoGainControl: false };
+    if (entradaId) audio.deviceId = { exact: entradaId };
+    return navigator.mediaDevices.getUserMedia({ audio });
+  }
+  function erroEntrada(e) {
+    if (e?.name === "NotAllowedError") return "Libere a permissão de microfone para o Studio.";
+    if (["NotFoundError", "OverconstrainedError"].includes(e?.name)) return "Entrada indisponível. Reconecte a interface ou selecione outra entrada.";
+    if (e?.name === "NotReadableError") return "Não consegui abrir a entrada. Confira se outro aplicativo está usando o dispositivo.";
+    return "Não consegui acessar o áudio neste navegador.";
+  }
+  function criarGravador(stream) {
+    const tipo = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]
+      .find((t) => MediaRecorder.isTypeSupported(t));
+    return new MediaRecorder(stream, tipo ? { mimeType: tipo } : undefined);
+  }
+  function limparTesteEntrada() {
+    const audio = $("#dwEntradaPlayer");
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.hidden = true;
+    if (testeUrl) URL.revokeObjectURL(testeUrl);
+    testeUrl = "";
+    $("#dwEntradaOuvir").disabled = true;
+  }
+  function fecharEscutaEntrada() {
+    const e = escutaEntrada;
+    escutaEntrada = null;
+    if (e) {
+      cancelAnimationFrame(e.frame);
+      clearTimeout(e.timer);
+      if (e.rec?.state === "recording") e.rec.stop();
+      e.src?.disconnect();
+      pararStream(e.stream);
+    }
+    $("#dwEntradaMedidor").value = 0;
+    $("#dwEntradaDb").textContent = "−∞ dBFS";
+    $("#dwEntradaMedidor").classList.remove("pico");
+    $("#dwEntradaTestar").disabled = true;
+    $("#dwEntradaAtivar").disabled = false;
+    $("#dwEntradaDispositivo").disabled = false;
+  }
+  async function listarEntradas() {
+    const seletor = $("#dwEntradaDispositivo");
+    let dispositivos = [];
+    try { dispositivos = await navigator.mediaDevices.enumerateDevices(); } catch (e) { /* mantém a escolha atual */ }
+    const entradas = dispositivos.filter((d) => d.kind === "audioinput" && d.deviceId && d.deviceId !== "default");
+    seletor.replaceChildren(new Option("Padrão do sistema", ""));
+    entradas.forEach((d, i) => seletor.add(new Option(d.label || "Entrada " + (i + 1), d.deviceId)));
+    if (entradaId && !entradas.some((d) => d.deviceId === entradaId)) seletor.add(new Option("Entrada salva", entradaId));
+    seletor.value = entradaId;
+  }
+  function mostrarFaixaEntrada() {
+    const seletor = $("#dwEntradaFaixa");
+    seletor.replaceChildren(new Option("Nova faixa de voz", ""));
+    S.faixas.forEach((f) => seletor.add(new Option(f.nome, f.id)));
+    seletor.value = S.faixas.find((f) => f.arm)?.id || "";
+  }
+  function alternarPainelEntrada(aberto) {
+    $("#dwPainelEntrada").hidden = !aberto;
+    $("#dwAbrirEntrada").setAttribute("aria-expanded", String(aberto));
+    if (aberto) {
+      mostrarFaixaEntrada();
+      listarEntradas();
+      $("#dwEntradaEstado").textContent = "Ative o sinal para medir ou fazer um teste.";
+      $("#dwEntradaAtivar").focus();
+    } else {
+      fecharEscutaEntrada();
+      limparTesteEntrada();
+    }
+  }
+  async function monitorarEntrada() {
+    fecharEscutaEntrada();
+    limparTesteEntrada();
+    const estado = $("#dwEntradaEstado");
+    if (S.contando || S.gravando || gravacao || solicitandoGravacao) { estado.textContent = "Termine a gravação para testar outra entrada."; return; }
+    if (!garantirAudio()) { estado.textContent = "O navegador não disponibilizou áudio."; return; }
+    const e = {};
+    escutaEntrada = e;
+    $("#dwEntradaAtivar").disabled = true;
+    estado.textContent = "Abrindo entrada…";
+    try {
+      const stream = await pedirEntrada();
+      if (escutaEntrada !== e) { pararStream(stream); return; }
+      e.stream = stream;
+      e.src = ctx.createMediaStreamSource(stream);
+      const analisador = ctx.createAnalyser();
+      analisador.fftSize = 1024;
+      e.src.connect(analisador); // mede a entrada sem devolver o sinal para a saída
+      const dados = new Float32Array(analisador.fftSize);
+      const db = $("#dwEntradaDb"), medidor = $("#dwEntradaMedidor");
+      const medir = () => {
+        analisador.getFloatTimeDomainData(dados);
+        let pico = 0;
+        for (const amostra of dados) pico = Math.max(pico, Math.abs(amostra));
+        const nivel = pico > 0 ? Math.round(20 * Math.log10(pico)) : -Infinity;
+        medidor.value = Math.max(0, Math.min(60, nivel + 60));
+        medidor.classList.toggle("pico", nivel >= -1);
+        db.textContent = nivel > -60 ? nivel + " dBFS" : "−∞ dBFS";
+        e.frame = requestAnimationFrame(medir);
+      };
+      estado.textContent = "Entrada ativa. Toque ou fale para conferir o nível.";
+      $("#dwEntradaTestar").disabled = !window.MediaRecorder;
+      const track = stream.getAudioTracks()[0];
+      track?.addEventListener("ended", () => {
+        if (escutaEntrada !== e) return;
+        fecharEscutaEntrada();
+        estado.textContent = "A entrada foi desconectada.";
+      }, { once: true });
+      medir();
+      listarEntradas();
+    } catch (err) {
+      if (escutaEntrada === e) { fecharEscutaEntrada(); estado.textContent = erroEntrada(err); }
+    }
+  }
+  function testarEntrada() {
+    const e = escutaEntrada;
+    if (!e?.stream || e.rec) return;
+    const botao = $("#dwEntradaTestar"), seletor = $("#dwEntradaDispositivo"), estado = $("#dwEntradaEstado");
+    limparTesteEntrada();
+    try {
+      const rec = criarGravador(e.stream), partes = [];
+      e.rec = rec;
+      rec.ondataavailable = (ev) => { if (ev.data.size) partes.push(ev.data); };
+      rec.onerror = () => {
+        if (escutaEntrada !== e) return;
+        fecharEscutaEntrada();
+        estado.textContent = "A captura do teste falhou. Ative a entrada para tentar novamente.";
+      };
+      rec.onstop = () => {
+        if (escutaEntrada !== e) return;
+        clearTimeout(e.timer);
+        e.rec = null; botao.disabled = false; seletor.disabled = false;
+        if (!partes.length) { estado.textContent = "O teste não recebeu áudio."; return; }
+        testeUrl = URL.createObjectURL(new Blob(partes, { type: rec.mimeType || partes[0].type }));
+        const audio = $("#dwEntradaPlayer");
+        audio.src = testeUrl;
+        audio.hidden = false;
+        $("#dwEntradaOuvir").disabled = false;
+        estado.textContent = "Teste pronto. Ouça antes de gravar.";
+      };
+      rec.start();
+      botao.disabled = true; seletor.disabled = true;
+      estado.textContent = "Gravando teste de 5 segundos…";
+      e.timer = setTimeout(() => { if (rec.state !== "inactive") rec.stop(); }, 5000);
+    } catch (err) {
+      fecharEscutaEntrada();
+      estado.textContent = "Não consegui iniciar o teste de áudio.";
+    }
+  }
+  function ligarPainelEntrada() {
+    const painel = $("#dwPainelEntrada");
+    try { entradaId = localStorage.getItem("oh-dw-entrada") || ""; } catch (e) { /* sem armazenamento */ }
+    $("#dwAbrirEntrada").addEventListener("click", () => alternarPainelEntrada(painel.hidden));
+    $("#dwEntradaFechar").addEventListener("click", () => alternarPainelEntrada(false));
+    $("#dwEntradaAtivar").addEventListener("click", monitorarEntrada);
+    $("#dwEntradaDispositivo").addEventListener("change", (ev) => {
+      const ativo = !!escutaEntrada;
+      entradaId = ev.target.value;
+      try { localStorage.setItem("oh-dw-entrada", entradaId); } catch (e) { /* sem armazenamento */ }
+      fecharEscutaEntrada(); limparTesteEntrada();
+      if (ativo) monitorarEntrada();
+    });
+    $("#dwEntradaFaixa").addEventListener("change", (ev) => {
+      if (S.gravando || S.contando || gravacao || solicitandoGravacao) { mostrarFaixaEntrada(); return; }
+      const id = ev.target.value;
+      mudarFx(() => { S.faixas.forEach((f) => { f.arm = f.id === id; }); if (id) S.faixaSel = id; });
+    });
+    $("#dwEntradaTestar").addEventListener("click", testarEntrada);
+    $("#dwEntradaOuvir").addEventListener("click", () => {
+      const audio = $("#dwEntradaPlayer");
+      if (!audio.paused) { audio.pause(); return; }
+      if (S.gravando || S.contando) return;
+      if (S.tocando) pausar();
+      audio.currentTime = 0;
+      audio.play().catch(() => { $("#dwEntradaEstado").textContent = "Não consegui reproduzir o teste."; });
+    });
+    $("#dwEntradaGravar").addEventListener("click", iniciarGravacao);
+    const pagina = $("#page-estudio");
+    if (pagina && window.MutationObserver) {
+      const observador = new MutationObserver(() => {
+        if (!pagina.classList.contains("oh-page-ativa")) alternarPainelEntrada(false);
+      });
+      observador.observe(pagina, { attributes: true, attributeFilter: ["class", "hidden"] });
+    }
+    window.addEventListener("pagehide", () => { fecharEscutaEntrada(); limparTesteEntrada(); });
+  }
+
+  function ligarLarguraFaixas() {
+    const alca = $("#dwLarguraFaixas"), raiz = $("#dw");
+    const faixa = () => $(".dw-cab-col", raiz);
+    const limites = () => ({ min: Math.min(150, Math.floor(raiz.clientWidth * .43)), max: Math.min(470, Math.floor(raiz.clientWidth * .62)) });
+    const ajustar = (px) => {
+      const { min, max } = limites();
+      if (!raiz.clientWidth) return;
+      const largura = Math.max(min, Math.min(max, Math.round(px)));
+      raiz.style.setProperty("--dw-cab", largura + "px");
+      alca.setAttribute("aria-valuemin", min);
+      alca.setAttribute("aria-valuemax", max);
+      alca.setAttribute("aria-valuenow", largura);
+    };
+    let preferida = 236, arraste = null;
+    try { preferida = +localStorage.getItem("oh-dw-cab") || preferida; } catch (e) { /* sem armazenamento */ }
+    const salvar = () => {
+      preferida = faixa().offsetWidth;
+      try { localStorage.setItem("oh-dw-cab", String(preferida)); } catch (e) { /* sem armazenamento */ }
+    };
+    alca.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0 || arraste) return;
+      ev.preventDefault(); alca.focus(); alca.setPointerCapture(ev.pointerId);
+      arraste = { id: ev.pointerId, x: ev.clientX, largura: faixa().offsetWidth };
+    });
+    alca.addEventListener("pointermove", (ev) => { if (arraste?.id === ev.pointerId) ajustar(arraste.largura + ev.clientX - arraste.x); });
+    alca.addEventListener("lostpointercapture", (ev) => { if (arraste?.id === ev.pointerId) { arraste = null; salvar(); } });
+    alca.addEventListener("keydown", (ev) => {
+      const { min, max } = limites(), w = faixa().offsetWidth;
+      const valor = { ArrowLeft: w - 12, ArrowRight: w + 12, Home: min, End: max }[ev.key];
+      if (valor == null) return;
+      ev.preventDefault(); ev.stopPropagation(); ajustar(valor); salvar();
+    });
+    alca.addEventListener("dblclick", () => { ajustar(236); salvar(); });
+    if (window.ResizeObserver) new ResizeObserver(() => { if (!arraste) ajustar(preferida); }).observe(raiz);
+    ajustar(preferida);
+  }
+
   // ══ GRAVAÇÃO ══════════════════════════════════════════════════════════
   let gravacao = null, contTimers = [];
   function mostrarContagem(txt) { const c = $("#dwContagemOv"); c.hidden = !txt; c.innerHTML = txt ? `<span>${txt}</span><small>pré-contagem</small>` : ""; }
@@ -558,73 +805,125 @@
   function criarFaixaVoz() { const n = S.faixas.filter((f) => f.gravada).length + 2; S.faixas.forEach((x) => { x.arm = false; }); return novaFaixa("Voz " + n, CORES[n % CORES.length], { arm: true, gravada: true }); }
   async function iniciarGravacao() {
     if (S.gravando || S.contando) return pararGravacao();
-    if (!garantirAudio()) return dica("Este navegador não deixa gravar áudio.");
+    if (solicitandoGravacao || gravacao) return;
+    if (!window.MediaRecorder || !garantirAudio()) return dica("Este navegador não deixa gravar áudio.");
     if (S.tocando) pausar();
+    alternarPainelEntrada(false);
+    let stream;
+    const projeto = S.id;
+    solicitandoGravacao = true;
+    try { stream = await pedirEntrada(); }
+    catch (e) { return dica(erroEntrada(e)); }
+    finally { solicitandoGravacao = false; }
+    if (S.id !== projeto || !$("#page-estudio").classList.contains("oh-page-ativa")) {
+      pararStream(stream); return;
+    }
     const antes = foto(); let alvo = S.faixas.find((f) => f.arm);
+    const faixaCriada = !alvo;
     if (!alvo) alvo = criarFaixaVoz();
     S.faixaSel = alvo.id; renderTudo(); mostrarFaixa(alvo.id);
-    let stream = null, simulado = false;
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: S.monitor === "caixa", noiseSuppression: false, autoGainControl: false } }); } catch (e) { simulado = true; }
     // Com caixa de som a música sai pelo ar e entra no microfone. Só o cancelamento de eco do navegador ajuda; o fone resolve de vez.
     let aviso = "";
     if (stream && S.monitor === "caixa" && S.regioes.some((r) => r.f !== alvo.id && audivel(r.f))) {
       let aec = null; try { const tr = stream.getAudioTracks()[0]; aec = tr && tr.getSettings ? tr.getSettings().echoCancellation : null; } catch (e) { aec = null; }
       aviso = aec === false ? " ⚠️ Este navegador não ativou o cancelamento de eco: a música pode vazar no microfone. Use fone de ouvido." : " Com caixa de som, parte da música ainda pode vazar no microfone; o fone deixa a gravação mais limpa.";
     }
-    gravacao = { aviso, antes, alvo, stream, simulado, regiao: null, rec: null, chunks: [], an: null, dados: null, ini: snap(S.tAtual) };
+    gravacao = { aviso, antes, alvo, faixaCriada, projeto, latencia: S.latencia, stream, regiao: null, rec: null, chunks: [], an: null, dados: null, ini: snap(S.tAtual) };
     $("#dwRec").classList.add("on");
     const total = S.contagem * COMPASSOS[S.compasso].n;
     if (!total) { comecarGravacao(); return; }
-    S.contando = true; dica((simulado ? "Microfone não liberado: vou SIMULAR a gravação, só para você ver o fluxo." : "Pré-contagem… prepare-se para cantar.") + (gravacao.aviso || ""));
+    S.contando = true; dica("Pré-contagem… prepare-se para gravar." + aviso);
     const bd = beatDur(), n = COMPASSOS[S.compasso].n;
     for (let i = 0; i < total; i++) contTimers.push(setTimeout(() => { cliqueEm(ctx.currentTime + 0.005, i % n === 0); mostrarContagem(String((i % n) + 1)); }, 60 + i * bd * 1000));
     contTimers.push(setTimeout(() => { mostrarContagem(""); comecarGravacao(); }, 60 + total * bd * 1000));
   }
   function comecarGravacao() {
-    S.contando = false; S.gravando = true;
-    const g = gravacao, id = proxId++, bufId = "rec" + id;
+    S.contando = false;
+    const g = gravacao;
+    if (!g) return;
+    if (g.projeto !== S.id || faixaPorId(g.alvo.id) !== g.alvo || !$("#page-estudio").classList.contains("oh-page-ativa")) {
+      return cancelarCaptura(g, "A gravação foi cancelada. Abra o Studio e selecione a faixa.");
+    }
+    try {
+      g.src = ctx.createMediaStreamSource(g.stream);
+      g.an = ctx.createAnalyser(); g.an.fftSize = 1024;
+      g.src.connect(g.an); g.dados = new Uint8Array(g.an.fftSize);
+      g.rec = criarGravador(g.stream);
+      g.rec.ondataavailable = (ev) => { if (ev.data.size) g.chunks.push(ev.data); };
+      g.rec.onerror = () => cancelarCaptura(g, "A captura de áudio falhou.");
+      g.rec.start();
+    } catch (e) { return cancelarCaptura(g, erroEntrada(e)); }
+    S.gravando = true;
+    g.stream.getAudioTracks()[0]?.addEventListener("ended", () => {
+      if (gravacao === g && S.gravando) pausar();
+    }, { once: true });
+    const id = proxId++, bufId = "rec" + id;
     picos.set(bufId, []);
     g.regiao = { id, f: g.alvo.id, ini: g.ini, dur: 0.05, off: 0, buf: bufId, nome: g.alvo.nome + " · gravação", ganho: 0, fi: 0.005, fo: 0.005, gravando: true };
     S.regioes.push(g.regiao); S.regiaoSel = id; S.tAtual = g.ini;
-    if (g.stream) {
-      const src = ctx.createMediaStreamSource(g.stream); g.an = ctx.createAnalyser(); g.an.fftSize = 1024; src.connect(g.an); g.dados = new Uint8Array(g.an.fftSize);
-      const tipo = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
-      g.rec = new MediaRecorder(g.stream, tipo ? { mimeType: tipo } : undefined); g.rec.ondataavailable = (ev) => { if (ev.data.size) g.chunks.push(ev.data); }; g.rec.start();
-    }
     tocar(); renderTudo(); dica("Gravando… aperte o botão vermelho (ou a barra de espaço) para parar." + (g.aviso || ""));
   }
   function atualizarGravacao() {
     const g = gravacao; if (!g || !g.regiao) return; const r = g.regiao; r.dur = Math.max(0.05, S.tAtual - r.ini);
     let a;
     if (g.an) { g.an.getByteTimeDomainData(g.dados); let m = 0; for (let i = 0; i < g.dados.length; i++) m = Math.max(m, Math.abs(g.dados[i] - 128) / 128); a = Math.min(1, m * 1.6); }
-    else a = 0.2 + 0.55 * Math.abs(Math.sin(S.tAtual * 3.1)) * (0.6 + 0.4 * Math.random());
+    else a = 0;
     const p = picos.get(r.buf), bin = Math.floor((S.tAtual - r.ini) / BIN); p[bin] = Math.max(p[bin] || 0, a);
     const el = $(`.dw-regiao[data-r="${r.id}"]`);
     if (el) { el.style.width = px(r.dur) + "px"; desenharOnda($("canvas", el), r, g.alvo.cor, px(r.dur), el.clientHeight - 18 || 60); }
     const vu = $(`[data-vu="${g.alvo.id}"]`); if (vu) vu.style.width = a * 100 + "%";
   }
+  function cancelarCaptura(g, mensagem) {
+    if (!g || gravacao !== g) return;
+    gravacao = null;
+    S.gravando = false;
+    if (S.tocando) pausar();
+    $("#dwRec").classList.remove("on");
+    if (g.rec && g.rec.state !== "inactive") {
+      g.rec.onerror = null; g.rec.onstop = null;
+      g.rec.stop();
+    }
+    g.src?.disconnect();
+    pararStream(g.stream);
+    if (g.projeto !== S.id) return;
+    if (g.regiao) {
+      picos.delete(g.regiao.buf);
+      S.regioes = S.regioes.filter((r) => r !== g.regiao);
+      if (S.regiaoSel === g.regiao.id) S.regiaoSel = null;
+    }
+    if (g.faixaCriada && !S.regioes.some((r) => r.f === g.alvo.id)) {
+      S.faixas = S.faixas.filter((f) => f !== g.alvo);
+      if (S.faixaSel === g.alvo.id) S.faixaSel = S.faixas[0]?.id || null;
+    }
+    renderTudo();
+    dica(mensagem);
+  }
   function finalizarGravacao() {
     const g = gravacao; if (!g || !g.regiao) return;
     S.gravando = false; $("#dwRec").classList.remove("on");
     const r = g.regiao;
-    const pronto = (buf, blob) => {
-      if (buf) {
-        const off = Math.min(S.latencia / 1000, Math.max(0, buf.duration - 0.2)), id = guardarAudio(buf, blob);
+    const pronto = async () => {
+      pararStream(g.stream);
+      g.src?.disconnect();
+      try {
+        const blob = new Blob(g.chunks, { type: g.rec.mimeType || g.chunks[0]?.type || "" });
+        if (!blob.size) throw new Error("sem dados");
+        const buf = await decodificar(await blob.arrayBuffer());
+        if (gravacao !== g) return;
+        if (g.projeto !== S.id || !S.regioes.includes(r)) return cancelarCaptura(g, "A região de gravação mudou.");
+        const off = Math.min(g.latencia / 1000, Math.max(0, buf.duration - 0.2)), id = guardarAudio(buf, blob);
         picos.delete(r.buf); r.buf = id; r.off = off; r.dur = buf.duration - off;
-      } else { const p = picos.get(r.buf); r.dur = Math.max(0.1, (p.length || 1) * BIN); }
-      r.gravando = false; empilhar(g.antes); gravacao = null; renderTudo();
-      dica(buf ? `Gravação pronta: ${fmt(r.dur)}. Já faz parte do projeto: mexa nela como em qualquer região.` : "Gravação simulada pronta (sem microfone: não há áudio de verdade).");
+        r.gravando = false; empilhar(g.antes); gravacao = null; renderTudo();
+        dica(`Gravação pronta: ${fmt(r.dur)}.`);
+      } catch (e) { cancelarCaptura(g, "Não consegui salvar o áudio capturado."); }
     };
-    if (g.rec && g.rec.state !== "inactive") {
-      g.rec.onstop = async () => { g.stream.getTracks().forEach((t) => t.stop()); try { const blob = new Blob(g.chunks); pronto(await decodificar(await blob.arrayBuffer()), blob); } catch (e) { pronto(null); } };
-      g.rec.stop();
-    } else { if (g.stream) g.stream.getTracks().forEach((t) => t.stop()); pronto(null); }
+    if (g.rec.state === "inactive") pronto();
+    else { g.rec.onstop = pronto; g.rec.stop(); }
   }
   function pararGravacao() {
     if (S.contando) {
       contTimers.forEach(clearTimeout); contTimers = []; S.contando = false; mostrarContagem(""); $("#dwRec").classList.remove("on");
-      if (gravacao && gravacao.stream) gravacao.stream.getTracks().forEach((t) => t.stop());
-      gravacao = null; dica("Gravação cancelada antes de começar."); return;
+      cancelarCaptura(gravacao, "Gravação cancelada antes de começar."); return;
     }
     if (S.gravando) pausar();
   }
@@ -1162,6 +1461,8 @@
     $("#dwUndo").addEventListener("click", desfazer); $("#dwRedo").addEventListener("click", refazer);
     $("#dwMutarTodas").addEventListener("click", mutarTodas);
     ligarAgenteStudio();
+    ligarPainelEntrada();
+    ligarLarguraFaixas();
     $("#dwSnap").addEventListener("change", (e) => { S.snap = e.target.value; dica("Grade: " + e.target.options[e.target.selectedIndex].text); });
     $("#dwZoom").addEventListener("input", (e) => mudarZoom(+e.target.value));
     $("#dwAjustar").addEventListener("click", () => { const fim = Math.max(fimProjeto(), 10), w = $("#dwTlScroll").clientWidth - 60; mudarZoom(w / fim); $("#dwTlScroll").scrollLeft = 0; });
@@ -2097,12 +2398,14 @@
     return { atrasos, mediana, desvio, ok: o.length >= 4 && desvio < 0.02 };
   }
   async function calibrarAtraso() {
-    const res = $("#dwCalRes"), btn = $("#dwCalIniciar"); if (S.gravando || S.contando) { res.textContent = "Pare a gravação antes de calibrar."; return; }
+    const res = $("#dwCalRes"), btn = $("#dwCalIniciar"); if (S.gravando || S.contando || gravacao || solicitandoGravacao) { res.textContent = "Pare a gravação antes de calibrar."; return; }
     if (!garantirAudio()) { res.textContent = "Este navegador não toca áudio aqui."; return; } if (S.tocando) pausar();
-    let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }); } catch (e) { res.textContent = "Não consegui usar o microfone. Libere o acesso ao microfone neste site e tente de novo."; return; }
-    btn.disabled = true; res.textContent = "Tocando 6 cliques e ouvindo… fique em silêncio."; const tempos = [0.9, 1.5, 2.1, 2.7, 3.3, 3.9], partes = [];
+    fecharEscutaEntrada();
+    btn.disabled = true;
+    let stream; try { stream = await pedirEntrada(false); } catch (e) { btn.disabled = false; res.textContent = erroEntrada(e); return; }
+    res.textContent = "Tocando 6 cliques e ouvindo… fique em silêncio."; const tempos = [0.9, 1.5, 2.1, 2.7, 3.3, 3.9], partes = [];
     try {
-      const tipo = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)), rec = new MediaRecorder(stream, tipo ? { mimeType: tipo } : undefined);
+      const rec = criarGravador(stream);
       rec.ondataavailable = (ev) => { if (ev.data.size) partes.push(ev.data); }; rec.start(); const t0 = ctx.currentTime;   // a gravação e o toque começam juntos, como numa gravação de verdade
       tempos.forEach((t) => { const o = ctx.createOscillator(), g = ctx.createGain(), q = t0 + t; o.frequency.value = 2500; g.gain.setValueAtTime(0.0001, q); g.gain.linearRampToValueAtTime(0.9, q + 0.0015); g.gain.exponentialRampToValueAtTime(0.0001, q + 0.012); o.connect(g); g.connect(ctx.destination); o.start(q); o.stop(q + 0.02); });
       await new Promise((ok) => setTimeout(ok, (tempos[tempos.length - 1] + 1.1) * 1000));
