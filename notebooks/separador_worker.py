@@ -34,13 +34,14 @@ def wav_para_mp3(wav_bytes, kbps=192):
     return bytes(enc.encode(np.ascontiguousarray(dados).tobytes()) + enc.flush())
 
 
-def bater_coracao(db, online=True, gpu=False):
+def bater_coracao(db, online=True, gpu=False, completo=False, backing=False):
+    # `completo` avisa o app que este notebook já sabe separar em 6 faixas
     db.collection(COLECAO_STATUS).document(DOC_STATUS).set(
-        {"online": bool(online), "atualizado_em": _agora(), "gpu": bool(gpu)}
+        {"online": bool(online), "atualizado_em": _agora(), "gpu": bool(gpu), "completo": bool(completo), "backing": bool(backing)}
     )
 
 
-def processar_um_job(db, bucket, separar_fn, analisar_fn=None, log=print):
+def processar_um_job(db, bucket, separar_fn, analisar_fn=None, log=print, separar_completo_fn=None, separar_backing_fn=None):
     """Pega UM trabalho pendente e processa. Devolve True se havia trabalho."""
     achados = list(db.collection(COLECAO_JOBS).where("status", "==", "pendente").limit(1).stream())
     if not achados:
@@ -50,22 +51,38 @@ def processar_um_job(db, bucket, separar_fn, analisar_fn=None, log=print):
     dados_job = achados[0].to_dict() or {}
     ref = db.collection(COLECAO_JOBS).document(job_id)
     nome = dados_job.get("nome_original") or "audio.wav"
-    log(f"▶ Trabalho {job_id[:8]}… ({nome}) — separando…")
+    modo = dados_job.get("modo") or "rapido"
+    log(f"▶ Trabalho {job_id[:8]}… ({nome}) — separando ({modo})…")
     inicio = time.time()
 
     ref.update({"status": "processando", "atualizado_em": _agora()})
     try:
         entrada = bucket.blob(dados_job["entrada_path"]).download_as_bytes()
-        voz_wav, inst_wav, erro = separar_fn(entrada, nome)
-        if erro:
-            raise RuntimeError(erro)
+        separador = {"completo": separar_completo_fn, "backing": separar_backing_fn}.get(modo)
+        if modo == "backing" and separador is None:
+            raise RuntimeError("O modelo de backing vocal não está disponível no Colab.")
+        if separador is not None:
+            fontes, erro = separador(entrada, nome)
+            if erro:
+                raise RuntimeError(erro)
+            caminhos = {}
+            for chave, wav in fontes.items():
+                caminho = f"estudio/{job_id}/{chave}.mp3"
+                bucket.blob(caminho).upload_from_string(wav_para_mp3(wav), content_type="audio/mpeg")
+                caminhos[chave] = caminho
+            extra = {"modo": modo, "stems": list(caminhos.keys()), "stems_paths": caminhos}
+        else:
+            voz_wav, inst_wav, erro = separar_fn(entrada, nome)
+            if erro:
+                raise RuntimeError(erro)
 
-        voz_mp3 = wav_para_mp3(voz_wav)
-        inst_mp3 = wav_para_mp3(inst_wav)
-        caminho_voz = f"estudio/{job_id}/voz.mp3"
-        caminho_inst = f"estudio/{job_id}/instrumental.mp3"
-        bucket.blob(caminho_voz).upload_from_string(voz_mp3, content_type="audio/mpeg")
-        bucket.blob(caminho_inst).upload_from_string(inst_mp3, content_type="audio/mpeg")
+            voz_mp3 = wav_para_mp3(voz_wav)
+            inst_mp3 = wav_para_mp3(inst_wav)
+            caminho_voz = f"estudio/{job_id}/voz.mp3"
+            caminho_inst = f"estudio/{job_id}/instrumental.mp3"
+            bucket.blob(caminho_voz).upload_from_string(voz_mp3, content_type="audio/mpeg")
+            bucket.blob(caminho_inst).upload_from_string(inst_mp3, content_type="audio/mpeg")
+            extra = {"modo": "rapido", "voz_path": caminho_voz, "inst_path": caminho_inst}
 
         bpm = tom = None
         if analisar_fn is not None:
@@ -75,8 +92,7 @@ def processar_um_job(db, bucket, separar_fn, analisar_fn=None, log=print):
                 pass  # BPM/tom são só um extra — nunca derrubam a separação
 
         ref.update({
-            "status": "pronto", "atualizado_em": _agora(),
-            "voz_path": caminho_voz, "inst_path": caminho_inst,
+            "status": "pronto", "atualizado_em": _agora(), **extra,
             "bpm": bpm, "tom": tom,
         })
         log(f"✅ Pronto em {time.time() - inicio:.0f} s")
@@ -87,17 +103,17 @@ def processar_um_job(db, bucket, separar_fn, analisar_fn=None, log=print):
 
 
 def rodar(db, bucket, separar_fn, analisar_fn=None, gpu=False,
-          intervalo_s=4, batida_s=20, log=print, parar=lambda: False):
+          intervalo_s=4, batida_s=20, log=print, parar=lambda: False, separar_completo_fn=None, separar_backing_fn=None):
     """Laço principal. `parar` existe só pra testes."""
     log("🟢 Separador ligado. Deixe esta célula rodando e volte ao Orange Harmony.")
     ultima_batida = 0.0
     try:
         while not parar():
             if time.time() - ultima_batida >= batida_s:
-                bater_coracao(db, True, gpu)
+                bater_coracao(db, True, gpu, separar_completo_fn is not None, separar_backing_fn is not None)
                 ultima_batida = time.time()
             try:
-                if processar_um_job(db, bucket, separar_fn, analisar_fn, log):
+                if processar_um_job(db, bucket, separar_fn, analisar_fn, log, separar_completo_fn, separar_backing_fn):
                     ultima_batida = 0.0      # avisa "online" logo depois de um trabalho longo
                     continue
             except Exception as e:
