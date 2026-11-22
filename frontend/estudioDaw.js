@@ -374,15 +374,32 @@
       <input type="file" id="dwArqSample" accept="audio/*" hidden>
       <input type="file" id="dwArqProj" accept=".ohstudio,.zip" hidden>
       <dialog id="dwAgentePainel" class="dw-agente" aria-labelledby="dwAgenteTitulo">
-        <div class="dw-modal-topo"><b id="dwAgenteTitulo">Laranjinha · Agente do Studio</b><button type="button" id="dwAgenteFechar" aria-label="Fechar agente">×</button></div>
-        <p class="dw-dica" id="dwAgenteContexto"></p>
+        <header class="dw-modal-topo dw-agente-topo">
+          <img src="laranjinha.png" alt="">
+          <div><b id="dwAgenteTitulo">Laranjinha</b><span>Agente do Studio</span></div>
+          <button type="button" id="dwAgenteFechar" aria-label="Fechar agente">×</button>
+        </header>
+        <p class="dw-agente-contexto" id="dwAgenteContexto"></p>
+        <section aria-labelledby="dwAgenteAtalhosTitulo">
+          <h3 id="dwAgenteAtalhosTitulo">Ações rápidas</h3>
+          <div class="dw-agente-atalhos" id="dwAgenteAtalhos">
+            <button type="button" data-acao="adiantar"><b>Adiantar 10 ms</b><span>Posição da região</span></button>
+            <button type="button" data-acao="atrasar"><b>Atrasar 10 ms</b><span>Posição da região</span></button>
+            <button type="button" data-acao="baixar"><b>Baixar 2 dB</b><span>Ganho da região</span></button>
+            <button type="button" data-acao="silenciar"><b>Silenciar trecho</b><span>Intervalo selecionado</span></button>
+            <button type="button" data-acao="limpar"><b>Reduzir chiado</b><span>Ruído de fundo</span></button>
+            <button type="button" data-acao="mudo"><b id="dwAgenteMudo">Mutar faixa</b><span>Controle do mixer</span></button>
+          </div>
+        </section>
         <form id="dwAgenteForm">
-          <label for="dwAgentePedido">O que você quer ajustar?</label>
+          <label for="dwAgentePedido">Ou descreva o ajuste</label>
           <textarea id="dwAgentePedido" rows="3" maxlength="500" placeholder="Ex.: atrase a região selecionada em 25 ms" required></textarea>
           <div class="dw-acoes"><button class="dw-btn" id="dwAgentePropor" type="submit">Propor edição</button></div>
         </form>
-        <p class="dw-dica" id="dwAgenteStatus" role="status"></p>
-        <div class="dw-acoes"><button class="dw-btn cheio" type="button" id="dwAgenteAplicar" hidden>Aplicar edição</button></div>
+        <div class="dw-agente-proposta" id="dwAgenteProposta" hidden>
+          <p id="dwAgenteStatus" role="status"></p>
+          <div class="dw-acoes"><button class="dw-btn peq" type="button" id="dwAgenteDescartar" hidden>Descartar</button><button class="dw-btn cheio" type="button" id="dwAgenteAplicar" hidden>Aplicar edição</button></div>
+        </div>
       </dialog>
       <div class="dw-modal" id="dwModalExp" hidden>
         <div class="dw-modal-cartao">
@@ -1463,7 +1480,20 @@
     if (!r || r.gravando) { a.limpar("Selecione uma região de voz na linha do tempo (clique nela) para ver e ajustar a afinação."); return; }
     const base = baseDaRegiao(r); if (!base) { a.limpar("Esta região ainda não tem áudio."); return; }
     const chave = `${r.id}:${base.ref.buf}:${base.ini}:${base.fim}`, comp = COMPASSOS[S.compasso];
-    const dados = { chave, cents: r.afin?.cents, ignorados: r.afin?.ignorados, origemTempo: r.ini, batidaSeg: beatDur(), porCompasso: comp.n, tonica: S.tom, nome: r.nome };
+    const processada = r.afin ? (r.afinada ? r : r.alt) : null;
+    const bufferProcessado = processada && bufs.get(processada.buf);
+    const lerAfinado = bufferProcessado && bufferProcessado.sampleRate === base.sr ? () => {
+      const inicio = Math.max(0, Math.round(processada.off * base.sr));
+      const n = base.fim - base.ini, mono = new Float32Array(n), nc = bufferProcessado.numberOfChannels;
+      const fim = Math.min(n, bufferProcessado.length - inicio);
+      for (let c = 0; c < nc; c++) {
+        const dados = bufferProcessado.getChannelData(c);
+        for (let i = 0; i < fim; i++) mono[i] += dados[inicio + i] / nc;
+      }
+      return mono;
+    } : null;
+    const chaveAfinada = lerAfinado ? `${processada.buf}:${processada.off}` : null;
+    const dados = { chave, chaveAfinada, lerAfinado, silenciada: !!r.silenciada, cents: r.afin?.cents, ignorados: r.afin?.ignorados, origemTempo: r.ini, batidaSeg: beatDur(), porCompasso: comp.n, tonica: S.tom, nome: r.nome };
     if (!(a.E.carregado && a.E.chave === chave)) {
       const nc = base.buf.numberOfChannels, n = base.fim - base.ini, mono = new Float32Array(n);
       for (let c = 0; c < nc; c++) { const d = base.buf.getChannelData(c); for (let i = 0; i < n; i++) mono[i] += d[base.ini + i] / nc; }
@@ -1922,56 +1952,109 @@
     }
   }
 
+  function alvoDoSilencioAgente(contexto) {
+    const trecho = contexto.trecho;
+    if (!trecho || trecho.fim - trecho.ini < MIN_TRECHO) return null;
+    const regioes = contexto.regioes.filter((r) =>
+      r.faixa === trecho.faixa && Math.min(r.fim, trecho.fim) - Math.max(r.inicio, trecho.ini) >= MIN_TRECHO
+    );
+    return regioes.find((r) => r.id === contexto.regiaoSelecionada) || (regioes.length === 1 ? regioes[0] : null);
+  }
+
   function ligarAgenteStudio() {
     const painel = $("#dwAgentePainel"), pedido = $("#dwAgentePedido"), status = $("#dwAgenteStatus");
-    const propor = $("#dwAgentePropor"), aplicar = $("#dwAgenteAplicar");
+    const propor = $("#dwAgentePropor"), aplicar = $("#dwAgenteAplicar"), cancelar = $("#dwAgenteDescartar");
+    const cartao = $("#dwAgenteProposta"), atalhos = $("#dwAgenteAtalhos");
     let proposta = null, consulta = null;
-    const descartar = () => { proposta = null; aplicar.hidden = true; };
+    const mostrar = (texto = "") => {
+      cartao.hidden = !texto;
+      status.textContent = texto;
+      aplicar.hidden = cancelar.hidden = !proposta;
+    };
+    const descartar = () => { proposta = null; mostrar(); };
+    const proporPlano = (plano, contexto, estado, projeto) => {
+      proposta = { ...prepararPlanoAgente(plano, contexto), estado, projeto };
+      mostrar(proposta.descricao);
+    };
     $("#dwLaranjinha").addEventListener("click", () => {
       const c = contextoAgenteStudio(), r = regiaoPorId(c.regiaoSelecionada), f = faixaPorId(c.faixaSelecionada);
       const trecho = c.trecho && c.trecho.fim - c.trecho.ini >= MIN_TRECHO
         ? ` · Trecho: ${c.trecho.ini.toFixed(3)}–${c.trecho.fim.toFixed(3)} s` : "";
       $("#dwAgenteContexto").textContent = `${r ? `Região: ${r.nome} · ${faixaPorId(r.f)?.nome}` : f ? `Faixa: ${f.nome}` : "Selecione uma região para dar contexto ao pedido."}${trecho}`;
-      descartar(); status.textContent = "";
-      painel.showModal(); pedido.focus();
+      $$("#dwAgenteAtalhos button").forEach((botao) => {
+        const acao = botao.dataset.acao;
+        botao.disabled = acao === "mudo" ? !f : acao === "silenciar" ? !alvoDoSilencioAgente(c) : !r;
+      });
+      $("#dwAgenteMudo").textContent = f?.mudo ? "Reativar faixa" : "Mutar faixa";
+      descartar();
+      painel.showModal();
     });
     $("#dwAgenteFechar").addEventListener("click", () => painel.close());
-    painel.addEventListener("close", () => { consulta?.abort(); descartar(); });
-    pedido.addEventListener("input", () => { if (proposta) { descartar(); status.textContent = ""; } });
+    painel.addEventListener("close", () => {
+      consulta?.abort(); consulta = null; propor.disabled = false; descartar();
+    });
+    pedido.addEventListener("input", () => { if (proposta) descartar(); });
+    cancelar.addEventListener("click", descartar);
+    atalhos.addEventListener("click", (ev) => {
+      const botao = ev.target.closest("[data-acao]");
+      if (!botao || botao.disabled) return;
+      consulta?.abort();
+      consulta = null;
+      propor.disabled = false;
+      descartar();
+      const c = contextoAgenteStudio(), regiao = c.regiaoSelecionada;
+      const f = faixaPorId(c.faixaSelecionada);
+      const acoes = {
+        adiantar: { acao: "mover", regiao, ms: -10 },
+        atrasar: { acao: "mover", regiao, ms: 10 },
+        baixar: { acao: "ganho", regiao, db: -2 },
+        limpar: { acao: "limpar_ruido", regiao },
+        mudo: { acao: "mudo_faixa", faixa: f?.id, mudo: !f?.mudo },
+      };
+      let plano = acoes[botao.dataset.acao];
+      if (botao.dataset.acao === "silenciar") {
+        const alvo = alvoDoSilencioAgente(c);
+        if (!alvo) return mostrar("Selecione um trecho em uma única região ou indique a região no pedido.");
+        plano = { acao: "silenciar", regiao: alvo.id, inicio: Math.max(alvo.inicio, c.trecho.ini), fim: Math.min(alvo.fim, c.trecho.fim) };
+      }
+      try { proporPlano(plano, c, foto(), S.id); }
+      catch (e) { mostrar(e.message); }
+    });
     $("#dwAgenteForm").addEventListener("submit", async (ev) => {
       ev.preventDefault();
       if (consulta) return;
       const mensagem = pedido.value.trim();
       if (!mensagem) return;
       const contexto = contextoAgenteStudio();
-      if (!contexto.faixas.length) { status.textContent = "Adicione uma faixa antes de pedir uma edição."; return; }
+      if (!contexto.faixas.length) { mostrar("Adicione uma faixa antes de pedir uma edição."); return; }
       descartar();
       const controller = new AbortController(); consulta = controller;
       const projeto = S.id, estado = foto();
       const form = new FormData(); form.append("mensagem", mensagem); form.append("contexto", JSON.stringify(contexto));
-      propor.disabled = true; status.textContent = "Preparando proposta…";
+      propor.disabled = true; mostrar("Preparando proposta…");
       const timer = setTimeout(() => controller.abort(), 35000);
       try {
         const resp = await fetch(`${API_BASE}/api/estudio/propor-edicao`, { method: "POST", body: form, signal: controller.signal });
         if (!resp.ok) throw new Error(resp.status === 503 ? "O agente está indisponível agora. Tente novamente." : "Não consegui consultar o agente do Studio.");
         const plano = await resp.json();
-        if (!painel.open || pedido.value.trim() !== mensagem) return;
+        if (consulta !== controller || !painel.open || pedido.value.trim() !== mensagem) return;
         if (projeto !== S.id || estado !== foto()) throw new Error("O projeto mudou. Peça uma proposta nova.");
-        const operacao = prepararPlanoAgente(plano, contexto);
-        proposta = { ...operacao, estado, projeto };
-        status.textContent = operacao.descricao; aplicar.hidden = false;
+        proporPlano(plano, contexto, estado, projeto);
       } catch (e) {
-        if (painel.open) status.textContent = e.name === "AbortError" ? "A consulta foi interrompida." : e.message;
+        if (consulta === controller && painel.open) mostrar(e.name === "AbortError" ? "A consulta foi interrompida." : e.message);
       } finally {
-        clearTimeout(timer); consulta = null; propor.disabled = false;
-        if (painel.open && status.textContent === "Preparando proposta…") status.textContent = "";
+        clearTimeout(timer);
+        if (consulta === controller) {
+          consulta = null; propor.disabled = false;
+          if (painel.open && status.textContent === "Preparando proposta…") mostrar();
+        }
       }
     });
     aplicar.addEventListener("click", async () => {
       if (!proposta) return;
       const operacao = proposta; descartar();
-      if (operacao.projeto !== S.id || operacao.estado !== foto()) { status.textContent = "O projeto mudou. Peça uma proposta nova."; return; }
-      if (bloqueioTrecho()) { status.textContent = $("#dwStatus").textContent; return; }
+      if (operacao.projeto !== S.id || operacao.estado !== foto()) { mostrar("O projeto mudou. Peça uma proposta nova."); return; }
+      if (bloqueioTrecho()) { mostrar($("#dwStatus").textContent); return; }
       painel.close();
       try {
         const antes = pilha.at(-1), estado = foto();

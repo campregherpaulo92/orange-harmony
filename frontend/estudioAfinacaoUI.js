@@ -76,7 +76,7 @@
     const TONS = [["cromatica", "Cromática (todos os semitons)"]]; NOMES.forEach((n, i) => TONS.push(["M" + i, n + " maior"])); NOMES.forEach((n, i) => TONS.push(["m" + i, n + " menor"]));
     host.innerHTML = `<div class="af">
       <div class="af-barra">
-        <div class="af-grupo af-g1"><b>Ouvir</b><span class="af-seg"><button id="afOrig" class="on">Original</button><button id="afAfin">Afinado</button></span>
+        <div class="af-grupo af-g1"><b>Ouvir</b><span class="af-seg"><button id="afOrig" class="on" aria-pressed="true" title="Ouvir a região antes da afinação">Original</button><button id="afAfin" aria-pressed="false" title="Ouvir a afinação da região">Afinado</button></span>
           <button id="afPlay" class="cheio">▶ Tocar</button><span class="af-tempo" id="afTempo">0:00.0</span>
           <label title="Muda a velocidade SEM mudar o tom (bom para ouvir um pedacinho com calma)">Velocidade <select id="afVel"><option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1" selected>100%</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="2">200%</option></select></label>
           <label title="Seleciona um trecho (arrastando numa área vazia) e toca só ele, sem parar"><input type="checkbox" id="afLoop"> Repetir a seleção</label></div>
@@ -253,8 +253,8 @@
     // "pendente" = a curva de ajuste é diferente da que já está gravada no áudio da região (só o botão "Aplicar na região" grava)
     const pendente = () => { if (!E.cents) return false; const ap = E.aplicado; for (let q = 0; q < E.cents.length; q++) if (E.ignorados[q] !== E.aplicadoIgnorados[q] || Math.abs(E.cents[q] - (ap && q < ap.length ? ap[q] : 0)) > 0.05) return true; return false; };
     function marcarPendente() { const p = !!E.det && pendente(), b = $("afAplicar"); if (b) b.classList.toggle("pendente", p); if (opc.aoPendente) opc.aoPendente(p); return p; }
-    function ouvirAfinado() { if (E.ouvir === "afinado") return; E.ouvir = "afinado"; $("afAfin").classList.add("on"); $("afOrig").classList.remove("on"); trocarFonte(); }
-    function mudou() { E.sujo = true; if (E.cents && (E.ouvir === "afinado" || E.ignorados.some(Boolean) || E.cents.some((v) => Math.abs(v) > 0.5))) ouvirAfinado(); /* depois de editar, o "Tocar" já toca o AFINADO */ marcarPendente(); if (opc.aoMudar) opc.aoMudar(); }
+    function ouvirAfinado() { escolherFonte("afinado"); }
+    function mudou() { invalidarAfinado(); if (E.cents && (E.ouvir === "afinado" || E.ignorados.some(Boolean) || E.cents.some((v) => Math.abs(v) > 0.5))) ouvirAfinado(); /* depois de editar, o "Tocar" já toca o AFINADO */ marcarPendente(); if (opc.aoMudar) opc.aoMudar(); }
     function empilhar(antes) { E.undo.push(antes); if (E.undo.length > 60) E.undo.shift(); E.redo.length = 0; botoes(); mudou(); }
     const fotoEdicao = () => ({ cents: E.cents.slice(), ignorados: E.ignorados.slice() });
     function recalcularNotas() {
@@ -272,7 +272,7 @@
       recalcularNotas();
       parar(); empilhar(antes);
       desenhar(); atualizarInfo();
-      status("Pontos ignorados na correção. Toque em “Afinado” para comparar ou use “Desfazer”.");
+      status("Pontos ignorados na correção. O áudio desses pontos permanece como foi gravado.");
     }
     function detParaCorrecao() {
       if (!E.ignorados.some(Boolean)) return E.det;
@@ -373,34 +373,106 @@
     // ── áudio de prévia: um <audio> do navegador, que muda a velocidade SEM mudar o tom ──
     const au = new Audio(); au.preload = "auto"; au.preservesPitch = true; au.webkitPreservesPitch = true;
     au.addEventListener("ended", () => { if (!E.ocupado) { E.tocando = false; $("afPlay").textContent = "▶ Tocar"; } });
-    function renderizar() { if (!E.det) return; E.afinado = AF.corrigirAltura(E.mono, E.sr, detParaCorrecao(), E.cents); E.sujo = false; if (E.urlA) { URL.revokeObjectURL(E.urlA); E.urlA = null; } }
+    let fonteAplicada = null, chaveAfinada = null, previaSilenciada = false, troca = null, animacao = 0;
+    function invalidarAfinado() {
+      E.sujo = true;
+      if (E.urlA) { URL.revokeObjectURL(E.urlA); E.urlA = null; }
+    }
+    function renderizar() {
+      if (!E.det) return;
+      const salvo = fonteAplicada && !pendente();
+      E.afinado = salvo ? fonteAplicada() : AF.corrigirAltura(E.mono, E.sr, detParaCorrecao(), E.cents);
+      const pcm = (x) => Math.trunc(Math.max(-1, Math.min(1, x)) * 32767);
+      E.previaDiferente = E.afinado.some((v, i) => pcm(v) !== pcm(E.mono[i]));
+      invalidarAfinado();
+      E.sujo = false;
+    }
+    function informarPrevia(modo) {
+      const extra = previaSilenciada ? " A região está silenciada na mixagem." : "";
+      if (modo === "original") return status("Ouvindo a região antes da afinação." + extra);
+      if (E.previaDiferente) return status("Ouvindo a versão afinada da região." + extra);
+      const pontos = E.ignorados.some(Boolean) ? " Ignorar pontos só muda onde a correção atua." : "";
+      status("O áudio da prévia Afinado ficou igual ao Original." + pontos + extra);
+    }
     function urlDe(m) {
       if (m === "original") { if (!E.urlO) E.urlO = URL.createObjectURL(wav(E.mono, E.sr)); return E.urlO; }
       if (E.sujo || !E.afinado) renderizar(); if (!E.urlA) E.urlA = URL.createObjectURL(wav(E.afinado, E.sr)); return E.urlA;
     }
-    const esperarEv = (ev) => new Promise((ok) => au.addEventListener(ev, ok, { once: true }));
-    async function carregarFonte(m) { const url = urlDe(m); if (au.dataset.url === url) return; au.src = url; au.dataset.url = url; await esperarEv("loadedmetadata"); }
+    async function carregarFonte(m, signal) {
+      const url = urlDe(m);
+      if (au.dataset.url === url && au.readyState >= 1) return;
+      await new Promise((ok, rejeitar) => {
+        const concluir = (erro) => {
+          clearTimeout(timer);
+          au.removeEventListener("loadedmetadata", pronto);
+          au.removeEventListener("error", falha);
+          signal.removeEventListener("abort", abortar);
+          if (erro) rejeitar(erro); else ok();
+        };
+        const pronto = () => concluir();
+        const falha = () => { au.dataset.url = ""; concluir(new Error("Áudio indisponível.")); };
+        const abortar = () => concluir(new DOMException("Prévia interrompida.", "AbortError"));
+        const timer = setTimeout(falha, 8000);
+        au.addEventListener("loadedmetadata", pronto);
+        au.addEventListener("error", falha);
+        signal.addEventListener("abort", abortar);
+        au.dataset.url = url;
+        au.src = url;
+      });
+    }
     function aplicarVel() { au.defaultPlaybackRate = E.vel; au.playbackRate = E.vel; au.preservesPitch = true; au.webkitPreservesPitch = true; }
     function definirPos(t) { E.pos = Math.max(0, Math.min(E.dur, t)); if (au.dataset.url) { try { au.currentTime = E.pos; } catch (e) { /* ainda carregando */ } } $("afTempo").textContent = fmt(E.pos); desenhar(); }
-    async function tocar() {
-      if (!E.mono || E.ocupado) return; E.ocupado = true; if (opc.aoTocar) opc.aoTocar();
+    async function tocar(pos = E.pos) {
+      if (!E.det) return;
+      const modo = E.ouvir;
+      parar();
+      const atual = new AbortController();
+      troca = atual; E.ocupado = true;
+      if (opc.aoTocar) opc.aoTocar();
       try {
-        await carregarFonte(E.ouvir); aplicarVel(); let ini = E.pos; if (E.loop && E.sel && (ini < E.sel[0] || ini >= E.sel[1])) ini = E.sel[0]; if (ini >= E.dur - 0.05) ini = 0;
-        au.currentTime = ini; await au.play(); E.tocando = true; E.nTocadas++; $("afPlay").textContent = "■ Parar"; requestAnimationFrame(tick);
-      } catch (e) { status("Não consegui tocar o áudio neste navegador."); } finally { E.ocupado = false; }
+        await carregarFonte(modo, atual.signal);
+        if (troca !== atual) return;
+        aplicarVel();
+        let ini = pos;
+        if (E.loop && E.sel && (ini < E.sel[0] || ini >= E.sel[1])) ini = E.sel[0];
+        if (ini >= E.dur - 0.05) ini = 0;
+        au.currentTime = ini;
+        await au.play();
+        if (troca !== atual) return;
+        E.tocando = true; E.nTocadas++;
+        $("afPlay").textContent = "■ Parar";
+        informarPrevia(modo);
+        animacao = requestAnimationFrame(tick);
+      } catch (e) {
+        if (troca === atual) status("Não consegui tocar a prévia neste navegador.");
+      } finally {
+        if (troca === atual) { troca = null; E.ocupado = false; }
+      }
     }
-    function parar() { au.pause(); E.tocando = false; $("afPlay").textContent = "▶ Tocar"; }
-    async function trocarFonte() { if (!E.tocando || E.ocupado) return; E.ocupado = true; const t = au.currentTime; try { au.pause(); await carregarFonte(E.ouvir); aplicarVel(); au.currentTime = t; await au.play(); E.nTocadas++; } finally { E.ocupado = false; } }
+    function parar() {
+      troca?.abort(); troca = null; cancelAnimationFrame(animacao);
+      au.pause(); E.tocando = false; E.ocupado = false;
+      $("afPlay").textContent = "▶ Tocar";
+    }
+    function escolherFonte(modo) {
+      const tocarAgora = E.tocando || E.ocupado, pos = E.tocando ? au.currentTime : E.pos;
+      E.ouvir = modo;
+      for (const [id, selecionado] of [["afOrig", modo === "original"], ["afAfin", modo === "afinado"]]) {
+        $(id).classList.toggle("on", selecionado);
+        $(id).setAttribute("aria-pressed", String(selecionado));
+      }
+      if (tocarAgora) tocar(pos);
+    }
     function tick() {
       if (!E.tocando) return; E.pos = au.currentTime;
       if (E.loop && E.sel && E.pos >= E.sel[1]) { au.currentTime = E.sel[0]; E.pos = E.sel[0]; E.voltas++; }
-      $("afTempo").textContent = fmt(E.pos); const x = X(E.pos); if (x > vp.clientWidth * 0.9 || x < LEFT) vp.scrollLeft = Math.max(0, E.pos * E.pps - vp.clientWidth * 0.2); desenhar(); requestAnimationFrame(tick);
+      $("afTempo").textContent = fmt(E.pos); const x = X(E.pos); if (x > vp.clientWidth * 0.9 || x < LEFT) vp.scrollLeft = Math.max(0, E.pos * E.pps - vp.clientWidth * 0.2); desenhar(); animacao = requestAnimationFrame(tick);
     }
 
     // ── carregar uma voz ──
     function vazio(txt) { const v = $("afVazio"); v.textContent = txt || ""; v.classList.toggle("on", !!txt); }
     function sugestaoDeTom(t) { const i = NOMES.indexOf(String(t || "").toUpperCase().replace("♯", "#")); const sel = $("afTom"); sel.querySelectorAll("option[data-sug]").forEach((o) => o.remove()); if (i >= 0) { const o = document.createElement("option"); o.value = "M" + i; o.dataset.sug = "1"; o.textContent = `Sugestão do app: ${NOMES[i]} maior (o app só estima a nota-base)`; sel.insertBefore(o, sel.options[1]); } }
-    function limpar(msg) { analiseAtual++; $("afCarregando").classList.remove("on"); parar(); E.drag = null; E.hover = -1; limparPontos(); E.undo = []; E.redo = []; E.cents = null; E.ignorados = null; E.det = null; E.mono = null; E.carregado = false; E.chave = null; E.sel = null; vazio(msg || "Selecione uma região de voz na linha do tempo para ver e ajustar a afinação."); status(msg ? "" : "Selecione uma região de voz."); $("afInfo").textContent = ""; botoes(); marcarPendente(); desenhar(); }
+    function limpar(msg) { fonteAplicada = null; chaveAfinada = null; previaSilenciada = false; analiseAtual++; $("afCarregando").classList.remove("on"); parar(); E.drag = null; E.hover = -1; limparPontos(); E.undo = []; E.redo = []; E.cents = null; E.ignorados = null; E.det = null; E.mono = null; E.carregado = false; E.chave = null; E.sel = null; vazio(msg || "Selecione uma região de voz na linha do tempo para ver e ajustar a afinação."); status(msg ? "" : "Selecione uma região de voz."); $("afInfo").textContent = ""; botoes(); marcarPendente(); desenhar(); }
     function carregarEdicao(d) {
       E.cents = new Float32Array(E.det.n);
       E.ignorados = new Uint8Array(E.det.n);
@@ -414,6 +486,11 @@
       limparPontos(); recalcularNotas(); botoes(); marcarPendente();
     }
     async function carregar(d) {
+      fonteAplicada = d.lerAfinado || null;
+      previaSilenciada = !!d.silenciada;
+      if (chaveAfinada !== d.chaveAfinada) {
+        parar(); invalidarAfinado(); chaveAfinada = d.chaveAfinada;
+      }
       E.beat = d.batidaSeg || 60 / (d.bpm || E.bpm); E.porComp = d.porCompasso || 4; E.origem = d.origemTempo || 0; E.nome = d.nome || "voz"; sugestaoDeTom(d.tonica);
       if (E.carregado && d.chave && d.chave === E.chave && E.det) {
         const mudouAplicado = E.aplicado.some((v, q) => {
@@ -476,9 +553,9 @@
     $("afIgnorarPontos").onclick = ignorarPontos;
     $("afDesfazer").onclick = desfazer; $("afRefazer").onclick = refazer;
     $("afReverter").onclick = () => { if (!E.det) return; const antes = fotoEdicao(); E.cents.fill(0); E.ignorados.fill(0); limparPontos(); recalcularNotas(); empilhar(antes); desenhar(); atualizarInfo(); status("Voltou tudo para a voz como foi cantada."); };
-    $("afOrig").onclick = () => { E.ouvir = "original"; $("afOrig").classList.add("on"); $("afAfin").classList.remove("on"); trocarFonte(); };
-    $("afAfin").onclick = () => { E.ouvir = "afinado"; $("afAfin").classList.add("on"); $("afOrig").classList.remove("on"); trocarFonte(); };
-    $("afPlay").onclick = () => { if (E.tocando) parar(); else tocar(); };
+    $("afOrig").onclick = () => escolherFonte("original");
+    $("afAfin").onclick = () => escolherFonte("afinado");
+    $("afPlay").onclick = () => { if (E.tocando || E.ocupado) parar(); else tocar(); };
     $("afVel").onchange = (e) => { E.vel = +e.target.value; aplicarVel(); status(`Velocidade ${Math.round(E.vel * 100)}%: o tom continua o mesmo.`); };
     $("afLoop").onchange = (e) => { E.loop = e.target.checked; status(E.loop ? "Vai repetir a seleção (arraste numa área vazia para selecionar um trecho)." : "Repetição desligada."); };
     $("afAjustes").onclick = () => { const on = $("afPainel").classList.toggle("on"); $("afAjustes").textContent = on ? "Ajustes ▴" : "Ajustes ▾"; dimensionar(); };

@@ -335,9 +335,24 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-selecionando-trecho .dw-regiao, .dw-selecionando-trecho .dw-regiao .alca { cursor: crosshair; }
 .dw-trecho-selecao { position: absolute; top: 1px; bottom: 1px; z-index: 5; pointer-events: none; background: rgba(56, 189, 248, .25); border-inline: 1px solid #7dd3fc; }
 
-/* Propostas de edição da Laranjinha no Studio */
-.dw-agente { width: min(520px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 18px 20px; background: var(--dw-painel); color: var(--dw-texto); border: 1px solid var(--dw-borda-forte); border-radius: 16px; }
-.dw-agente::backdrop { background: rgba(0, 0, 0, .65); }
-.dw-agente form { display: grid; gap: 8px; }
-.dw-agente textarea { width: 100%; padding: 8px; resize: vertical; font: inherit; color: inherit; background: var(--dw-fundo); border: 1px solid var(--dw-borda-forte); border-radius: 8px; }
+/* Agente do Studio */
+.dw-agente { width: min(600px, calc(100% - 24px)); max-height: calc(100% - 24px); padding: clamp(14px, 3vw, 24px); background: linear-gradient(155deg, var(--dw-painel2), var(--dw-fundo) 75%); color: var(--dw-texto); border: 1px solid var(--dw-borda-forte); border-radius: 20px; box-shadow: 0 24px 85px #000b; }
+.dw-agente::backdrop { background: rgba(0, 0, 0, .62); }
+.dw-agente-topo { justify-content: flex-start; gap: 12px; }
+.dw-agente-topo img { width: 48px; height: 48px; object-fit: cover; border-radius: 14px; }
+.dw-agente-topo b { display: block; font-size: 20px; }
+.dw-agente-topo span { color: var(--dw-suave); font-size: 12px; }
+.dw-agente-topo button { margin-left: auto; }
+.dw-agente-contexto { padding: 10px 12px; border-left: 2px solid var(--dw-turq); background: var(--dw-painel); overflow-wrap: anywhere; font-size: 13px; }
+.dw-agente h3 { margin: 0 0 8px; font-size: 14px; }
+.dw-agente-atalhos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr)); gap: 8px; }
+.dw-agente-atalhos button { padding: 10px 11px; text-align: left; font: inherit; color: inherit; background: var(--dw-painel2); border: 1px solid var(--dw-borda); border-radius: 10px; cursor: pointer; }
+.dw-agente-atalhos button:not(:disabled):hover, .dw-agente-atalhos button:focus-visible { border-color: var(--dw-laranja); }
+.dw-agente-atalhos button:disabled { opacity: .5; cursor: not-allowed; }
+.dw-agente-atalhos span { display: block; margin-top: 3px; font-size: 11px; color: var(--dw-suave); }
+.dw-agente form { display: grid; gap: 8px; margin-top: 18px; }
+.dw-agente textarea { width: 100%; padding: 9px; resize: vertical; font: inherit; color: inherit; background: var(--dw-fundo); border: 1px solid var(--dw-borda-forte); border-radius: 10px; }
+.dw-agente-proposta { margin-top: 12px; padding: 10px 12px; background: var(--dw-painel2); border: 1px solid var(--dw-borda); border-radius: 12px; }
+.dw-agente-proposta p { margin: 0; overflow-wrap: anywhere; }
+.dw-agente-proposta .dw-acoes:has(button:not([hidden])) { margin-top: 8px; }
 .dw-agente [hidden] { display: none; }
