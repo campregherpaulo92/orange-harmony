@@ -68,6 +68,7 @@
             <div id="dsEditor" hidden>
               <div class="ds-linha ds-tomada-campos">
                 <label>Tomada <select id="dsTomada"></select></label>
+                <button type="button" class="dw-btn peq" id="dsExcluirTomada" title="Excluir tomada selecionada" aria-label="Excluir tomada selecionada">${ic("lixeira")}</button>
                 <label>Nome da faixa <input id="dsNome" type="text" maxlength="60"></label>
                 <button type="button" class="dw-btn peq" id="dsOuvirTomada">${ic("play")} Ouvir com a base</button>
               </div>
@@ -127,12 +128,14 @@
       $("dsTeste").disabled = !entrada;
       $("dsGravar").disabled = travado;
       $("dsFechar").disabled = travado;
-      $("dsParar").disabled = !gravacao && !transporte || operacao === "decodificando" || !!gravacao?.encerrando;
+      const finalizando = !!gravacao?.encerrando || operacao === "decodificando";
+      $("dsParar").disabled = finalizando || !(operacao || gravacao || transporte);
       const editor = $("dsEditor");
       editor.inert = travado;
       $("dsOuvirBase").disabled = !faixasMarcadas().length;
       const tomada = tomadaAtual();
       $("dsEnviar").disabled = !tomada || tomada.enviada || tomada.teste;
+      $("dsExcluirTomada").disabled = travado || !tomada;
     }
 
     async function listarEntradas() {
@@ -188,7 +191,7 @@
           return item;
         } catch (erro) {
           pararStream(stream);
-          if (dialog.open && sessao === atual) estado(motor.erroEntrada(erro));
+          if (dialog.open && sessao === atual && ativando === pedido) estado(motor.erroEntrada(erro));
           return null;
         } finally {
           if (ativando === pedido) ativando = null;
@@ -251,11 +254,24 @@
       g.metro = setInterval(avancar, 30);
     }
 
-    function limparCaptura(g) {
+    function pararRetornoCaptura(g) {
       clearInterval(g.metro);
       g.clickBus?.disconnect();
+      g.clickBus = null;
       pararTransporte();
+    }
+
+    function limparCaptura(g) {
+      pararRetornoCaptura(g);
       gravacao = null;
+    }
+
+    function cancelarAbertura() {
+      if (!operacao || operacao === "decodificando") return;
+      operacao = "";
+      fecharEntrada();
+      estado("Abertura da gravação cancelada.");
+      controles();
     }
 
     function pararGravacao() {
@@ -263,25 +279,24 @@
       if (!g || g.encerrando) return;
       g.encerrando = true;
       g.parou = ctx.currentTime;
-      clearInterval(g.metro);
-      g.clickBus?.disconnect();
-      pararTransporte();
-      if (g.rec.state !== "inactive") g.rec.stop();
+      pararRetornoCaptura(g);
+      estado("Finalizando a gravação…");
       controles();
+      if (g.rec.state !== "inactive") g.rec.stop();
     }
 
     async function iniciarGravacao(teste) {
       if (ocupado()) return;
+      const pedido = {};
       try {
         const intervaloAtual = teste ? { inicio: 0, fim: 3 } : intervalo();
         const atraso = $("dsAtraso").valueAsNumber;
         if (!teste && (!Number.isFinite(atraso) || atraso < 0 || atraso > 500)) throw new Error("Informe um atraso entre 0 e 500 ms.");
         pararTransporte();
-        operacao = "abrindo";
+        operacao = pedido;
         controles();
         const dispositivo = await ativarEntrada();
-        operacao = "";
-        if (!dispositivo || !dialog.open) return;
+        if (operacao !== pedido || !dispositivo || !dialog.open) return;
         const rec = motor.criarGravador(dispositivo.stream);
         const g = { ...intervaloAtual, rec, teste, atraso: teste ? 0 : atraso / 1000, partes: [], sessao,
           pre: teste ? 0 : Number($("dsConta").value) * projeto.tempos };
@@ -307,7 +322,7 @@
         if (gravacao) limparCaptura(gravacao);
         estado(erro.message || "Não consegui iniciar a gravação.");
       } finally {
-        operacao = "";
+        if (operacao === pedido) operacao = "";
         controles();
       }
     }
@@ -373,7 +388,7 @@
           controles();
         }
       } else {
-        texto("dsFase", operacao === "decodificando" ? "Lendo a tomada" : ocupado() ? "Preparando entrada" : "Pronto para gravar");
+        texto("dsFase", operacao === "decodificando" || gravacao?.encerrando ? "Finalizando gravação" : ocupado() ? "Preparando entrada" : "Pronto para gravar");
       }
       frame = requestAnimationFrame(animar);
     }
@@ -411,8 +426,8 @@
       const t = tomadaAtual();
       $("dsEditor").hidden = !t;
       $("dsSemTomadas").hidden = !!t;
-      if (!t) return;
       $("dsTomada").replaceChildren(...sessao.tomadas.map((x) => new Option(x.nome + (x.enviada ? " · enviada" : ""), x.id)));
+      if (!t) { controles(); return; }
       $("dsTomada").value = t.id;
       $("dsNome").value = t.nome;
       $("dsCorteA").value = segundos(t.a);
@@ -422,6 +437,18 @@
       $("dsAlinhar").value = Math.round(t.deslocamento * 1000);
       $("dsOuvirTomada").innerHTML = ic("play") + (t.teste ? " Ouvir teste" : " Ouvir com a base");
       atualizarDestino(t);
+    }
+
+    function excluirTomada() {
+      const tomada = tomadaAtual();
+      if (!tomada || ocupado() || !window.confirm(`Excluir “${tomada.nome}” da Sala de Gravação?`)) return;
+      pararTransporte();
+      const indice = sessao.tomadas.indexOf(tomada);
+      sessao.tomadas.splice(indice, 1);
+      sessao.selecionada = (sessao.tomadas[indice] || sessao.tomadas[indice - 1])?.id ?? null;
+      renderTomadas();
+      (tomadaAtual() ? $("dsTomada") : $("dsGravar")).focus();
+      estado(`“${tomada.nome}” excluída da sala.`);
     }
 
     function atualizarMarcador(tempo = $("dsDivisao").valueAsNumber) {
@@ -484,6 +511,7 @@
     }
 
     function fechar() {
+      cancelarAbertura();
       pararTransporte();
       if (gravacao) pararGravacao();
       fecharEntrada();
@@ -529,6 +557,7 @@
     $("dsTeste").onclick = () => iniciarGravacao(true);
     $("dsParar").onclick = () => {
       if (gravacao) pararGravacao();
+      else if (operacao) cancelarAbertura();
       else { pararTransporte(); controles(); }
     };
     $("dsFaixas").onchange = () => { pararTransporte(); sessao.referencias = faixasMarcadas(); controles(); };
@@ -544,6 +573,7 @@
       } catch (erro) { estado(erro.message); }
     };
     ["dsVolBase", "dsVolEntrada", "dsVolClique", "dsMonitor"].forEach((id) => { $(id).oninput = atualizarMix; });
+    $("dsExcluirTomada").onclick = excluirTomada;
     $("dsTomada").onchange = (e) => { pararTransporte(); sessao.selecionada = +e.target.value; renderTomadas(); };
     $("dsNome").onchange = (e) => { const t = tomadaAtual(); t.nome = e.target.value.trim() || nomePadrao(t.id); renderTomadas(); };
     $("dsCorteA").onchange = $("dsCorteB").onchange = editarRecorte;
