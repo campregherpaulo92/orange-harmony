@@ -2,12 +2,14 @@
 (function () {
   "use strict";
 
+  const urlCaptura = new URL("estudioSalaCaptura.js?v=1", document.currentScript.src).href;
+
   function criar(dialog, motor) {
     const { ctx, ic, esc } = motor;
     const $ = (id) => dialog.querySelector("#" + id);
     const projetos = new Map();
     let projeto = null, sessao = null, entrada = null, ativando = null, gravacao = null;
-    let transporte = null, frame = 0, operacao = "", contador = 0;
+    let transporte = null, frame = 0, operacao = "", contador = 0, moduloCaptura;
     const nomePadrao = (n) => "Tomada " + n;
     const duracaoMinima = 0.05;
     const ganhoBase = ctx.createGain(), ganhoClique = ctx.createGain(), ganhoEntrada = ctx.createGain(), ganhoTomada = ctx.createGain();
@@ -128,7 +130,7 @@
       $("dsTeste").disabled = !entrada;
       $("dsGravar").disabled = travado;
       $("dsFechar").disabled = travado;
-      const finalizando = !!gravacao?.encerrando || operacao === "decodificando";
+      const finalizando = !!gravacao?.encerrando;
       $("dsParar").disabled = finalizando || !(operacao || gravacao || transporte);
       const editor = $("dsEditor");
       editor.inert = travado;
@@ -263,11 +265,14 @@
 
     function limparCaptura(g) {
       pararRetornoCaptura(g);
+      if (entrada?.fonte === g.fonte) g.fonte.disconnect(g.captura);
+      g.captura.disconnect();
+      g.captura.port.close();
       gravacao = null;
     }
 
     function cancelarAbertura() {
-      if (!operacao || operacao === "decodificando") return;
+      if (!operacao) return;
       operacao = "";
       fecharEntrada();
       estado("Abertura da gravação cancelada.");
@@ -282,7 +287,7 @@
       pararRetornoCaptura(g);
       estado("Finalizando a gravação…");
       controles();
-      if (g.rec.state !== "inactive") g.rec.stop();
+      g.captura.port.postMessage("parar");
     }
 
     async function iniciarGravacao(teste) {
@@ -297,56 +302,77 @@
         controles();
         const dispositivo = await ativarEntrada();
         if (operacao !== pedido || !dispositivo || !dialog.open) return;
-        const rec = motor.criarGravador(dispositivo.stream);
-        const g = { ...intervaloAtual, rec, teste, atraso: teste ? 0 : atraso / 1000, partes: [], sessao,
+        if (!ctx.audioWorklet) throw new Error("Abra a Sala por HTTPS em um navegador com suporte à captura de áudio.");
+        try {
+          moduloCaptura ??= ctx.audioWorklet.addModule(urlCaptura);
+          await moduloCaptura;
+        } catch (_) {
+          moduloCaptura = null;
+          throw new Error("O módulo de gravação não carregou. Recarregue a página e tente novamente.");
+        }
+        if (operacao !== pedido || !dialog.open || entrada !== dispositivo) return;
+        const g = { ...intervaloAtual, teste, partes: [], amostras: 0, sessao, fonte: dispositivo.fonte,
           pre: teste ? 0 : Number($("dsConta").value) * projeto.tempos };
+        g.primeiro = ctx.currentTime + 0.12;
+        const inicio = Math.round((g.primeiro + g.pre * projeto.passo) * ctx.sampleRate);
+        g.quando = inicio / ctx.sampleRate;
+        g.inicioCaptura = inicio + Math.round((teste ? 0 : atraso / 1000) * ctx.sampleRate);
+        const fim = g.inicioCaptura + Math.round((g.fim - g.inicio) * ctx.sampleRate);
+        g.captura = new AudioWorkletNode(ctx, "oh-sala-captura", {
+          outputChannelCount: [1], processorOptions: { inicio: g.inicioCaptura, fim },
+        });
+        dispositivo.fonte.connect(g.captura);
+        g.captura.connect(ctx.destination);
         gravacao = g;
-        rec.ondataavailable = (e) => { if (e.data.size) g.partes.push(e.data); };
-        rec.onstart = () => {
-          if (gravacao !== g || g.encerrando) return;
-          g.captura = ctx.currentTime;
-          g.primeiro = g.captura + 0.12;
-          g.quando = g.primeiro + g.pre * projeto.passo;
-          if (!teste) { iniciarBase(g.inicio, g.fim, g.quando); agendarClique(g); }
+        g.captura.port.onmessage = ({ data }) => {
+          if (gravacao !== g) return;
+          if (data.concluida) concluirGravacao(g);
+          else {
+            g.partes.push(data.canais);
+            g.amostras += data.canais[0].length;
+          }
         };
-        rec.onstop = () => concluirGravacao(g);
-        rec.onerror = () => {
+        g.captura.onprocessorerror = () => {
           if (gravacao !== g) return;
           limparCaptura(g);
           estado("O navegador interrompeu a captura. Tente gravar novamente.");
           controles();
         };
-        rec.start(500);
+        if (!teste) { iniciarBase(g.inicio, g.fim, g.quando); agendarClique(g); }
         estado(teste ? "Gravando o teste de entrada." : "Preparando a tomada…");
       } catch (erro) {
-        if (gravacao) limparCaptura(gravacao);
-        estado(erro.message || "Não consegui iniciar a gravação.");
+        if (operacao === pedido) {
+          if (gravacao) limparCaptura(gravacao);
+          estado(erro.message || "Não consegui iniciar a gravação.");
+        }
       } finally {
         if (operacao === pedido) operacao = "";
         controles();
       }
     }
 
-    async function concluirGravacao(g) {
+    function concluirGravacao(g) {
       if (gravacao !== g) return;
       limparCaptura(g);
-      if (!Number.isFinite(g.quando) || (g.parou ?? ctx.currentTime) < g.quando + duracaoMinima) {
+      const limite = g.parou === undefined ? g.amostras : Math.round(g.parou * ctx.sampleRate) - g.inicioCaptura;
+      const amostras = Math.min(limite, g.amostras);
+      if (amostras < duracaoMinima * ctx.sampleRate) {
         estado("Gravação cancelada antes de haver uma tomada.");
         controles();
         return;
       }
-      operacao = "decodificando";
-      controles();
       try {
-        const blob = new Blob(g.partes, { type: g.rec.mimeType });
-        const fonte = await ctx.decodeAudioData(await blob.arrayBuffer());
-        const inicio = Math.round((g.quando - g.captura + g.atraso) * fonte.sampleRate);
-        const maximo = Math.min(g.fim - g.inicio, (g.parou ?? ctx.currentTime) - g.quando);
-        const amostras = Math.min(fonte.length - inicio, Math.round(maximo * fonte.sampleRate));
-        if (amostras < duracaoMinima * fonte.sampleRate) throw new Error("O intervalo gravado foi curto demais.");
+        const fonte = ctx.createBuffer(g.partes[0].length, amostras, ctx.sampleRate);
+        let pos = 0;
+        for (const canais of g.partes) {
+          const n = Math.min(canais[0].length, amostras - pos);
+          canais.forEach((dados, c) => fonte.copyToChannel(dados.subarray(0, n), c, pos));
+          pos += n;
+          if (pos === amostras) break;
+        }
         const tomada = {
           id: ++contador, nome: g.teste ? "Teste de entrada" : nomePadrao(++g.sessao.numero),
-          fonte, off: inicio, comprimento: amostras, a: 0, b: amostras / fonte.sampleRate,
+          fonte, comprimento: amostras, a: 0, b: amostras / fonte.sampleRate,
           inicio: g.inicio, deslocamento: 0, enviada: false, teste: g.teste,
         };
         g.sessao.tomadas.push(tomada);
@@ -358,7 +384,6 @@
       } catch (erro) {
         estado(erro.message || "Não consegui ler a tomada gravada.");
       } finally {
-        operacao = "";
         controles();
       }
     }
@@ -373,7 +398,6 @@
         texto("dsFase", falta > 0 && g.pre ? "Pré-contagem · " + Math.min(g.pre, Math.ceil(falta / projeto.passo))
           : agora >= g.quando ? (g.teste ? "Teste de entrada" : "Gravando") : "Preparando entrada");
         texto("dsPos", relogio(Math.min(g.fim, g.inicio + Math.max(0, -falta))));
-        if (agora >= g.quando + (g.fim - g.inicio) + g.atraso) pararGravacao();
       } else if (transporte && !gravacao) {
         const { tipo, quando, inicio, fim, repetir, tomada } = transporte;
         const pos = inicio + Math.max(0, agora - quando);
@@ -388,7 +412,7 @@
           controles();
         }
       } else {
-        texto("dsFase", operacao === "decodificando" || gravacao?.encerrando ? "Finalizando gravação" : ocupado() ? "Preparando entrada" : "Pronto para gravar");
+        texto("dsFase", gravacao?.encerrando ? "Finalizando gravação" : ocupado() ? "Preparando entrada" : "Pronto para gravar");
       }
       frame = requestAnimationFrame(animar);
     }
@@ -398,7 +422,7 @@
       const a = Math.round(t.a * sr), b = Math.min(t.comprimento, Math.round(t.b * sr));
       const buffer = ctx.createBuffer(t.fonte.numberOfChannels, b - a, sr);
       for (let c = 0; c < buffer.numberOfChannels; c++) {
-        buffer.copyToChannel(t.fonte.getChannelData(c).subarray(t.off + a, t.off + b), c);
+        buffer.copyToChannel(t.fonte.getChannelData(c).subarray(a, b), c);
       }
       return buffer;
     }
@@ -415,7 +439,7 @@
         const a = Math.floor(x * passo), b = Math.min(t.comprimento, Math.floor((x + 1) * passo));
         let pico = 0;
         for (const canal of canais) {
-          for (let i = a; i < b; i += Math.max(1, Math.floor(passo / 20))) pico = Math.max(pico, Math.abs(canal[t.off + i]));
+          for (let i = a; i < b; i += Math.max(1, Math.floor(passo / 20))) pico = Math.max(pico, Math.abs(canal[i]));
         }
         const h = Math.max(1, pico * H * 0.94);
         g.fillRect(x, (H - h) / 2, 1, h);
@@ -505,7 +529,7 @@
       const src = ctx.createBufferSource();
       src.buffer = t.fonte;
       src.connect(ganhoTomada);
-      src.start(quando, t.off / t.fonte.sampleRate + t.a, t.b - t.a);
+      src.start(quando, t.a, t.b - t.a);
       transporte = { tipo: "tomada", inicio, fim, quando, tomada: t, parar() { pararBase?.(); src.stop(); src.disconnect(); } };
       controles();
     }

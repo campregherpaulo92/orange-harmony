@@ -41,9 +41,10 @@
     backing: '<path d="M2 11v2m3-5v8m3-12v16m3-10v4m3-5v6m3-9v12m3-7v2"/>',
     limpar: '<path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4M9 9l6 6m0-6-6 6"/>',
     calibrar: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>',
+    alca: '<path stroke-linecap="round" d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3"/>',
     lixeira: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v6m4-6v6"/>',
   };
-  const TRACADOS = new Set(["loop", "metro", "tes", "mao", "lupa", "undo", "redo", "mais", "seta", "mic", "pasta", "divide", "baixar", "bot", "intervalo", "mudo", "som", "todas", "grupo", "enquadrar", "fecharEspaco", "copiar", "ruido", "afinar", "efeito", "backing", "limpar", "calibrar", "lixeira"]);
+  const TRACADOS = new Set(["loop", "metro", "tes", "mao", "lupa", "undo", "redo", "mais", "seta", "mic", "pasta", "divide", "baixar", "bot", "intervalo", "mudo", "som", "todas", "grupo", "enquadrar", "fecharEspaco", "copiar", "ruido", "afinar", "efeito", "backing", "limpar", "calibrar", "alca", "lixeira"]);
   const ic = (n) => `<svg class="dw-ic ${TRACADOS.has(n) ? "tr" : ""}" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
   const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const dicaBotao = (texto) => `title="${esc(texto)}" aria-label="${esc(texto)}"`;
@@ -562,7 +563,8 @@
     $("#dwCabLista").innerHTML = S.faixas.map((f) => `
       <div class="dw-cab ${f.id === S.faixaSel ? "sel" : ""} ${f.vazia ? "vazia" : ""}" data-f="${f.id}" ${f.vazia ? 'title="Esta faixa quase não tem som nesta música (deixei muda)"' : ""}>
         <i class="cor" style="background:${f.cor}"></i>
-        <div class="l1"><input class="nome" value="${esc(f.nome)}" data-nome="${f.id}">
+        <div class="l1"><button type="button" class="dw-mini dw-alca" data-ordenar aria-keyshortcuts="ArrowUp ArrowDown" ${dicaBotao("Mover " + f.nome + " (arraste ou use ↑ e ↓)")}>${ic("alca")}</button>
+          <input class="nome" value="${esc(f.nome)}" data-nome="${f.id}">
           ${botaoMudoFaixa(f)}<button class="dw-mini s ${f.solo ? "on" : ""}" data-s="${f.id}" title="Solo">S</button><button class="dw-mini r ${f.arm ? "on" : ""}" data-r="${f.id}" title="Armar para gravar">R</button></div>
         <div class="l2"><span>Vol</span>${knob("Volume de " + f.nome, f.vol, 0, 1.5, 0.01, `data-vol="${f.id}"`, dbTxt(f.vol))}<span>Pan</span>${knob("Panorama de " + f.nome, f.pan, -1, 1, 0.05, `data-pan="${f.id}"`)}</div>
         <div class="l3"><input type="checkbox" data-marcar="${f.id}" ${faixasMarcadas.has(f.id) ? "checked" : ""} aria-label="Marcar ${esc(f.nome)} para mute em grupo" title="Marcar para mute em grupo"><div class="medidor"><i data-vu="${f.id}"></i></div><button class="excl" data-fxabrir="${f.id}" title="Efeitos desta faixa">FX${(f.fx || []).filter((x) => x.ligado).length ? " " + (f.fx || []).filter((x) => x.ligado).length : ""}</button><button class="excl" data-del="${f.id}" title="Excluir a faixa e as regiões dela" aria-label="Excluir faixa">${ic("lixeira")}</button></div>
@@ -2024,6 +2026,104 @@
     const m = $(id), r = ancora.getBoundingClientRect(), outros = ["#dwMenuArquivo", "#dwMenuFaixa", "#dwMenuFx"].filter((x) => x !== id); outros.forEach((x) => { $(x).hidden = true; });
     m.style.top = r.bottom + 6 + "px"; m.style.left = (alinharDireita ? Math.max(8, r.right - 290) : r.left) + "px"; m.hidden = !m.hidden;
   }
+  function moverFaixa(id, destino) {
+    const origem = S.faixas.findIndex((f) => f.id === id);
+    if (origem < 0 || destino === origem || destino < 0 || destino >= S.faixas.length) return false;
+    if (S.gravando || S.contando || solicitandoGravacao) {
+      dica("Pare a gravação para mover a faixa.");
+      return false;
+    }
+    const antes = foto();
+    const [faixa] = S.faixas.splice(origem, 1);
+    S.faixas.splice(destino, 0, faixa);
+    empilhar(antes);
+    renderTudo();
+    dica(`Faixa “${faixa.nome}” movida para a posição ${destino + 1}.`);
+    return true;
+  }
+
+  function ligarOrdemFaixas() {
+    const lista = $("#dwCabLista");
+    let arrasto;
+
+    function indicarDestino() {
+      const a = arrasto;
+      const slot = a.linhas.findIndex((linha) => {
+        const area = linha.getBoundingClientRect();
+        return a.y < area.top + area.height / 2;
+      });
+      const entre = slot < 0 ? a.linhas.length : slot;
+      a.destino = entre > a.origem ? entre - 1 : entre;
+      const borda = entre === a.linhas.length ? "dw-soltar-depois" : "dw-soltar-antes";
+      const alvo = a.destino === a.origem ? null : a.linhas[Math.min(entre, a.linhas.length - 1)];
+      if (a.alvo === alvo && a.borda === borda) return;
+      a.alvo?.classList.remove(a.borda);
+      alvo?.classList.add(borda);
+      a.alvo = alvo;
+      a.borda = borda;
+    }
+
+    function rolar() {
+      if (!arrasto) return;
+      const { top, bottom } = lista.getBoundingClientRect();
+      const y = arrasto.y;
+      const delta = y < top + 28 ? -Math.min(14, (top + 28 - y) / 2)
+        : y > bottom - 28 ? Math.min(14, (y - bottom + 28) / 2) : 0;
+      if (delta) { lista.scrollTop += delta; indicarDestino(); }
+      arrasto.frame = requestAnimationFrame(rolar);
+    }
+
+    function limpar() {
+      const a = arrasto;
+      arrasto = null;
+      cancelAnimationFrame(a.frame);
+      a.alvo?.classList.remove(a.borda);
+      a.linhas[a.origem].classList.remove("dw-faixa-arrastada");
+      return a;
+    }
+
+    lista.addEventListener("pointerdown", (e) => {
+      const alca = e.target.closest("[data-ordenar]");
+      if (!alca || arrasto || !e.isPrimary || e.button !== 0 || S.faixas.length < 2) return;
+      if (S.gravando || S.contando || solicitandoGravacao) return dica("Pare a gravação para mover a faixa.");
+      const linha = alca.closest(".dw-cab");
+      const linhas = [...lista.children], origem = linhas.indexOf(linha);
+      lista.setPointerCapture(e.pointerId);
+      arrasto = { ponteiro: e.pointerId, linha, linhas, origem, destino: origem, y: e.clientY, yInicial: e.clientY };
+      e.preventDefault();
+    });
+    lista.addEventListener("pointermove", (e) => {
+      if (arrasto?.ponteiro !== e.pointerId) return;
+      if (!arrasto.frame && Math.abs(e.clientY - arrasto.yInicial) < 4) return;
+      arrasto.y = e.clientY;
+      if (!arrasto.frame) {
+        arrasto.linha.classList.add("dw-faixa-arrastada");
+        arrasto.frame = requestAnimationFrame(rolar);
+      }
+      indicarDestino();
+    });
+    lista.addEventListener("pointerup", (e) => {
+      if (arrasto?.ponteiro !== e.pointerId) return;
+      const a = limpar();
+      if (a.linha.isConnected) moverFaixa(a.linha.dataset.f, a.destino);
+    });
+    for (const tipo of ["pointercancel", "lostpointercapture"]) {
+      lista.addEventListener(tipo, (e) => { if (arrasto?.ponteiro === e.pointerId) limpar(); });
+    }
+    lista.addEventListener("keydown", (e) => {
+      const alca = e.target.closest("[data-ordenar]");
+      if (!alca || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || !["ArrowUp", "ArrowDown"].includes(e.key)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const id = alca.closest(".dw-cab").dataset.f;
+      const origem = S.faixas.findIndex((f) => f.id === id);
+      if (moverFaixa(id, origem + (e.key === "ArrowUp" ? -1 : 1))) {
+        mostrarFaixa(id);
+        lista.querySelector(`[data-f="${CSS.escape(id)}"] [data-ordenar]`)?.focus({ preventScroll: true });
+      }
+    });
+  }
+
   function ligarEventos() {
     $("#dwAbrirSala").addEventListener("click", () => abrirSala());
     $("#dwRew").addEventListener("click", () => { ir(0); $("#dwTlScroll").scrollLeft = 0; });
@@ -2104,7 +2204,9 @@
     let sync = false;
     $("#dwTlScroll").addEventListener("scroll", () => { if (sync) return; sync = true; $("#dwCabLista").scrollTop = $("#dwTlScroll").scrollTop; sync = false; });
     $("#dwCabLista").addEventListener("scroll", () => { if (sync) return; sync = true; $("#dwTlScroll").scrollTop = $("#dwCabLista").scrollTop; sync = false; });
+    ligarOrdemFaixas();
     function aoClicarFaixaUI(e) {
+      if (e.target.closest("[data-ordenar]")) return;
       const t = e.target, a = (k) => t.closest(`[data-${k}]`) && t.closest(`[data-${k}]`).dataset[k];
       const m = a("m"), s = a("s"), r = a("r"), del = a("del"), fxa = a("fxabrir");
       if (fxa) { S.faixaSel = fxa; abrirAba("fx"); renderTudo(); return; }
@@ -2178,7 +2280,7 @@
       const salvo = parseInt(localStorage.getItem("oh-dw-ed-h"), 10); if (salvo) ed.style.height = lim(salvo) + "px";
       alca.addEventListener("pointerdown", (e) => {
         if (ed.classList.contains("fechado") || ed.classList.contains("ampliado") || (e.button != null && e.button !== 0)) return;
-        e.preventDefault(); const y0 = e.clientY, h0 = ed.getBoundingClientRect().height; alca.setPointerCapture(e.pointerId); ed.classList.add("redimensionando"); document.body.style.userSelect = "none";
+        e.preventDefault(); const y0 = e.clientY, h0 = ed.getBoundingClientRect().height; lista.setPointerCapture(e.pointerId); ed.classList.add("redimensionando"); document.body.style.userSelect = "none";
         const mover = (ev) => { ed.style.height = lim(h0 + (y0 - ev.clientY)) + "px"; };
         const soltar = () => { alca.removeEventListener("pointermove", mover); alca.removeEventListener("pointerup", soltar); alca.removeEventListener("pointercancel", soltar); ed.classList.remove("redimensionando"); document.body.style.userSelect = ""; try { localStorage.setItem("oh-dw-ed-h", Math.round(ed.getBoundingClientRect().height)); } catch (err) { /* sem armazenamento */ } };
         alca.addEventListener("pointermove", mover); alca.addEventListener("pointerup", soltar); alca.addEventListener("pointercancel", soltar);
@@ -3149,7 +3251,7 @@
     const todas = usarTrecho && $("#dwTrechoTodas").checked;
     const selecao = usarTrecho && trechoSel ? { inicio: trechoSel.ini, fim: trechoSel.fim } : null;
     if (!salaGravacao) salaGravacao = EstudioSala.criar($("#dwSala"), {
-      ic, esc, ctx, criarGravador, erroEntrada,
+      ic, esc, ctx, erroEntrada,
       pedirEntrada: (id) => pedirEntrada(false, id),
       cliqueEm, tocarReferencia: tocarReferenciaSala, receberTomada: receberTomadaSala,
       exportar: (audio, nome) => baixar(audioBufferParaWavBlob(audio), nomeLimpo(nome, "tomada") + ".wav"),
