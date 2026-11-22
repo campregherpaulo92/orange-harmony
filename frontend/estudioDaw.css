@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    Orange Studio (DAW) — estilos. Tudo com prefixo "dw-" para não colidir com o resto do app.
-   Segue a identidade do Orange Harmony: fonte Bricolage Grotesque, botões em contorno laranja,
+   Segue a identidade do Orange Harmony: tipografia de interface e controles compactos,
    cores do app (laranja, turquesa, rosa, roxo).
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -16,7 +16,7 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
   --dw-laranja: #f97316; --dw-texto: #f4ece4; --dw-suave: #b9ab9d; --dw-mudo: #6f6458; --dw-turq: #14b8a6; --dw-rosa: #ec4899; --dw-roxo: #a855f7;
   --dw-alt-faixa: 84px; --dw-cab: 236px;
   display: flex; flex-direction: column; height: 100vh; background: var(--dw-fundo); color: var(--dw-texto);
-  font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-size: 13px; position: relative; overflow: hidden;
+  font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; position: relative; overflow: hidden;
 }
 .dw *, .dw *::before, .dw *::after { box-sizing: border-box; }
 .dw button, .dw input, .dw select, .dw textarea { font-family: inherit; color: inherit; }
@@ -52,7 +52,7 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-tb.gravar { color: #ef4444; }
 .dw-tb.gravar.on { background: #ef4444; color: #fff; border-color: #ef4444; animation: dwRecPulso 1s ease-in-out infinite; }
 @keyframes dwRecPulso { 50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, .35), 0 0 16px rgba(239, 68, 68, .6); } }
-.dw-relogio { font: 800 19px/1 'Bricolage Grotesque', sans-serif; background: #0a0705; border: 1px solid var(--dw-borda); border-radius: 10px; padding: 5px 10px; min-width: 128px; text-align: center; font-variant-numeric: tabular-nums; }
+.dw-relogio { font: 700 19px/1 'Segoe UI', system-ui, sans-serif; background: #0a0705; border: 1px solid var(--dw-borda); border-radius: 10px; padding: 5px 10px; min-width: 128px; text-align: center; font-variant-numeric: tabular-nums; }
 .dw-relogio small { display: block; font-size: 10px; font-weight: 600; color: var(--dw-suave); margin-top: 2px; }
 .dw-campo { display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: var(--dw-suave); }
 .dw-campo input { background: #0a0705; border: 1px solid var(--dw-borda); border-radius: 8px; padding: 4px 6px; font-size: 12px; width: 64px; }
@@ -62,7 +62,7 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-vu-mestre i { position: absolute; left: 0; right: 0; bottom: 0; height: 3%; background: linear-gradient(0deg, var(--dw-turq) 0 60%, #eab308 60% 85%, #ef4444 85%); transition: height .06s; }
 .dw-menu-wrap { position: relative; }
 .dw-menu { --dw-fundo: #0d0a07; --dw-painel: #14100b; --dw-painel2: #1b150e; --dw-borda: rgba(249, 115, 22, 0.28); --dw-borda-forte: rgba(249, 115, 22, 0.6); --dw-laranja: #f97316; --dw-texto: #f4ece4; --dw-suave: #b9ab9d; --dw-mudo: #6f6458; --dw-turq: #14b8a6;
-  color: var(--dw-texto); font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-size: 13px; }
+  color: var(--dw-texto); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; }
 .dw-menu *, .dw-menu *::before, .dw-menu *::after { box-sizing: border-box; } .dw-menu button { color: var(--dw-texto); font: inherit; }
 .dw-menu { position: fixed; z-index: 120; width: 290px; background: #120d08; border: 1px solid var(--dw-borda-forte); border-radius: 12px; padding: 6px; box-shadow: 0 16px 50px rgba(0, 0, 0, .7); }
 .dw-menu button { display: block; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
@@ -329,7 +329,6 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 /* Seleção de intervalo em uma faixa */
 .dw-trecho-barra:not([hidden]) { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 12px; background: var(--dw-painel2); border-bottom: 1px solid var(--dw-borda); }
 #dwTrechoInfo { flex: 1 1 250px; font-size: 12px; color: var(--dw-suave); }
-#dwFerr [data-f="trecho"].on { color: var(--dw-laranja); border-color: var(--dw-laranja); }
 .dw-selecionando-trecho .dw-linha[data-lf] { touch-action: none; user-select: none; }
 .dw-selecionando-trecho .dw-regiao, .dw-selecionando-trecho .dw-regiao .alca { cursor: crosshair; }
 .dw-trecho-selecao { position: absolute; top: 1px; bottom: 1px; z-index: 5; pointer-events: none; background: rgba(56, 189, 248, .25); border-inline: 1px solid #7dd3fc; }
@@ -454,10 +453,52 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 }
 .dw-trecho-alca.ini { left: -4px; }
 .dw-trecho-alca.fim { right: -4px; }
-.dw-trecho-barra input[type=number] { width: 68px; }
+.dw-trecho-barra label { display: inline-flex; align-items: center; gap: 5px; color: var(--dw-suave); white-space: nowrap; }
+.dw-trecho-barra input[type=number] {
+  width: 74px;
+  padding: 4px 6px;
+  border: 1px solid var(--dw-borda);
+  border-radius: 6px;
+  background: #100c08;
+  color: var(--dw-texto);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.dw-trecho-barra input[type=checkbox], .dw-cab input[data-marcar] { accent-color: var(--dw-laranja); }
 #dwBackingPainel form, #dwEfeitoTrechoPainel form, #dwBpmPainel form { display: grid; gap: 10px; }
 #dwBackingPainel label, #dwEfeitoTrechoPainel label, #dwBpmPainel label { display: flex; align-items: center; gap: 8px; }
 #dwBackingPainel [hidden] { display: none; }
 
 #dwMutarMarcadas[hidden] { display: none; }
-#dwMutarTodas.on { color: var(--dw-laranja); border-color: var(--dw-laranja); }
+
+
+/* Controles de edição, transporte e faixa compartilham a mesma geometria. */
+.dw button.dw-btn { border-radius: 7px; }
+#dwColabLink { font-family: 'Bricolage Grotesque', system-ui, sans-serif; }
+.dw :is(.dw-fb, .dw-tb) {
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--dw-borda);
+  border-radius: 7px;
+  background: #1d160e;
+  color: var(--dw-texto);
+  box-shadow: none;
+}
+.dw :is(.dw-fb, .dw-tb):hover:not(:disabled) {
+  border-color: var(--dw-borda-forte);
+  background: #332317;
+}
+.dw :is(.dw-fb, .dw-tb).on:not(.gravar),
+.dw :is(.dw-fb, .dw-tb)[aria-pressed="true"],
+.dw .dw-tb.play {
+  color: #1a0c02;
+  background: #ff943f;
+  border-color: #ff943f;
+}
+.dw .dw-tb.gravar { color: #ef6666; }
+.dw .dw-tb.gravar.on { color: #fff; background: #dc2626; border-color: #ef4444; }
+.dw :is(.dw-fb, .dw-tb):disabled { opacity: .36; cursor: not-allowed; }
+.dw button:focus-visible { outline: 2px solid #ffb077; outline-offset: 2px; }
+.dw .dw-cab-topo .dw-icon { height: 24px; width: 28px; min-width: 28px; }
+.dw .dw-cab-topo .dw-icon svg { width: 15px; height: 15px; }

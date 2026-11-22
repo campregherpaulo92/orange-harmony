@@ -29,11 +29,31 @@
     bot: '<rect x="5" y="7" width="14" height="12" rx="4"/><path d="M12 3v4M9 12h.01M15 12h.01M9 16h6"/>',
     intervalo: '<path d="M8 5H4v14h4M16 5h4v14h-4"/><path d="M9 12h6"/>',
     mudo: '<path d="M3 10v4h4l5 4V6l-5 4H3zM16 10l5 5m0-5-5 5"/>',
+    som: '<path d="M3 10v4h4l5 4V6l-5 4H3zM15 9a4 4 0 010 6m2-8a7 7 0 010 10"/>',
+    todas: '<path d="M4 5h16M4 12h16M4 19h16M7 3v4m10 3v4M9 17v4"/>',
+    grupo: '<rect x="4" y="4" width="11" height="11" rx="2"/><path d="M9 19h8a2 2 0 002-2V9M7 9v1h5V9"/>',
+    enquadrar: '<path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4M8 12h8"/>',
+    fecharEspaco: '<path d="M3 6v12m18-12v12M6 12h4m4 0h4m-9-3 3 3-3 3m6-6-3 3 3 3"/>',
+    copiar: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 4H6a2 2 0 00-2 2v10"/>',
+    ruido: '<path d="m3 13 3-3 3 5 3-8 3 5 2-2m1-6v6m-3-3h6M3 19h18"/>',
+    afinar: '<path d="M7 3v18m5-18v18m5-18v18M5 8h4m1 8h4m1-5h4"/>',
+    efeito: '<path d="m5 19 9-9 3 3-9 9zM17 2v6m-3-3h6M4 5v4M2 7h4"/>',
+    backing: '<path d="M2 11v2m3-5v8m3-12v16m3-10v4m3-5v6m3-9v12m3-7v2"/>',
+    limpar: '<path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4M9 9l6 6m0-6-6 6"/>',
+    calibrar: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>',
     lixeira: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v6m4-6v6"/>',
   };
-  const TRACADOS = new Set(["loop", "metro", "tes", "mao", "lupa", "undo", "redo", "mais", "seta", "mic", "pasta", "divide", "baixar", "bot", "intervalo", "mudo", "lixeira"]);
+  const TRACADOS = new Set(["loop", "metro", "tes", "mao", "lupa", "undo", "redo", "mais", "seta", "mic", "pasta", "divide", "baixar", "bot", "intervalo", "mudo", "som", "todas", "grupo", "enquadrar", "fecharEspaco", "copiar", "ruido", "afinar", "efeito", "backing", "limpar", "calibrar", "lixeira"]);
   const ic = (n) => `<svg class="dw-ic ${TRACADOS.has(n) ? "tr" : ""}" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
   const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const dicaBotao = (texto) => `title="${esc(texto)}" aria-label="${esc(texto)}"`;
+  const botaoIcone = (atributos, icone, texto) =>
+    `<button type="button" class="dw-fb dw-icon" ${atributos} ${dicaBotao(texto)}>${ic(icone)}</button>`;
+  function atualizarBotaoIcone(botao, icone, texto) {
+    botao.innerHTML = ic(icone);
+    botao.title = texto;
+    botao.setAttribute("aria-label", texto);
+  }
   const corA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
 
   // ── estado do projeto (só dados simples: é isto que o desfazer guarda) ──
@@ -56,8 +76,26 @@
   const px = (t) => t * S.pps;
   const algumSolo = () => S.faixas.some((f) => f.solo);
   let mudoGeral = false;
+  const faixasLiberadas = new Set();
+  const faixaMuda = (f) => !!f && (mudoGeral ? !faixasLiberadas.has(f.id) : !!f.mudo);
+  function resetarMudoGeral() {
+    mudoGeral = false;
+    faixasLiberadas.clear();
+  }
+  function definirMudoFaixas(faixas, mudo) {
+    if (!mudoGeral) {
+      mudarFx(() => faixas.forEach((f) => { f.mudo = mudo; }));
+      return;
+    }
+    for (const f of faixas) {
+      if (mudo) faixasLiberadas.delete(f.id);
+      else faixasLiberadas.add(f.id);
+    }
+    renderTudo();
+    atualizarNos();
+  }
   const faixasMarcadas = new Set();
-  const audivel = (id) => { const f = faixaPorId(id); return !!f && !mudoGeral && !f.mudo && (!algumSolo() || f.solo); };
+  const audivel = (id) => { const f = faixaPorId(id); return !!f && !faixaMuda(f) && (!algumSolo() || f.solo); };
   const fmt = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(1).padStart(4, "0")}`; };
   function snap(t, livre) {
     if (livre || S.snap === "off") return t;
@@ -267,37 +305,37 @@
         <div class="dw-relogio" id="dwRelogio">0:00.0<small>Compasso 1 · tempo 1</small></div>
         <label class="dw-campo">Andamento<input type="number" id="dwBpm" value="100" min="40" max="220" title="Batidas por minuto: define a grade e o metrônomo"></label>
         <label class="dw-campo">Compasso<select id="dwComp"><option>4/4</option><option>3/4</option><option>2/4</option><option>6/8</option></select></label>
-        <button class="dw-btn peq" id="dwAjustarBpm" title="Ajustar o ritmo do áudio mantendo o tom">Ajustar BPM</button>
+        ${botaoIcone('id="dwAjustarBpm"', "todas", "Ajustar BPM do áudio")}
         <div class="dw-campo">Tom<b id="dwTom">—</b></div>
         <div class="dw-vu-mestre" title="Volume geral"><i id="dwVuMestre"></i></div>
         <div class="dw-esp"></div>
-        <button type="button" class="dw-btn dw-entrada-trigger" id="dwAbrirEntrada" aria-expanded="false" aria-controls="dwPainelEntrada">${ic("mic")} Entrada de áudio</button>
-        <button class="dw-btn cheio" id="dwSeparar">${ic("divide")} Separar música</button>
+        <button type="button" class="dw-btn dw-entrada-trigger" id="dwAbrirEntrada" aria-expanded="false" aria-controls="dwPainelEntrada" title="Configurar a entrada de áudio">${ic("mic")} Entrada de áudio</button>
+        <button class="dw-btn cheio" id="dwSeparar" title="Separar a música em faixas">${ic("divide")} Separar música</button>
         <button type="button" class="dw-btn" id="dwLaranjinha" aria-haspopup="dialog" title="Abrir o agente de edição do Studio">${ic("bot")} Agente do Studio</button>
-        <button class="dw-btn" id="dwArquivo">${ic("pasta")} Arquivo ${ic("seta")}</button>
+        <button class="dw-btn" id="dwArquivo" title="Abrir menu Arquivo">${ic("pasta")} Arquivo ${ic("seta")}</button>
       </header>
       <div class="dw-ferr">
         <div class="dw-grupo" id="dwFerr">
           <button class="dw-fb on" data-f="sel" title="Selecionar e mover (V)">${ic("sel")}</button>
           <button class="dw-fb" data-f="tes" title="Dividir (C): clique numa região">${ic("tes")}</button>
-          <button class="dw-btn peq" data-f="trecho" aria-pressed="false" title="Clique e arraste em uma faixa">${ic("intervalo")} Selecionar trecho</button>
+          ${botaoIcone('data-f="trecho" aria-pressed="false"', "intervalo", "Selecionar trecho: arraste em uma faixa")}
           <button class="dw-fb" data-f="mao" title="Mão (H): arraste para rolar">${ic("mao")}</button>
           <button class="dw-fb" data-f="lupa" title="Zoom (Z): clique aproxima; Alt + clique afasta">${ic("lupa")}</button>
         </div>
         <div class="dw-grupo"><button class="dw-fb" id="dwUndo" title="Desfazer (Ctrl+Z)">${ic("undo")}</button><button class="dw-fb" id="dwRedo" title="Refazer (Ctrl+Y)">${ic("redo")}</button></div>
-        <button type="button" class="dw-btn peq" id="dwMutarTodas" title="Liga e desliga o silêncio do projeto" aria-pressed="false" disabled>${ic("mudo")} Mutar todas</button>
-        <button type="button" class="dw-btn peq" id="dwMutarMarcadas" hidden>Mutar marcadas</button>
+        ${botaoIcone('id="dwMutarTodas" aria-pressed="false" disabled', "mudo", "Mutar todas as faixas")}
+        ${botaoIcone('id="dwMutarMarcadas" hidden', "grupo", "Mutar faixas marcadas")}
         <div class="dw-sep"></div>
         <label>Grade <select id="dwSnap"><option value="off" selected>Livre</option><option value="bar">Compasso</option><option value="beat">Tempo</option><option value="half">Meio tempo</option></select></label>
         <label>Zoom <input type="range" id="dwZoom" min="8" max="${ZOOM_MAX}" value="40"></label>
-        <button class="dw-btn peq" id="dwAjustar" title="Ajusta o zoom para caber o projeto todo">Ajustar</button>
+        ${botaoIcone('id="dwAjustar"', "enquadrar", "Enquadrar o projeto no zoom")}
         <label title="Seguir o cursor: a tela acompanha enquanto toca"><input type="checkbox" id="dwSeguir" checked> Seguir</label>
         <div class="dw-grupo dw-rec-grupo">
         <button class="dw-tb" id="dwMetroBtn" title="Liga e desliga o metrônomo" style="width:28px;height:28px"></button>
         <select id="dwMetro" title="Metrônomo: desligado, ligado ou só ao gravar"><option value="off">Desligado</option><option value="on">Ligado</option><option value="rec">Só ao gravar</option></select>
         <label>Contagem <select id="dwContagem" title="Pré-contagem antes de gravar"><option value="0">Nenhuma</option><option value="1" selected>1 compasso</option><option value="2">2 compassos</option></select></label>
         <label title="Se a voz gravada ficar atrasada em relação à música, aumente. Ex.: 80">Atraso <input type="number" id="dwLat" value="0" min="0" max="500" step="10"> ms</label>
-          <button class="dw-btn peq" id="dwCalibrar" title="Mede o atraso do seu equipamento: toca cliques e vê quanto eles demoram a aparecer na gravação">Calibrar</button>
+          ${botaoIcone('id="dwCalibrar"', "calibrar", "Calibrar o atraso da gravação")}
           <label title="Como você ouve a música enquanto grava. Com fone de ouvido a voz sai limpa. Com caixa de som o navegador tenta cancelar o eco, mas parte da música pode vazar no microfone.">Ouço com <select id="dwMonitor"><option value="caixa">Caixa de som</option><option value="fone">Fone de ouvido</option></select></label>
         </div>
       </div>
@@ -306,20 +344,20 @@
         <label>Início (s) <input type="number" min="0" step="0.001" id="dwTrechoInicio" disabled></label>
         <label>Fim (s) <input type="number" min="0" step="0.001" id="dwTrechoFim" disabled></label>
         <label><input type="checkbox" id="dwTrechoTodas"> Todas as faixas</label>
-        <button class="dw-btn peq" id="dwTrechoProjeto" disabled>Selecionar projeto</button>
-        <button class="dw-btn peq" id="dwTrechoDividir" disabled>Dividir trecho</button>
-        <button class="dw-btn peq" id="dwTrechoSilenciar" disabled>Silenciar trecho</button>
-        <button class="dw-btn peq" id="dwTrechoExcluir" title="Remove o intervalo e puxa para a esquerda o áudio seguinte nas faixas selecionadas" disabled>Excluir e fechar espaço</button>
-        <button class="dw-btn peq" id="dwTrechoOuvir" disabled>Ouvir</button>
-        <button class="dw-btn peq" id="dwTrechoCopiar" disabled>Copiar para nova faixa</button>
-        <button class="dw-btn peq" id="dwTrechoRuido" disabled>Limpar ruído</button>
-        <button class="dw-btn peq" id="dwTrechoAfinar" disabled>Afinar</button>
-        <button class="dw-btn peq" id="dwTrechoEfeito" disabled>Aplicar efeito</button>
-        <button class="dw-btn peq" id="dwTrechoBacking" disabled>Backing vocal</button>
-        <button class="dw-btn peq" id="dwTrechoLimpar" disabled>Limpar seleção</button>
+        ${botaoIcone('id="dwTrechoProjeto" disabled', "enquadrar", "Selecionar o projeto inteiro")}
+        ${botaoIcone('id="dwTrechoDividir" disabled', "tes", "Dividir nos limites do trecho")}
+        ${botaoIcone('id="dwTrechoSilenciar" aria-pressed="false" disabled', "mudo", "Silenciar trecho")}
+        ${botaoIcone('id="dwTrechoExcluir" disabled', "fecharEspaco", "Excluir trecho e fechar espaço")}
+        ${botaoIcone('id="dwTrechoOuvir" disabled', "play", "Ouvir trecho")}
+        ${botaoIcone('id="dwTrechoCopiar" disabled', "copiar", "Copiar trecho para nova faixa")}
+        ${botaoIcone('id="dwTrechoRuido" disabled', "ruido", "Limpar ruído no trecho")}
+        ${botaoIcone('id="dwTrechoAfinar" disabled', "afinar", "Afinar trecho")}
+        ${botaoIcone('id="dwTrechoEfeito" disabled', "efeito", "Aplicar efeito no trecho")}
+        ${botaoIcone('id="dwTrechoBacking" disabled', "backing", "Criar backing vocal")}
+        ${botaoIcone('id="dwTrechoLimpar" disabled', "limpar", "Limpar seleção")}
       </div>
       <div class="dw-area">
-        <div class="dw-cab-col"><div class="dw-cab-topo"><span>FAIXAS</span><button class="dw-btn peq" id="dwAddFaixa">${ic("mais")} Faixa</button></div><div class="dw-cab-lista" id="dwCabLista"></div></div>
+        <div class="dw-cab-col"><div class="dw-cab-topo"><span>FAIXAS</span>${botaoIcone('id="dwAddFaixa"', "mais", "Adicionar faixa")}</div><div class="dw-cab-lista" id="dwCabLista"></div></div>
         <div id="dwLarguraFaixas" class="dw-largura-faixas" role="separator" tabindex="0" aria-label="Largura da coluna de faixas" aria-orientation="vertical" title="Arraste para redimensionar. Use as setas ou dê dois cliques para voltar ao tamanho padrão."></div>
         <div class="dw-tl-scroll" id="dwTlScroll"><div class="dw-tl" id="dwTl"><div class="dw-regua" id="dwRegua"></div><div class="dw-loop" id="dwLoopBand" hidden></div><div class="dw-faixas" id="dwFaixas"></div><div class="dw-playhead" id="dwPlayhead"></div></div>
           <div class="dw-vazio" id="dwVazio" hidden>
@@ -494,15 +532,18 @@
   }
 
   function mutarTodas() {
-    mudoGeral = !mudoGeral;
+    if (mudoGeral) resetarMudoGeral(); else mudoGeral = true;
     renderTudo(); atualizarNos();
     dica(mudoGeral ? "Mute geral ligado." : "Mute geral desligado.");
   }
   function mutarMarcadas() {
     const faixas = S.faixas.filter((f) => faixasMarcadas.has(f.id));
     if (!faixas.length) return;
-    const mudo = faixas.some((f) => !f.mudo);
-    mudarFx(() => faixas.forEach((f) => { f.mudo = mudo; }));
+    definirMudoFaixas(faixas, faixas.some((f) => !faixaMuda(f)));
+  }
+  function botaoMudoFaixa(f) {
+    const mudo = faixaMuda(f);
+    return `<button type="button" class="dw-mini m ${mudo ? "on" : ""}" data-m="${f.id}" aria-pressed="${mudo}" ${dicaBotao((mudo ? "Reativar " : "Mutar ") + f.nome)}>M</button>`;
   }
   function renderCab() {
     const geral = $("#dwMutarTodas"), grupo = $("#dwMutarMarcadas");
@@ -510,14 +551,15 @@
     geral.disabled = !S.faixas.length;
     geral.setAttribute("aria-pressed", String(mudoGeral));
     geral.classList.toggle("on", mudoGeral);
-    geral.innerHTML = ic("mudo") + (mudoGeral ? " Reativar geral" : " Mutar todas");
+    atualizarBotaoIcone(geral, mudoGeral ? "som" : "mudo", mudoGeral ? "Desligar mute geral e restaurar os mutes anteriores" : "Mutar todas as faixas");
     grupo.hidden = !marcadas.length;
-    grupo.textContent = (marcadas.some((f) => !f.mudo) ? "Mutar" : "Reativar") + ` marcadas (${marcadas.length})`;
+    const mutar = marcadas.some((f) => !faixaMuda(f));
+    atualizarBotaoIcone(grupo, mutar ? "mudo" : "som", `${mutar ? "Mutar" : "Reativar"} faixas marcadas (${marcadas.length})`);
     $("#dwCabLista").innerHTML = S.faixas.map((f) => `
       <div class="dw-cab ${f.id === S.faixaSel ? "sel" : ""} ${f.vazia ? "vazia" : ""}" data-f="${f.id}" ${f.vazia ? 'title="Esta faixa quase não tem som nesta música (deixei muda)"' : ""}>
         <i class="cor" style="background:${f.cor}"></i>
         <div class="l1"><input class="nome" value="${esc(f.nome)}" data-nome="${f.id}">
-          <button class="dw-mini m ${f.mudo ? "on" : ""}" data-m="${f.id}" title="Mudo">M</button><button class="dw-mini s ${f.solo ? "on" : ""}" data-s="${f.id}" title="Solo">S</button><button class="dw-mini r ${f.arm ? "on" : ""}" data-r="${f.id}" title="Armar para gravar">R</button></div>
+          ${botaoMudoFaixa(f)}<button class="dw-mini s ${f.solo ? "on" : ""}" data-s="${f.id}" title="Solo">S</button><button class="dw-mini r ${f.arm ? "on" : ""}" data-r="${f.id}" title="Armar para gravar">R</button></div>
         <div class="l2"><span>Vol</span>${knob("Volume de " + f.nome, f.vol, 0, 1.5, 0.01, `data-vol="${f.id}"`, dbTxt(f.vol))}<span>Pan</span>${knob("Panorama de " + f.nome, f.pan, -1, 1, 0.05, `data-pan="${f.id}"`)}</div>
         <div class="l3"><input type="checkbox" data-marcar="${f.id}" ${faixasMarcadas.has(f.id) ? "checked" : ""} aria-label="Marcar ${esc(f.nome)} para mute em grupo" title="Marcar para mute em grupo"><div class="medidor"><i data-vu="${f.id}"></i></div><button class="excl" data-fxabrir="${f.id}" title="Efeitos desta faixa">FX${(f.fx || []).filter((x) => x.ligado).length ? " " + (f.fx || []).filter((x) => x.ligado).length : ""}</button><button class="excl" data-del="${f.id}" title="Excluir a faixa e as regiões dela" aria-label="Excluir faixa">${ic("lixeira")}</button></div>
       </div>`).join("");
@@ -530,7 +572,7 @@
     $("#dwRegua").innerHTML = h;
     const linhas = S.faixas.map((f) => {
       const rs = S.regioes.filter((r) => r.f === f.id).map((r) => `
-        <div class="dw-regiao ${r.id === S.regiaoSel ? "sel" : ""} ${mudoGeral || f.mudo || r.silenciada ? "mudo" : ""} ${r.gravando ? "gravando" : ""}" data-r="${r.id}" style="left:${px(r.ini)}px;width:${px(r.dur)}px;background:${corA(f.cor, 0.16)};border-color:${corA(f.cor, 0.85)}">
+        <div class="dw-regiao ${r.id === S.regiaoSel ? "sel" : ""} ${faixaMuda(f) || r.silenciada ? "mudo" : ""} ${r.gravando ? "gravando" : ""}" data-r="${r.id}" style="left:${px(r.ini)}px;width:${px(r.dur)}px;background:${corA(f.cor, 0.16)};border-color:${corA(f.cor, 0.85)}">
           <div class="rot" style="background:${corA(f.cor, 0.95)}">${esc(r.nome)}${r.limpo ? " · limpa" : ""}${r.afinada || r.tomAjustado ? " · afinada" : ""}${r.silenciada ? " · silenciada" : ""}</div><canvas></canvas>
           ${r.fi > 0.02 ? `<i class="fade i" style="width:${px(r.fi)}px"></i>` : ""}${r.fo > 0.02 ? `<i class="fade o" style="width:${px(r.fo)}px"></i>` : ""}
           <i class="alca e" data-alca="e"></i><i class="alca d" data-alca="d"></i></div>`).join("");
@@ -546,7 +588,7 @@
     const strip = (f) => `<div class="dw-strip"><div class="nome" style="color:${f.cor}">${esc(f.nome)}</div>
       <div class="fw"><div class="fader">${knob("Volume de " + f.nome, f.vol, 0, 1.5, 0.01, `data-vol="${f.id}"`, dbTxt(f.vol))}</div><div class="vu"><i data-vu2="${f.id}"></i></div></div>
       <div class="db" data-db="${f.id}">${dbTxt(f.vol)}</div>
-      <div style="display:flex;gap:4px"><button class="dw-mini m ${f.mudo ? "on" : ""}" data-m="${f.id}">M</button><button class="dw-mini s ${f.solo ? "on" : ""}" data-s="${f.id}">S</button></div></div>`;
+      <div style="display:flex;gap:4px">${botaoMudoFaixa(f)}<button class="dw-mini s ${f.solo ? "on" : ""}" data-s="${f.id}">S</button></div></div>`;
     $("#dwMix").innerHTML = (S.faixas.length ? S.faixas.map(strip).join("") : '<div class="dw-aviso-vazio" style="flex:1">Ainda não há faixas. Importe, grave ou separe uma música.</div>') +
       `<div class="strip dw-strip master"><div class="nome" style="color:#fff">Geral</div><div class="fw"><div class="fader">${knob("Volume geral", S.mestreVol, 0, 1.2, 0.01, 'id="dwMestreVol"', dbTxt(S.mestreVol))}</div><div class="vu"><i data-vu2="mestre"></i></div></div><div class="db" id="dwMestreDb">${dbTxt(S.mestreVol)}</div></div>`;
   }
@@ -1161,7 +1203,7 @@
     }
     if (S.regioes.length) novoProjeto();
     const antes = foto();
-    trechoSel = null; mudoGeral = false; faixasMarcadas.clear(); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
+    trechoSel = null; resetarMudoGeral(); faixasMarcadas.clear(); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
     const feitas = preparada.map(({ def, blob, buf }) => {
       const f = novaFaixa(def[0], def[1], { vol: def[2] });
       novaRegiao(f, guardarAudio(buf, blob), def[0], 0, 0);
@@ -1205,7 +1247,7 @@
   function aplicarSeparacao(bv, bi, bo, res, arq) {
     if (S.regioes.length) novoProjeto();   // o projeto atual fica salvo: Arquivo → Abrir projeto
     const antes = foto();
-    trechoSel = null; mudoGeral = false; faixasMarcadas.clear(); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
+    trechoSel = null; resetarMudoGeral(); faixasMarcadas.clear(); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
     const voz = novaFaixa("Voz (stem vocal)", "#f97316", { vol: 0.9 }), inst = novaFaixa("Instrumental", "#14b8a6", { vol: 0.8 }), orig = novaFaixa("Original (referência)", "#94a3b8", { vol: 0.7, mudo: true });
     novaRegiao(voz, guardarAudio(bv, res.vozBlob), "Voz", 0, 0); novaRegiao(inst, guardarAudio(bi, res.instBlob), "Instrumental", 0, 0); novaRegiao(orig, guardarAudio(bo, arq), "Original (referência)", 0, 0);
     S.faixaSel = voz.id; S.nome = arq.name.replace(/\.[^.]+$/, "").slice(0, 40); $("#dwNome").value = S.nome;
@@ -1357,7 +1399,7 @@
     const temSom = partes.some(({ r }) => !r.silenciada);
     const silenciar = $("#dwTrechoSilenciar");
     silenciar.disabled = !partes.length;
-    silenciar.textContent = temSom ? "Silenciar trecho" : "Reativar trecho";
+    atualizarBotaoIcone(silenciar, temSom || !partes.length ? "mudo" : "som", temSom || !partes.length ? "Silenciar trecho" : "Reativar trecho");
     silenciar.setAttribute("aria-pressed", String(!!partes.length && !temSom));
     ["dwTrechoOuvir", "dwTrechoCopiar", "dwTrechoRuido", "dwTrechoAfinar", "dwTrechoEfeito", "dwTrechoBacking"].forEach((id) => {
       $("#" + id).disabled = !temSom || (todas && ["dwTrechoRuido", "dwTrechoAfinar", "dwTrechoEfeito", "dwTrechoBacking"].includes(id));
@@ -2059,7 +2101,7 @@
       const t = e.target, a = (k) => t.closest(`[data-${k}]`) && t.closest(`[data-${k}]`).dataset[k];
       const m = a("m"), s = a("s"), r = a("r"), del = a("del"), fxa = a("fxabrir");
       if (fxa) { S.faixaSel = fxa; abrirAba("fx"); renderTudo(); return; }
-      if (m) { const f = faixaPorId(m); mudar(() => { f.mudo = !f.mudo; }); atualizarNos(); return; }
+      if (m) { const f = faixaPorId(m); definirMudoFaixas([f], !faixaMuda(f)); return; }
       if (s) { const f = faixaPorId(s); mudar(() => { f.solo = !f.solo; }); atualizarNos(); return; }
       if (r) { const f = faixaPorId(r); mudar(() => { const novo = !f.arm; S.faixas.forEach((x) => { x.arm = false; }); f.arm = novo; }); dica(f.arm ? `Faixa "${f.nome}" armada: o botão vermelho grava nela.` : "Faixa desarmada."); return; }
       if (del) { const f = faixaPorId(del); faixasMarcadas.delete(del); mudar(() => { S.faixas = S.faixas.filter((x) => x.id !== del); S.regioes = S.regioes.filter((x) => x.f !== del); if (S.faixaSel === del) S.faixaSel = S.faixas[0] ? S.faixas[0].id : null; }); dica(`Faixa "${f.nome}" excluída (Ctrl+Z traz de volta).`); return; }
@@ -2198,7 +2240,7 @@
   function novoProjeto() {
     salvarProjeto();                                   // o projeto atual fica guardado (Arquivo → Abrir projeto)
     if (S.tocando) pausar(); pararFontes(); descartarNos();
-    trechoSel = null; mudoGeral = false; faixasMarcadas.clear(); S.id = "p" + Date.now().toString(36); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0; S.nome = "Meu projeto"; S.tom = ""; S.bpm = 100; S.sujo = false;
+    trechoSel = null; resetarMudoGeral(); faixasMarcadas.clear(); S.id = "p" + Date.now().toString(36); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0; S.nome = "Meu projeto"; S.tom = ""; S.bpm = 100; S.sujo = false;
     bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); pilha.length = 0; refaz.length = 0;
     try { localStorage.removeItem("oh-dw-ultimo"); } catch (e) { /* sem armazenamento */ }
     $("#dwNome").value = S.nome; $("#dwBpm").value = S.bpm; $("#dwTom").textContent = "—"; mostrarSalvo(""); renderTudo(); dica("Projeto novo. O anterior ficou salvo em Arquivo → Abrir projeto.");
@@ -2269,7 +2311,7 @@
     if (S.tocando) pausar(); pararFontes(); descartarNos();
     bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); novosBufs.forEach((v, k) => { bufs.set(k, v); picos.set(k, novosPicos.get(k)); blobs.set(k, novosBlobs.get(k)); noBanco.add(k); });
     const faltaram = proj.regioes.filter((r) => !bufs.has(r.buf)).length;
-    trechoSel = null; mudoGeral = false; faixasMarcadas.clear(); S.id = proj.id; S.nome = proj.nome; S.faixas = proj.faixas; S.regioes = proj.regioes.filter((r) => bufs.has(r.buf)); S.regioes.forEach((r) => { if (r.alt && !bufs.has(r.alt.buf)) { r.alt = null; } }); S.bpm = proj.bpm; S.compasso = proj.compasso; S.tom = proj.tom || ""; S.mestreVol = proj.mestreVol == null ? 0.9 : proj.mestreVol;
+    trechoSel = null; resetarMudoGeral(); faixasMarcadas.clear(); S.id = proj.id; S.nome = proj.nome; S.faixas = proj.faixas; S.regioes = proj.regioes.filter((r) => bufs.has(r.buf)); S.regioes.forEach((r) => { if (r.alt && !bufs.has(r.alt.buf)) { r.alt = null; } }); S.bpm = proj.bpm; S.compasso = proj.compasso; S.tom = proj.tom || ""; S.mestreVol = proj.mestreVol == null ? 0.9 : proj.mestreVol;
     proxId = Math.max(proxId, proj.proxId || 0) + 1; S.faixaSel = S.faixas[0] ? S.faixas[0].id : null; S.regiaoSel = null; S.tAtual = 0; S.sujo = false; pilha.length = 0; refaz.length = 0;
     $("#dwNome").value = S.nome; $("#dwBpm").value = S.bpm; $("#dwComp").value = S.compasso; $("#dwTom").textContent = S.tom || "—";
     try { localStorage.setItem("oh-dw-ultimo", S.id); } catch (e) { /* sem armazenamento */ }
@@ -2751,7 +2793,7 @@
       faixaSelecionada: faixaAtiva?.id, regiaoSelecionada: regiaoAtiva?.id,
       trecho: trechoSel && { ...trechoSel, todas: $("#dwTrechoTodas").checked },
       cursor: S.tAtual,
-      faixas: faixas.map((f) => ({ id: f.id, nome: f.nome.slice(0, 80), mudo: !!f.mudo })),
+      faixas: faixas.map((f) => ({ id: f.id, nome: f.nome.slice(0, 80), mudo: faixaMuda(f) })),
       regioes: regioes.map((r) => ({ id: r.id, faixa: r.f, nome: r.nome.slice(0, 80), inicio: r.ini, fim: r.ini + r.dur, ganho: r.ganho })),
     };
   }
@@ -2765,10 +2807,10 @@
       const faixa = contexto.faixas.find((f) => f.id === plano.faixa);
       const f = faixa && faixaPorId(faixa.id);
       if (!f || typeof plano.mudo !== "boolean") return erro("Indique qual faixa quer mutar ou reativar.");
-      if (!!f.mudo === plano.mudo) return erro(`A faixa “${f.nome}” já está ${plano.mudo ? "muda" : "reativada"}.`);
+      if (faixaMuda(f) === plano.mudo) return erro(`A faixa “${f.nome}” já está ${plano.mudo ? "muda" : "reativada"}.`);
       return {
         descricao: `${plano.mudo ? "Mutar" : "Reativar"} a faixa “${f.nome}”.`,
-        executar: () => mudarFx(() => { f.mudo = plano.mudo; }),
+        executar: () => definirMudoFaixas([f], plano.mudo),
       };
     }
     const obter = (id) => contexto.regioes.some((r) => r.id === id) ? regiaoPorId(id) : null;
@@ -2895,7 +2937,7 @@
         const acao = botao.dataset.acao;
         botao.disabled = acao === "mudo" ? !f : acao === "silenciar" ? !alvoDoSilencioAgente(c) : !r;
       });
-      $("#dwAgenteMudo").textContent = f?.mudo ? "Reativar faixa" : "Mutar faixa";
+      $("#dwAgenteMudo").textContent = faixaMuda(f) ? "Reativar faixa" : "Mutar faixa";
       descartar();
       painel.showModal();
     });
@@ -2919,7 +2961,7 @@
         atrasar: { acao: "mover", regiao, ms: 10 },
         baixar: { acao: "ganho", regiao, db: -2 },
         limpar: { acao: "limpar_ruido", regiao },
-        mudo: { acao: "mudo_faixa", faixa: f?.id, mudo: !f?.mudo },
+        mudo: { acao: "mudo_faixa", faixa: f?.id, mudo: !faixaMuda(f) },
       };
       let plano = acoes[botao.dataset.acao];
       if (botao.dataset.acao === "silenciar") {
