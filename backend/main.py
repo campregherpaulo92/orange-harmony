@@ -225,7 +225,7 @@ def laranjinha_mensagem_rota(mensagem: str = Form(...), chat_id: str = Form(None
 # ══════════════════════════════════════════════════════════════
 # ORANGE STUDIO (separação de stems + agente embutido de limpeza)
 # ══════════════════════════════════════════════════════════════
-MODOS_SEPARACAO = ("rapido", "completo")
+MODOS_SEPARACAO = estudio_fila.MODOS
 
 
 def _comprimir_stem(wav):
@@ -263,13 +263,14 @@ def separar_stems_rota(arquivo: UploadFile = File(...), modo: str = Form("rapido
     nome = arquivo.filename or "audio.wav"
     import base64
 
-    if modo == "completo":
-        fontes, erro = stems.separar_completo(dados, nome)
+    if modo in ("completo", "backing"):
+        separar = stems.separar_backing if modo == "backing" else stems.separar_completo
+        fontes, erro = separar(dados, nome)
         if erro:
             raise HTTPException(status_code=400, detail=erro)
         bpm, tom = _bpm_e_tom(dados, nome)
         return {
-            "modo": "completo",
+            "modo": modo,
             "stems": {k: base64.b64encode(_comprimir_stem(v)).decode("ascii") for k, v in fontes.items()},
             "bpm": bpm,
             "tom": tom,
@@ -392,6 +393,7 @@ def estudio_config():
     resp = {"modo": modo, "colab_url": COLAB_SEPARADOR_URL, "colab_url_padrao": COLAB_SEPARADOR_URL_PADRAO,
             "colab_url_origem": "variavel" if COLAB_SEPARADOR_URL != COLAB_SEPARADOR_URL_PADRAO else "padrao"}
     if modo == "local":
+        resp["backing"] = stems.separacao_backing_disponivel()
         resp["completo"] = True        # este servidor tem Demucs: pode separar em 6 faixas
     if modo == "fila":
         resp["colab"] = estudio_fila.status_colab()
@@ -402,11 +404,14 @@ def estudio_config():
 def estudio_fila_criar(arquivo: UploadFile = File(...), modo: str = Form("rapido")):
     if modo not in MODOS_SEPARACAO:
         raise HTTPException(status_code=400, detail="Modo de separação inválido.")
-    if not estudio_fila.status_colab().get("online"):
+    colab = estudio_fila.status_colab()
+    if not colab.get("online"):
         raise HTTPException(
             status_code=409,
             detail="O separador do Colab está desligado. Abra o notebook no Colab e execute-o.",
         )
+    if modo == "backing" and not colab.get("backing"):
+        raise HTTPException(status_code=409, detail="Reabra e execute o notebook atualizado para separar os backings.")
     job_id, erro = estudio_fila.criar_job(arquivo.file, arquivo.filename, arquivo.content_type, modo)
     if erro:
         raise HTTPException(status_code=502, detail=erro)

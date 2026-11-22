@@ -221,3 +221,68 @@ def separar_completo(dados_audio, nome_arquivo):
             os.remove(caminho_temp)
         modelo = wav = wav_normalizado = fontes = referencia = None
         gc.collect()
+
+
+MODELO_BACKING = "mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt"
+
+
+def separacao_backing_disponivel():
+    """O segundo modelo é opcional no servidor; no Colab vem pelo notebook."""
+    from importlib.util import find_spec
+
+    return find_spec("audio_separator") is not None
+
+
+def separar_backing(dados_audio, nome_arquivo):
+    """Demucs isola as vozes. O RoFormer separa a voz principal do grupo de apoio."""
+    if not separacao_backing_disponivel():
+        return None, "O modelo de backing vocal não está disponível neste separador."
+
+    voz, instrumental, erro = separar(dados_audio, nome_arquivo)
+    if erro:
+        return None, erro
+
+    try:
+        from pathlib import Path
+
+        from audio_separator.separator import Separator
+
+        with tempfile.TemporaryDirectory() as pasta:
+            raiz = Path(pasta)
+            entrada = raiz / "vozes.wav"
+            entrada.write_bytes(voz)
+            separador = Separator(
+                output_dir=pasta, output_format="WAV", normalization_threshold=1.0,
+                output_single_stem="Vocals",
+            )
+            separador.load_model(model_filename=MODELO_BACKING)
+            arquivos = separador.separate(str(entrada))
+            if len(arquivos) != 1:
+                return None, "O modelo não devolveu a faixa de voz principal."
+            principal = (raiz / Path(arquivos[0]).name).read_bytes()
+
+        # Faz o residual com o mesmo nível da voz do Demucs, sem o ajuste de ganho
+        # independente do stem secundário. Isso mantém a soma dos dois alinhada.
+        import numpy as np
+        import soundfile as sf
+
+        vozes, taxa = sf.read(io.BytesIO(voz), dtype="float32", always_2d=True)
+        lead, taxa_lead = sf.read(io.BytesIO(principal), dtype="float32", always_2d=True)
+        if taxa != taxa_lead or lead.shape[1] != vozes.shape[1]:
+            return None, "A voz principal voltou com um formato incompatível."
+        alinhado = np.zeros_like(vozes)
+        n = min(len(lead), len(vozes))
+        alinhado[:n] = lead[:n]
+
+        def wav(amostras):
+            saida = io.BytesIO()
+            sf.write(saida, amostras, taxa, format="WAV", subtype="PCM_24")
+            return saida.getvalue()
+
+        return {
+            "lead_vocals": wav(alinhado),
+            "backing_vocals": wav(vozes - alinhado),
+            "instrumental": instrumental,
+        }, None
+    except Exception as erro:
+        return None, f"Não foi possível separar voz principal e backings: {erro}"

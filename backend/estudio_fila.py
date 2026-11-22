@@ -24,7 +24,7 @@ COLECAO_JOBS = "estudio_jobs"
 COLECAO_STATUS = "estudio_status"
 DOC_STATUS = "colab"
 
-MODOS = ("rapido", "completo")   # rapido = voz + instrumental; completo = 6 faixas (htdemucs_6s)
+MODOS = ("rapido", "completo", "backing")
 ONLINE_SE_BATIDA_EM_S = 75      # sem sinal do Colab há mais que isso = desligado
 JOB_EXPIRA_S = 20 * 60          # trabalho parado há 20 min = desiste
 GUARDAR_JOBS_HORAS = 24         # limpeza: apaga trabalhos com mais de 24 h
@@ -67,6 +67,7 @@ def status_colab():
         return {
             "online": bool(d.get("online")) and idade <= ONLINE_SE_BATIDA_EM_S,
             "gpu": bool(d.get("gpu")),
+            "backing": bool(d.get("backing")),
             "completo": bool(d.get("completo")),     # o notebook do Colab já sabe separar em 6 faixas?
             "segundos_desde_a_ultima_batida": int(idade),
         }

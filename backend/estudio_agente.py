@@ -101,7 +101,7 @@ Ações e formato:
   positivo atrasa). Só se o deslocamento for explícito.
 - {"acao":"alinhar_inicio","regiao":ID,"referencia":ID} iguala a posição do
   início de duas regiões. Só se o usuário pedir alinhar o início ou a entrada.
-  Encaixar pelo ouvido, pelas batidas ou pelo tom não é suportado.
+  Para encaixar na grade da base, use sincronizar_base.
 - {"acao":"ganho","regiao":ID,"db":N} altera o ganho da região em N dB
   (delta negativo para baixar). Só se o valor for explícito.
 - {"acao":"mudo_faixa","faixa":ID,"mudo":true} ou false para reativar.
@@ -109,8 +109,12 @@ Ações e formato:
   do projeto dentro da região. Tempo relativo à região deve somar seu início.
   Para toda a região, omita ambos. Para a seleção temporal explícita, use os
   limites fornecidos, intersectando com a região. Só silencie quando foi pedido.
-- {"acao":"limpar_ruido","regiao":ID} reduz ruído constante na região inteira,
-  quando existe pausa para medir o ruído. Não remove barulho pontual. Use
+- {"acao":"alinhar_tom","regiao":ID,"semis":N} corrige a afinação dentro do trecho
+  marcado ou da região. Inclua semis só quando o usuário indicar a transposição.
+- {"acao":"sincronizar_base","regiao":ID,"referencia":ID} encaixa o início do trecho
+  selecionado ou da região na batida mais próxima da grade da base indicada.
+- {"acao":"limpar_ruido","regiao":ID} reduz ruído constante no trecho marcado
+  ou na região inteira quando não houver seleção temporal, quando existe pausa para medir o ruído. Não remove barulho pontual. Use
   apenas em pedido explícito de ruído de fundo ou chiado constante na região.
 - {"acao":"esclarecer","mensagem":"pergunta ou limitação em português"}
   para qualquer ação não suportada ou sem parâmetros suficientes.
