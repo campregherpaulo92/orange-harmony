@@ -1,0 +1,97 @@
+/* Sala de Gravação, no mesmo tema do Orange Studio. */
+.dw .dw-sala {
+  color: var(--dw-texto);
+  background: var(--dw-fundo);
+  border: 1px solid var(--dw-borda-forte);
+  border-radius: 14px;
+  padding: 0;
+  width: min(1140px, calc(100% - 28px));
+  max-width: none;
+  max-height: calc(100dvh - 28px);
+  overflow: auto;
+  box-shadow: 0 18px 85px #000c;
+}
+.dw-sala::backdrop { background: #090705d9; }
+.ds-topo {
+  background: var(--dw-painel);
+  border-bottom: 1px solid var(--dw-borda);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ds-topo h2, .ds-topo p, .ds-tomadas h3 { margin: 0; }
+.ds-topo h2 { font-size: 21px; font-weight: 700; }
+.ds-topo p { color: var(--dw-suave); font-size: 12px; margin-top: 3px; }
+.ds-topo #dsFechar { margin-left: auto; }
+.ds-marca {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 9px;
+  border: 1px solid var(--dw-borda-forte);
+  background: #2e1c0e;
+  color: #ff9b55;
+}
+.ds-corpo { display: grid; grid-template-columns: minmax(240px, 290px) minmax(0, 1fr); gap: 14px; padding: 14px 20px; }
+.ds-controles, .ds-principal { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.ds-bloco {
+  min-width: 0;
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--dw-borda);
+  border-radius: 9px;
+  background: var(--dw-painel);
+}
+.ds-bloco legend, .ds-tomadas h3 { padding: 0 4px; font-size: 13px; font-weight: 700; color: var(--dw-texto); }
+.ds-bloco label { color: var(--dw-suave); font-size: 12px; }
+.ds-bloco input, .ds-bloco select { accent-color: var(--dw-laranja); }
+.ds-bloco input:is([type=number], [type=text]) {
+  padding: 4px 6px;
+  min-width: 0;
+  border: 1px solid var(--dw-borda);
+  border-radius: 6px;
+  background: #0d0a07;
+}
+.ds-bloco input[type=number] { width: 77px; font-variant-numeric: tabular-nums; }
+.ds-linha { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.ds-linha label, #dsRitmoConfig label { display: flex; align-items: center; justify-content: space-between; gap: 5px; }
+.ds-dica { color: var(--dw-suave); font-size: 12px; line-height: 1.45; margin: 0; }
+.ds-nivel, .ds-slider { display: grid; grid-template-columns: minmax(0, 1fr) 62px; align-items: center; gap: 7px; }
+.ds-slider { grid-template-columns: 70px minmax(30px, 1fr) 37px; }
+.ds-slider input { width: 100%; }
+.ds-nivel meter { width: 100%; height: 10px; }
+.ds-nivel meter::-webkit-meter-optimum-value { background: #51bc8e; }
+.ds-nivel meter.ds-pico::-webkit-meter-even-less-good-value { background: #ed6565; }
+.ds-nivel output, .ds-slider output { text-align: right; color: var(--dw-texto); font-size: 11px; font-variant-numeric: tabular-nums; }
+.ds-faixas { display: flex; gap: 5px 8px; flex-wrap: wrap; max-height: 100px; overflow: auto; }
+.ds-faixas label { background: #21180f; border: 1px solid var(--dw-borda); border-radius: 5px; padding: 4px 7px; }
+.ds-tempos { gap: 8px 14px; }
+.ds-transporte, .ds-envio {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.ds-transporte { background: #1c140d; border: 1px solid var(--dw-borda-forte); border-radius: 9px; padding: 10px 12px; }
+.ds-transporte output { font-size: 21px; font-variant-numeric: tabular-nums; margin-right: 10px; }
+#dsFase { color: #ff9b55; font-size: 12px; }
+#dsEditor { display: grid; gap: 9px; }
+#dsNome { width: min(195px, 100%); }
+.ds-tomada-campos select { max-width: 250px; }
+.ds-onda { position: relative; border: 1px solid var(--dw-borda); border-radius: 5px; overflow: hidden; background: #14100c; }
+.ds-onda canvas { display: block; width: 100%; height: 84px; cursor: crosshair; }
+#dsCursorOnda { position: absolute; top: 0; bottom: 0; width: 1px; background: #fff; pointer-events: none; }
+.ds-status { min-height: 34px; border-top: 1px solid var(--dw-borda); padding: 9px 20px; color: var(--dw-suave); }
+@media (max-width: 730px) {
+  .ds-corpo { grid-template-columns: 1fr; padding: 12px; }
+  .ds-topo { padding: 12px; }
+  .ds-topo h2 { font-size: 16px; }
+  .ds-marca { display: none; }
+  .ds-status { padding: 9px 12px; }
+}

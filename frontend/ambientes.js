@@ -45,7 +45,7 @@
         ] },
         { titulo: "Dentro do Studio", itens: [
           { id: "studio-separar", nome: "Separar uma música", icone: "tesoura", studio: "separar", desc: "Divida uma música em voz, bateria, baixo e outros instrumentos.", tags: ["stems", "6 faixas"] },
-          { id: "studio-gravar", nome: "Gravar uma voz", icone: "mic", studio: "gravar", desc: "Crie uma faixa já armada e grave com metrônomo e pré-contagem.", tags: ["microfone", "metrônomo"] },
+          { id: "studio-gravar", nome: "Sala de Gravação", icone: "mic", studio: "sala", desc: "Ouça uma referência, grave tomadas e envie a escolhida para o projeto.", tags: ["retorno", "pré-contagem"] },
           { id: "studio-voz", nome: "Edição vocal", icone: "brilho", studio: "voz", desc: "Peça em português ou escolha: ruído, tom, EQ, compressão, sibilância e reverb.", tags: ["IA", "ruído", "tom"] },
           { id: "studio-prod", nome: "Produtor IA", icone: "mix", studio: "prod", desc: "Gere bateria, baixo e acordes em cima da sua faixa, uma faixa por instrumento.", tags: ["270+ estilos", "faixa por instrumento"] },
           { id: "studio-cifra", nome: "Cifra e letra", icone: "nota", studio: "cifra", desc: "Descubra o tom, o andamento e os acordes de uma música e veja a letra com as cifras rolando, com velocidade ajustável.", tags: ["tom", "acordes", "letra", "velocidade"] },

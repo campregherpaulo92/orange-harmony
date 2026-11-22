@@ -246,11 +246,12 @@
   }
 
   // ── metrônomo ──
-  function cliqueEm(quando, forte) {
+  function cliqueEm(quando, forte, destino = null) {
     if (!garantirAudio()) return;
     const o = ctx.createOscillator(), g = ctx.createGain(); o.type = "square"; o.frequency.value = forte ? 1500 : 1000;
     g.gain.setValueAtTime(0.0001, quando); g.gain.exponentialRampToValueAtTime(0.3, quando + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, quando + 0.05);
-    o.connect(g); g.connect(ctx.destination); o.start(quando); o.stop(quando + 0.06);
+    o.connect(g); g.connect(destino || ctx.destination); o.start(quando); o.stop(quando + 0.06);
+    if (destino) return;
     cliquesTotal++; cliqueLog.push(!!forte); if (cliqueLog.length > 60) cliqueLog.shift();
     setTimeout(() => { const b = $("#dwMetroBtn"); if (!b) return; b.classList.add("pulso"); setTimeout(() => b.classList.remove("pulso"), 90); }, Math.max(0, (quando - ctx.currentTime) * 1000));
   }
@@ -309,6 +310,7 @@
         <div class="dw-campo">Tom<b id="dwTom">—</b></div>
         <div class="dw-vu-mestre" title="Volume geral"><i id="dwVuMestre"></i></div>
         <div class="dw-esp"></div>
+        <button type="button" class="dw-btn" id="dwAbrirSala" aria-haspopup="dialog" title="Abrir Sala de Gravação">${ic("rec")} Sala de Gravação</button>
         <button type="button" class="dw-btn dw-entrada-trigger" id="dwAbrirEntrada" aria-expanded="false" aria-controls="dwPainelEntrada" title="Configurar a entrada de áudio">${ic("mic")} Entrada de áudio</button>
         <button class="dw-btn cheio" id="dwSeparar" title="Separar a música em faixas">${ic("divide")} Separar música</button>
         <button type="button" class="dw-btn" id="dwLaranjinha" aria-haspopup="dialog" title="Abrir o agente de edição do Studio">${ic("bot")} Agente do Studio</button>
@@ -354,6 +356,7 @@
         ${botaoIcone('id="dwTrechoAfinar" disabled', "afinar", "Afinar trecho")}
         ${botaoIcone('id="dwTrechoEfeito" disabled', "efeito", "Aplicar efeito no trecho")}
         ${botaoIcone('id="dwTrechoBacking" disabled', "backing", "Criar backing vocal")}
+        ${botaoIcone('id="dwTrechoSala" disabled', "mic", "Usar trecho na Sala de Gravação")}
         ${botaoIcone('id="dwTrechoLimpar" disabled', "limpar", "Limpar seleção")}
       </div>
       <div class="dw-area">
@@ -509,6 +512,7 @@
           <div class="dw-acoes"><button class="dw-btn" id="dwExpFechar2">Fechar</button><button class="dw-btn cheio" id="dwExpIr">Exportar</button></div>
         </div>
       </div>
+      <dialog class="dw-sala" id="dwSala" aria-labelledby="dsTitulo"></dialog>
       <input type="file" id="dwArqAudio" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.webm" hidden>
     </div>
     <div class="dw-menu" id="dwMenuArquivo" hidden>
@@ -519,7 +523,7 @@
       <button data-a="salvar"><b>Salvar agora (Ctrl+S)</b><small>ele também salva sozinho enquanto você mexe</small></button>
       <button data-a="abrir"><b>Abrir projeto…</b><small>seus projetos salvos neste aparelho</small></button>
       <button data-a="novo"><b>Novo projeto</b><small>o atual fica salvo; começa um em branco</small></button>
-      <button data-a="classico"><b>Abrir o Estúdio clássico</b><small>a versão antiga, enquanto você valida esta</small></button>
+      <button data-a="sala"><b>Sala de Gravação</b><small>ouça uma referência e grave tomadas separadas</small></button>
     </div>
     <div class="dw-menu" id="dwMenuFx" hidden></div>
     <div class="dw-menu" id="dwMenuFaixa" hidden>
@@ -702,9 +706,9 @@
   // ══ ENTRADA DE ÁUDIO ═══════════════════════════════════════════════════
   let entradaId = "", escutaEntrada = null, testeUrl = "", solicitandoGravacao = false;
   const pararStream = (stream) => stream?.getTracks().forEach((track) => track.stop());
-  function pedirEntrada(echoCancellation = S.monitor === "caixa") {
+  function pedirEntrada(echoCancellation = S.monitor === "caixa", dispositivo = entradaId) {
     const audio = { echoCancellation, noiseSuppression: false, autoGainControl: false };
-    if (entradaId) audio.deviceId = { exact: entradaId };
+    if (dispositivo) audio.deviceId = { exact: dispositivo };
     return navigator.mediaDevices.getUserMedia({ audio });
   }
   function erroEntrada(e) {
@@ -1410,6 +1414,7 @@
       campo.value = ativo ? (+trechoSel[k].toFixed(3)) : "";
     }
     $("#dwTrechoLimpar").disabled = !pronto;
+    $("#dwTrechoSala").disabled = !pronto;
     $("#dwTrechoTodas").disabled = arrastandoTrecho || !S.faixas.length;
     $("#dwTrechoProjeto").disabled = arrastandoTrecho || fimMusica < MIN_TRECHO;
     $("#dwTrechoExcluir").disabled = !pronto || Math.min(trechoSel.fim, fimMusica) - trechoSel.ini < MIN_TRECHO;
@@ -2020,6 +2025,7 @@
     m.style.top = r.bottom + 6 + "px"; m.style.left = (alinharDireita ? Math.max(8, r.right - 290) : r.left) + "px"; m.hidden = !m.hidden;
   }
   function ligarEventos() {
+    $("#dwAbrirSala").addEventListener("click", () => abrirSala());
     $("#dwRew").addEventListener("click", () => { ir(0); $("#dwTlScroll").scrollLeft = 0; });
     $("#dwPlay").addEventListener("click", () => { if (S.gravando || S.contando) pararGravacao(); else if (S.tocando) pausar(); else { tocar(); if (afin && afin.pendente && afin.pendente()) dica("Atenção: há ajustes de afinação ainda NÃO aplicados, então este play toca o áudio original. Na aba Afinação, clique em “Aplicar na região”."); } });
     $("#dwStop").addEventListener("click", () => { if (S.gravando || S.contando) pararGravacao(); parar(); });
@@ -2066,6 +2072,7 @@
     $("#dwTrechoOuvir").addEventListener("click", ouvirTrecho);
     $("#dwTrechoCopiar").addEventListener("click", copiarTrecho);
     $("#dwTrechoAfinar").addEventListener("click", afinarTrecho);
+    $("#dwTrechoSala").addEventListener("click", () => abrirSala(true));
     $("#dwTrechoRuido").addEventListener("click", () => limparRecortes(recortesDoTrecho(trechoSel).filter(({ r }) => !r.silenciada)));
     ligarEdicaoBacking();
     ligarAjusteBpm();
@@ -2140,7 +2147,7 @@
       else if (b.dataset.a === "exportar") exportar();
       else if (b.dataset.a === "projsalvar") exportarProjetoArquivo();
       else if (b.dataset.a === "projabrir") $("#dwArqProj").click();
-      else if (b.dataset.a === "classico") { const f = document.getElementById("fabEstudio"); if (f) f.click(); }
+      else if (b.dataset.a === "sala") abrirSala();
       else if (b.dataset.a === "novo") novoProjeto();
       else if (b.dataset.a === "salvar") salvarProjeto().then((okk) => { if (okk) dica("Projeto salvo neste aparelho."); });
       else if (b.dataset.a === "abrir") abrirListaProjetos();
@@ -2193,7 +2200,7 @@
       const salto = e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && ["ArrowLeft", "ArrowRight"].includes(e.key);
       const atalhoNoRange = e.target.type === "range" && (e.ctrlKey || e.metaKey || salto || e.code === "Space");
       if ((/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !atalhoNoRange) || e.target.isContentEditable) return;
-      if ($("#dwAgentePainel").open || $("#dwBpmPainel").open || $("#dwBackingPainel").open || $("#dwEfeitoTrechoPainel").open || !$("#dwModalSep").hidden || !$("#dwModalProj").hidden || !$("#dwModalCal").hidden || !$("#dwModalExp").hidden) return;
+      if ($("#dwSala").open || $("#dwAgentePainel").open || $("#dwBpmPainel").open || $("#dwBackingPainel").open || $("#dwEfeitoTrechoPainel").open || !$("#dwModalSep").hidden || !$("#dwModalProj").hidden || !$("#dwModalCal").hidden || !$("#dwModalExp").hidden) return;
       if (salto) {
         e.preventDefault();
         if (!S.gravando && !S.contando) {
@@ -2228,7 +2235,7 @@
     });
     // clicar num botão solta o foco: a barra de espaço sempre toca/pausa
     $("#dwRaiz").addEventListener("click", (e) => { const b = e.target.closest("button, input[type=checkbox]"); if (b) setTimeout(() => b.blur(), 0); });
-    window.addEventListener("beforeunload", (e) => { if (S.sujo && S.regioes.length) { e.preventDefault(); e.returnValue = ""; } });
+    window.addEventListener("beforeunload", (e) => { if ((S.sujo && S.regioes.length) || salaGravacao?.temRascunhos()) { e.preventDefault(); e.returnValue = ""; } });
   }
   function abrirAba(n) {
     abaAtiva = n; $$(".dw-aba").forEach((a) => a.classList.toggle("on", a.dataset.aba === n)); $$(".dw-painel-aba").forEach((p) => p.classList.toggle("on", p.id === "dwP-" + n));
@@ -3080,13 +3087,92 @@
     finally { btn.disabled = false; }
   }
 
+  // ══ SALA DE GRAVAÇÃO: referências no mesmo projeto e envio de tomadas ══
+  let salaGravacao = null;
+
+  function tocarReferenciaSala(ids, inicio, fim, quando, saida) {
+    const fontesSala = [], nosSala = [];
+    for (const id of ids) {
+      const f = faixaPorId(id);
+      if (!f) continue;
+      const ganho = ctx.createGain(), pan = ctx.createStereoPanner?.();
+      ganho.gain.value = f.vol;
+      const silencio = ctx.createGain();
+      if (pan) { pan.pan.value = f.pan; ganho.connect(pan); pan.connect(silencio); }
+      else ganho.connect(silencio);
+      silencio.connect(saida);
+      const lista = window.EstudioFx ? (f.fx || []).filter((fx) => fxOk || !EstudioFx.precisaWorklet([fx])) : [];
+      const cadeia = lista.length ? EstudioFx.criarCadeia(ctx, lista, { bpm: S.bpm, origem: quando - inicio }) : null;
+      if (cadeia) cadeia.saida.connect(ganho);
+      nosSala.push({ ganho, pan, silencio, cadeia });
+      const regioes = S.regioes.filter((r) => r.f === id && !r.gravando && r.ini < fim);
+      agendarSilencio(silencio.gain, regioes, inicio, quando);
+      for (const r of regioes) {
+        const fonte = programarRegiao(ctx, r, cadeia?.entrada || ganho, inicio, quando);
+        if (fonte) { fonte.stop(quando + fim - inicio); fontesSala.push(fonte); }
+      }
+    }
+    return () => {
+      fontesSala.forEach((fonte) => { try { fonte.stop(); } catch (_) { /* já terminou */ } fonte.disconnect(); });
+      nosSala.forEach(({ ganho, pan, silencio, cadeia }) => {
+        ganho.disconnect(); pan?.disconnect(); silencio.disconnect();
+        if (cadeia) { cadeia.saida.disconnect(); cadeia.parar(); }
+      });
+    };
+  }
+
+  function receberTomadaSala(projeto, nome, audio, inicio) {
+    if (S.id !== projeto) throw new Error("Abra o projeto original para enviar esta tomada.");
+    const blob = audioBufferParaWavBlob(audio);
+    mudar(() => {
+      const faixa = novaFaixa(nome, undefined, { gravada: true });
+      const r = novaRegiao(faixa, guardarAudio(audio, blob), nome, inicio, 0);
+      S.faixaSel = faixa.id; S.regiaoSel = r.id;
+    });
+    ir(inicio);
+    mostrarFaixa(S.faixaSel);
+    const sc = $("#dwTlScroll");
+    if (px(inicio) > sc.scrollLeft + sc.clientWidth || px(inicio) < sc.scrollLeft) sc.scrollLeft = Math.max(0, px(inicio) - 80);
+    dica(`Tomada “${nome}” adicionada ao projeto em ${inicio.toFixed(3)} s.`);
+  }
+
+  async function abrirSala(usarTrecho = false) {
+    if (retomandoProjeto) await retomandoProjeto;
+    if (!$("#page-estudio").classList.contains("oh-page-ativa")) return;
+    if (bloqueioTrecho() || gravacao || solicitandoGravacao) return;
+    if (!window.EstudioSala || !garantirAudio()) return dica("A Sala de Gravação não carregou neste navegador.");
+    if (S.tocando) pausar();
+    if (afin) afin.parar();
+    if (cifraUI) cifraUI.pausar();
+    alternarPainelEntrada(false);
+    const fim = fimProjeto(), faixa = faixaPorId(usarTrecho ? trechoSel?.faixa : S.faixaSel);
+    const todas = usarTrecho && $("#dwTrechoTodas").checked;
+    const selecao = usarTrecho && trechoSel ? { inicio: trechoSel.ini, fim: trechoSel.fim } : null;
+    if (!salaGravacao) salaGravacao = EstudioSala.criar($("#dwSala"), {
+      ic, esc, ctx, criarGravador, erroEntrada,
+      pedirEntrada: (id) => pedirEntrada(false, id),
+      cliqueEm, tocarReferencia: tocarReferenciaSala, receberTomada: receberTomadaSala,
+      exportar: (audio, nome) => baixar(audioBufferParaWavBlob(audio), nomeLimpo(nome, "tomada") + ".wav"),
+    });
+    salaGravacao.abrir({
+      projeto: S.id, nome: S.nome, bpm: S.bpm, compasso: S.compasso, passo: beatDur(), tempos: COMPASSOS[S.compasso].n,
+      cursor: S.tAtual, fim, selecao, entrada: entradaId, atraso: S.latencia, contagem: S.contagem,
+      faixas: S.faixas.filter((f) => S.regioes.some((r) => r.f === f.id && !r.gravando && bufs.has(r.buf)))
+        .map((f) => ({ id: f.id, nome: f.nome, marcada: todas || (faixa ? f === faixa : audivel(f.id)) })),
+    });
+  }
+
   // ══ INÍCIO ════════════════════════════════════════════════════════════
-  let restauradoUmaVez = false;
+  let restauradoUmaVez = false, retomandoProjeto = null;
   function aoAbrir() {
     montar(); renderTudo(); atualizarNos();
-    if (restauradoUmaVez) return; restauradoUmaVez = true;
+    if (restauradoUmaVez) return retomandoProjeto;
+    restauradoUmaVez = true;
     let ultimo = null; try { ultimo = localStorage.getItem("oh-dw-ultimo"); } catch (e) { /* sem armazenamento */ }
-    if (ultimo && !S.faixas.length) abrirProjeto(ultimo).then((okk) => { if (okk) dica(`Projeto "${S.nome}" retomado de onde você parou.`); }).catch(() => {});
+    if (ultimo && !S.faixas.length) {
+      retomandoProjeto = abrirProjeto(ultimo).then((okk) => { if (okk) dica(`Projeto "${S.nome}" retomado de onde você parou.`); }).catch(() => {}).finally(() => { retomandoProjeto = null; });
+    }
+    return retomandoProjeto;
   }
   function iniciar() {
     montar();
@@ -3096,7 +3182,7 @@
   }
   // usado pelos cartões dos ambientes (Orange Studio e Orange Library): abre uma aba ou executa uma ação já dentro do Estúdio
   function acaoExterna(nome) {
-    if (nome === "separar") abrirSeparar(); else if (nome === "projetos") abrirListaProjetos(); else if (nome === "gravar") $("#dwOpGravar").click();
+    if (nome === "separar") abrirSeparar(); else if (nome === "projetos") abrirListaProjetos(); else if (nome === "gravar") $("#dwOpGravar").click(); else if (nome === "sala") abrirSala();
   }
   window.EstudioDaw = {
     aoAbrir, abrirAba: (n) => { montar(); abrirAba(n); }, acao: (n) => { montar(); acaoExterna(n); },
