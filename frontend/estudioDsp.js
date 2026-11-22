@@ -138,7 +138,51 @@
     return { canais: saidas, aviso: null, contraste: quieta / forte };
   }
 
-  const api = { limparRuido, _fft: fft, NFFT, HOP };
+  // WSOLA: procura um trecho com fase parecida antes de sobrepor as janelas.
+  // Usa o mesmo deslocamento nos canais para preservar a imagem estéreo.
+  async function ajustarAndamento(canais, sr, fator) {
+    if (!Number.isFinite(fator) || fator <= 0) throw new RangeError("Fator de andamento inválido.");
+    const tamanho = canais[0].length, n = Math.max(1, Math.round(tamanho / fator));
+    const saidas = canais.map(() => new Float32Array(n));
+    const passo = Math.min(Math.round(sr * 0.02), Math.max(1, Math.floor(tamanho / 2)));
+    const janela = 2 * passo, busca = Math.round(sr * 0.009), resolucao = Math.max(1, Math.round(sr / 8000));
+    const mono = new Float32Array(tamanho);
+    for (const canal of canais) {
+      for (let i = 0; i < tamanho; i++) mono[i] += canal[i] / canais.length;
+    }
+    let posAnterior = 0;
+    for (let pos = 0; pos < n; pos += passo) {
+      const alvo = Math.min(Math.max(0, tamanho - janela), Math.round(pos * fator));
+      let inicio = alvo;
+      if (pos > 0 && pos + passo < n) {
+        let melhor = -Infinity;
+        for (let k = Math.max(0, alvo - busca); k <= Math.min(tamanho - janela, alvo + busca); k += resolucao) {
+          let xy = 0, xx = 0, yy = 0;
+          for (let j = 0; j < passo; j += resolucao) {
+            const x = mono[posAnterior + passo + j] || 0, y = mono[k + j] || 0;
+            xy += x * y; xx += x * x; yy += y * y;
+          }
+          const valor = xy / Math.sqrt(xx * yy + 1e-16) - 0.015 * Math.abs(k - alvo) / Math.max(1, busca);
+          if (valor > melhor) { melhor = valor; inicio = k; }
+        }
+      } else if (pos > 0) {
+        inicio = Math.max(0, tamanho - (n - pos));
+      }
+      for (let c = 0; c < canais.length; c++) {
+        const entrada = canais[c], saida = saidas[c];
+        for (let j = 0; j < janela && pos + j < n; j++) {
+          const v = entrada[inicio + j] || 0;
+          const mistura = pos === 0 ? 1 : Math.min(1, j / passo);
+          saida[pos + j] += (v - saida[pos + j]) * mistura;
+        }
+      }
+      posAnterior = inicio;
+      if ((pos / passo) % 128 === 0) await tick();
+    }
+    return saidas;
+  }
+
+  const api = { limparRuido, ajustarAndamento, _fft: fft, NFFT, HOP };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   raiz.EstudioDsp = api;
 })(typeof window !== "undefined" ? window : globalThis);

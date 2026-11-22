@@ -37,7 +37,7 @@
   const corA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
 
   // ── estado do projeto (só dados simples: é isto que o desfazer guarda) ──
-  const ALT = 84, BIN = 0.005, FOLGA = 20;
+  const ALT = 84, BIN = 0.005, FOLGA = 20, ZOOM_MAX = 150, SALTO_TRANSPORTE = 1;
   const COMPASSOS = { "4/4": { n: 4, u: 1 }, "3/4": { n: 3, u: 1 }, "2/4": { n: 2, u: 1 }, "6/8": { n: 6, u: 0.5 } };
   const CORES = ["#a855f7", "#ec4899", "#eab308", "#38bdf8", "#84cc16", "#fb7185"];
   const S = {
@@ -55,7 +55,9 @@
   const duracaoTL = () => Math.max(30, fimProjeto() + FOLGA);
   const px = (t) => t * S.pps;
   const algumSolo = () => S.faixas.some((f) => f.solo);
-  const audivel = (id) => { const f = faixaPorId(id); return !!f && !f.mudo && (!algumSolo() || f.solo); };
+  let mudoGeral = false;
+  const faixasMarcadas = new Set();
+  const audivel = (id) => { const f = faixaPorId(id); return !!f && !mudoGeral && !f.mudo && (!algumSolo() || f.solo); };
   const fmt = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(1).padStart(4, "0")}`; };
   function snap(t, livre) {
     if (livre || S.snap === "off") return t;
@@ -90,7 +92,7 @@
   function desfazer() { if (S.gravando || S.contando) return dica("Pare a gravação antes de desfazer."); if (!pilha.length) return dica("Nada para desfazer."); restaurar(pilha.pop(), refaz); atualizarUndo(); dica("Desfeito."); }
   function refazer() { if (S.gravando || S.contando) return dica("Pare a gravação antes de refazer."); if (!refaz.length) return dica("Nada para refazer."); restaurar(refaz.pop(), pilha); atualizarUndo(); dica("Refeito."); }
   function atualizarUndo() { const u = $("#dwUndo"), r = $("#dwRedo"); if (u) u.disabled = !pilha.length; if (r) r.disabled = !refaz.length; }
-  function mudar(fn) { const antes = foto(); fn(); empilhar(antes); renderTudo(); if (S.tocando) reagendar(); }
+  function mudar(fn, comTransporte = false) { const antes = foto(comTransporte); fn(); empilhar(antes); renderTudo(); if (S.tocando) reagendar(); }
 
   // ══ ÁUDIO ═════════════════════════════════════════════════════════════
   let ctx = null, mestre = null, limitador = null, anMestre = null;
@@ -265,6 +267,7 @@
         <div class="dw-relogio" id="dwRelogio">0:00.0<small>Compasso 1 · tempo 1</small></div>
         <label class="dw-campo">Andamento<input type="number" id="dwBpm" value="100" min="40" max="220" title="Batidas por minuto: define a grade e o metrônomo"></label>
         <label class="dw-campo">Compasso<select id="dwComp"><option>4/4</option><option>3/4</option><option>2/4</option><option>6/8</option></select></label>
+        <button class="dw-btn peq" id="dwAjustarBpm" title="Ajustar o ritmo do áudio mantendo o tom">Ajustar BPM</button>
         <div class="dw-campo">Tom<b id="dwTom">—</b></div>
         <div class="dw-vu-mestre" title="Volume geral"><i id="dwVuMestre"></i></div>
         <div class="dw-esp"></div>
@@ -282,10 +285,11 @@
           <button class="dw-fb" data-f="lupa" title="Zoom (Z): clique aproxima; Alt + clique afasta">${ic("lupa")}</button>
         </div>
         <div class="dw-grupo"><button class="dw-fb" id="dwUndo" title="Desfazer (Ctrl+Z)">${ic("undo")}</button><button class="dw-fb" id="dwRedo" title="Refazer (Ctrl+Y)">${ic("redo")}</button></div>
-        <button type="button" class="dw-btn peq" id="dwMutarTodas" title="Ativa o M de todas as faixas. Use o M de cada faixa para reativá-la." disabled>${ic("mudo")} Mutar todas</button>
+        <button type="button" class="dw-btn peq" id="dwMutarTodas" title="Liga e desliga o silêncio do projeto" aria-pressed="false" disabled>${ic("mudo")} Mutar todas</button>
+        <button type="button" class="dw-btn peq" id="dwMutarMarcadas" hidden>Mutar marcadas</button>
         <div class="dw-sep"></div>
         <label>Grade <select id="dwSnap"><option value="off" selected>Livre</option><option value="bar">Compasso</option><option value="beat">Tempo</option><option value="half">Meio tempo</option></select></label>
-        <label>Zoom <input type="range" id="dwZoom" min="8" max="120" value="40"></label>
+        <label>Zoom <input type="range" id="dwZoom" min="8" max="${ZOOM_MAX}" value="40"></label>
         <button class="dw-btn peq" id="dwAjustar" title="Ajusta o zoom para caber o projeto todo">Ajustar</button>
         <label title="Seguir o cursor: a tela acompanha enquanto toca"><input type="checkbox" id="dwSeguir" checked> Seguir</label>
         <div class="dw-grupo dw-rec-grupo">
@@ -299,11 +303,19 @@
       </div>
       <div class="dw-trecho-barra" id="dwTrechoBarra" hidden>
         <span id="dwTrechoInfo" role="status"></span>
+        <label>Início (s) <input type="number" min="0" step="0.001" id="dwTrechoInicio" disabled></label>
+        <label>Fim (s) <input type="number" min="0" step="0.001" id="dwTrechoFim" disabled></label>
         <label><input type="checkbox" id="dwTrechoTodas"> Todas as faixas</label>
         <button class="dw-btn peq" id="dwTrechoProjeto" disabled>Selecionar projeto</button>
         <button class="dw-btn peq" id="dwTrechoDividir" disabled>Dividir trecho</button>
         <button class="dw-btn peq" id="dwTrechoSilenciar" disabled>Silenciar trecho</button>
-        <button class="dw-btn peq" id="dwTrechoExcluir" title="Remove o intervalo em todas as faixas e puxa o que vem depois para a esquerda" disabled>Excluir e fechar espaço</button>
+        <button class="dw-btn peq" id="dwTrechoExcluir" title="Remove o intervalo e puxa para a esquerda o áudio seguinte nas faixas selecionadas" disabled>Excluir e fechar espaço</button>
+        <button class="dw-btn peq" id="dwTrechoOuvir" disabled>Ouvir</button>
+        <button class="dw-btn peq" id="dwTrechoCopiar" disabled>Copiar para nova faixa</button>
+        <button class="dw-btn peq" id="dwTrechoRuido" disabled>Limpar ruído</button>
+        <button class="dw-btn peq" id="dwTrechoAfinar" disabled>Afinar</button>
+        <button class="dw-btn peq" id="dwTrechoEfeito" disabled>Aplicar efeito</button>
+        <button class="dw-btn peq" id="dwTrechoBacking" disabled>Backing vocal</button>
         <button class="dw-btn peq" id="dwTrechoLimpar" disabled>Limpar seleção</button>
       </div>
       <div class="dw-area">
@@ -348,7 +360,7 @@
         <div class="dw-painel-aba" id="dwP-prod"><div class="dw-vz" id="dwProd"></div></div>
         <div class="dw-painel-aba" id="dwP-cifra"><div class="cf" id="dwCifra"></div></div>
       </section>
-      <div class="dw-status"><span class="e" id="dwStatus">Pronto.</span><span id="dwStatusSel"></span><span id="dwSalvo"></span><span>Espaço toca/pausa · R grava · V seleciona · C divide · S divide no cursor · Ctrl+Z desfaz</span></div>
+      <div class="dw-status"><span class="e" id="dwStatus">Pronto.</span><span id="dwStatusSel"></span><span id="dwSalvo"></span><span>Espaço toca/pausa · Shift + ←/→ salta 1 s · R grava · V seleciona · C divide · S divide no cursor · Ctrl+Z desfaz</span></div>
       <div class="dw-contagem" id="dwContagemOv" hidden></div>
       <div class="dw-modal" id="dwModalSep" hidden>
         <div class="dw-modal-cartao">
@@ -366,6 +378,7 @@
           </div>
           <div class="dw-modos" id="dwModos">
             <label class="dw-modo"><input type="radio" name="dwModoSep" value="completo"><span><b>Todos os instrumentos</b><small>6 faixas: voz, bateria, baixo, guitarra, piano e outros</small></span></label>
+            <label class="dw-modo"><input type="radio" name="dwModoSep" value="backing"><span><b>Voz principal e backings</b><small>3 faixas: principal, vozes de apoio agrupadas e instrumental</small></span></label>
             <label class="dw-modo"><input type="radio" name="dwModoSep" value="rapido"><span><b>Só voz e instrumental</b><small>2 faixas: mais leve e rápido</small></span></label>
           </div>
           <div class="dw-dica" id="dwModoAviso"></div>
@@ -391,6 +404,33 @@
       </div>
       <input type="file" id="dwArqSample" accept="audio/*" hidden>
       <input type="file" id="dwArqProj" accept=".ohstudio,.zip" hidden>
+      <dialog id="dwBpmPainel" class="dw-agente" aria-labelledby="dwBpmTitulo">
+        <header class="dw-modal-topo dw-agente-topo"><b id="dwBpmTitulo">Ajustar BPM do áudio</b><button type="button" id="dwBpmFechar" aria-label="Fechar">×</button></header>
+        <form id="dwBpmForm">
+          <label>Aplicar em <select id="dwBpmEscopo"><option value="projeto">Projeto inteiro</option><option value="faixa">Faixa selecionada</option></select></label>
+          <label>BPM atual <input id="dwBpmOrigem" type="number" min="40" max="220" required></label>
+          <label>Novo BPM <input id="dwBpmDestino" type="number" min="40" max="220" required></label>
+          <p class="dw-dica">Altera a duração mantendo o tom. Use o BPM real do áudio como origem.</p>
+          <div class="dw-acoes"><button class="dw-btn cheio">Aplicar</button></div>
+        </form>
+      </dialog>
+      <dialog id="dwBackingPainel" class="dw-agente" aria-labelledby="dwBackingTitulo">
+        <header class="dw-modal-topo dw-agente-topo"><b id="dwBackingTitulo">Backing vocal</b><button type="button" id="dwBackingFechar" aria-label="Fechar">×</button></header>
+        <form id="dwBackingForm">
+          <label>Preset <select id="dwBackingPreset"><option value="dobra">Dobra</option><option value="harmonia">Harmonia</option><option value="coro">Coro</option><option value="vocalize">Vocalize (gravar)</option></select></label>
+          <label id="dwBackingModoLabel">Destino <select id="dwBackingModo"><option value="faixas">Criar faixas de apoio</option><option value="trecho">Aplicar no trecho</option></select></label>
+          <label id="dwBackingNLabel">Camadas <select id="dwBackingN"><option>1</option><option>2</option><option>3</option></select></label>
+          <p id="dwBackingDica" class="dw-dica"></p>
+          <div class="dw-acoes"><button class="dw-btn cheio" id="dwBackingCriar">Criar backing</button></div>
+        </form>
+      </dialog>
+      <dialog id="dwEfeitoTrechoPainel" class="dw-agente" aria-labelledby="dwEfeitoTrechoTitulo">
+        <header class="dw-modal-topo dw-agente-topo"><b id="dwEfeitoTrechoTitulo">Efeito no trecho</b><button type="button" id="dwEfeitoTrechoFechar" aria-label="Fechar">×</button></header>
+        <form id="dwEfeitoTrechoForm">
+          <label>Efeito <select id="dwEfeitoTrechoTipo"><option value="reverb">Reverb</option><option value="chorus">Chorus</option><option value="delay">Delay</option></select></label>
+          <div class="dw-acoes"><button class="dw-btn cheio">Aplicar</button></div>
+        </form>
+      </dialog>
       <dialog id="dwAgentePainel" class="dw-agente" aria-labelledby="dwAgenteTitulo">
         <header class="dw-modal-topo dw-agente-topo">
           <img src="laranjinha.png" alt="">
@@ -454,19 +494,32 @@
   }
 
   function mutarTodas() {
-    if (S.faixas.every((f) => f.mudo)) return;
-    mudarFx(() => { S.faixas.forEach((f) => { f.mudo = true; }); });
-    dica("Todas as faixas mudas. Use M para reativar cada faixa ou Desfazer para voltar à mixagem anterior.");
+    mudoGeral = !mudoGeral;
+    renderTudo(); atualizarNos();
+    dica(mudoGeral ? "Mute geral ligado." : "Mute geral desligado.");
+  }
+  function mutarMarcadas() {
+    const faixas = S.faixas.filter((f) => faixasMarcadas.has(f.id));
+    if (!faixas.length) return;
+    const mudo = faixas.some((f) => !f.mudo);
+    mudarFx(() => faixas.forEach((f) => { f.mudo = mudo; }));
   }
   function renderCab() {
-    $("#dwMutarTodas").disabled = S.faixas.every((f) => f.mudo);
+    const geral = $("#dwMutarTodas"), grupo = $("#dwMutarMarcadas");
+    const marcadas = S.faixas.filter((f) => faixasMarcadas.has(f.id));
+    geral.disabled = !S.faixas.length;
+    geral.setAttribute("aria-pressed", String(mudoGeral));
+    geral.classList.toggle("on", mudoGeral);
+    geral.innerHTML = ic("mudo") + (mudoGeral ? " Reativar geral" : " Mutar todas");
+    grupo.hidden = !marcadas.length;
+    grupo.textContent = (marcadas.some((f) => !f.mudo) ? "Mutar" : "Reativar") + ` marcadas (${marcadas.length})`;
     $("#dwCabLista").innerHTML = S.faixas.map((f) => `
       <div class="dw-cab ${f.id === S.faixaSel ? "sel" : ""} ${f.vazia ? "vazia" : ""}" data-f="${f.id}" ${f.vazia ? 'title="Esta faixa quase não tem som nesta música (deixei muda)"' : ""}>
         <i class="cor" style="background:${f.cor}"></i>
         <div class="l1"><input class="nome" value="${esc(f.nome)}" data-nome="${f.id}">
           <button class="dw-mini m ${f.mudo ? "on" : ""}" data-m="${f.id}" title="Mudo">M</button><button class="dw-mini s ${f.solo ? "on" : ""}" data-s="${f.id}" title="Solo">S</button><button class="dw-mini r ${f.arm ? "on" : ""}" data-r="${f.id}" title="Armar para gravar">R</button></div>
-        <div class="l2"><span>Vol</span><input type="range" min="0" max="1.5" step="0.01" value="${f.vol}" data-vol="${f.id}"><span>Pan</span><input type="range" min="-1" max="1" step="0.1" value="${f.pan}" data-pan="${f.id}" style="max-width:46px"></div>
-        <div class="l3"><div class="medidor"><i data-vu="${f.id}"></i></div><button class="excl" data-fxabrir="${f.id}" title="Efeitos desta faixa">FX${(f.fx || []).filter((x) => x.ligado).length ? " " + (f.fx || []).filter((x) => x.ligado).length : ""}</button><button class="excl" data-del="${f.id}" title="Excluir a faixa e as regiões dela" aria-label="Excluir faixa">${ic("lixeira")}</button></div>
+        <div class="l2"><span>Vol</span>${knob("Volume de " + f.nome, f.vol, 0, 1.5, 0.01, `data-vol="${f.id}"`, dbTxt(f.vol))}<span>Pan</span>${knob("Panorama de " + f.nome, f.pan, -1, 1, 0.05, `data-pan="${f.id}"`)}</div>
+        <div class="l3"><input type="checkbox" data-marcar="${f.id}" ${faixasMarcadas.has(f.id) ? "checked" : ""} aria-label="Marcar ${esc(f.nome)} para mute em grupo" title="Marcar para mute em grupo"><div class="medidor"><i data-vu="${f.id}"></i></div><button class="excl" data-fxabrir="${f.id}" title="Efeitos desta faixa">FX${(f.fx || []).filter((x) => x.ligado).length ? " " + (f.fx || []).filter((x) => x.ligado).length : ""}</button><button class="excl" data-del="${f.id}" title="Excluir a faixa e as regiões dela" aria-label="Excluir faixa">${ic("lixeira")}</button></div>
       </div>`).join("");
   }
   function renderLinhas() {
@@ -477,8 +530,8 @@
     $("#dwRegua").innerHTML = h;
     const linhas = S.faixas.map((f) => {
       const rs = S.regioes.filter((r) => r.f === f.id).map((r) => `
-        <div class="dw-regiao ${r.id === S.regiaoSel ? "sel" : ""} ${f.mudo || r.silenciada ? "mudo" : ""} ${r.gravando ? "gravando" : ""}" data-r="${r.id}" style="left:${px(r.ini)}px;width:${px(r.dur)}px;background:${corA(f.cor, 0.16)};border-color:${corA(f.cor, 0.85)}">
-          <div class="rot" style="background:${corA(f.cor, 0.95)}">${esc(r.nome)}${r.limpo ? " · limpa" : ""}${r.afinada ? " · afinada" : ""}${r.silenciada ? " · silenciada" : ""}</div><canvas></canvas>
+        <div class="dw-regiao ${r.id === S.regiaoSel ? "sel" : ""} ${mudoGeral || f.mudo || r.silenciada ? "mudo" : ""} ${r.gravando ? "gravando" : ""}" data-r="${r.id}" style="left:${px(r.ini)}px;width:${px(r.dur)}px;background:${corA(f.cor, 0.16)};border-color:${corA(f.cor, 0.85)}">
+          <div class="rot" style="background:${corA(f.cor, 0.95)}">${esc(r.nome)}${r.limpo ? " · limpa" : ""}${r.afinada || r.tomAjustado ? " · afinada" : ""}${r.silenciada ? " · silenciada" : ""}</div><canvas></canvas>
           ${r.fi > 0.02 ? `<i class="fade i" style="width:${px(r.fi)}px"></i>` : ""}${r.fo > 0.02 ? `<i class="fade o" style="width:${px(r.fo)}px"></i>` : ""}
           <i class="alca e" data-alca="e"></i><i class="alca d" data-alca="d"></i></div>`).join("");
       return `<div class="dw-linha" data-lf="${f.id}">${rs}</div>`;
@@ -491,11 +544,42 @@
   }
   function renderMixer() {
     const strip = (f) => `<div class="dw-strip"><div class="nome" style="color:${f.cor}">${esc(f.nome)}</div>
-      <div class="fw"><div class="fader"><input type="range" min="0" max="1.5" step="0.01" value="${f.vol}" data-vol="${f.id}"></div><div class="vu"><i data-vu2="${f.id}"></i></div></div>
+      <div class="fw"><div class="fader">${knob("Volume de " + f.nome, f.vol, 0, 1.5, 0.01, `data-vol="${f.id}"`, dbTxt(f.vol))}</div><div class="vu"><i data-vu2="${f.id}"></i></div></div>
       <div class="db" data-db="${f.id}">${dbTxt(f.vol)}</div>
       <div style="display:flex;gap:4px"><button class="dw-mini m ${f.mudo ? "on" : ""}" data-m="${f.id}">M</button><button class="dw-mini s ${f.solo ? "on" : ""}" data-s="${f.id}">S</button></div></div>`;
     $("#dwMix").innerHTML = (S.faixas.length ? S.faixas.map(strip).join("") : '<div class="dw-aviso-vazio" style="flex:1">Ainda não há faixas. Importe, grave ou separe uma música.</div>') +
-      `<div class="strip dw-strip master"><div class="nome" style="color:#fff">Geral</div><div class="fw"><div class="fader"><input type="range" id="dwMestreVol" min="0" max="1.2" step="0.01" value="${S.mestreVol}"></div><div class="vu"><i data-vu2="mestre"></i></div></div><div class="db">limitador ligado</div></div>`;
+      `<div class="strip dw-strip master"><div class="nome" style="color:#fff">Geral</div><div class="fw"><div class="fader">${knob("Volume geral", S.mestreVol, 0, 1.2, 0.01, 'id="dwMestreVol"', dbTxt(S.mestreVol))}</div><div class="vu"><i data-vu2="mestre"></i></div></div><div class="db" id="dwMestreDb">${dbTxt(S.mestreVol)}</div></div>`;
+  }
+  function knob(nome, valor, min, max, passo, atributos, texto = valor) {
+    const angulo = -135 + 270 * (valor - min) / (max - min);
+    return `<span class="dw-knob" style="--angulo:${angulo}deg"><input type="range" min="${min}" max="${max}" step="${passo}" value="${valor}" aria-label="${esc(nome)}" aria-valuetext="${esc(texto)}" ${atributos}><i aria-hidden="true"></i><output aria-hidden="true">${esc(texto)}</output></span>`;
+  }
+  function atualizarKnob(input, texto = input.value) {
+    const el = input.closest(".dw-knob");
+    if (!el) return;
+    el.style.setProperty("--angulo", (-135 + 270 * (input.value - input.min) / (input.max - input.min)) + "deg");
+    input.setAttribute("aria-valuetext", texto);
+    el.querySelector("output").textContent = texto;
+  }
+  function girarKnob(e) {
+    const input = e.target.closest(".dw-knob input");
+    if (!input || e.button !== 0 || !e.isPrimary) return;
+    e.preventDefault();
+    input.focus({ preventScroll: true });
+    input.setPointerCapture(e.pointerId);
+    const ini = +input.value, escala = (+input.max - +input.min) / 130;
+    const mover = (ev) => {
+      const valor = Math.min(+input.max, Math.max(+input.min, ini + (e.clientY - ev.clientY) * escala));
+      const ultimo = input.value;
+      input.value = String(valor);
+      if (input.value !== ultimo) input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const soltar = () => {
+      input.removeEventListener("pointermove", mover);
+      if (+input.value !== ini) input.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    input.addEventListener("pointermove", mover);
+    input.addEventListener("lostpointercapture", soltar, { once: true });
   }
   const dbTxt = (v) => (v <= 0 ? "-∞ dB" : (20 * Math.log10(v)).toFixed(1) + " dB");
   function renderRegiao() {
@@ -505,9 +589,9 @@
       <div class="dw-bloco"><h4>Região</h4><input type="text" value="${esc(r.nome)}" data-rnome><div style="color:var(--dw-suave);font-size:11px">Início ${fmt(r.ini)} · duração ${fmt(r.dur)} · compasso ${(r.ini / BAR() + 1).toFixed(1)}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="dw-btn peq" data-ra="dividir">Dividir no cursor</button><button class="dw-btn peq" data-ra="duplicar">Duplicar</button>${r.silenciada ? '<button class="dw-btn peq" data-ra="reativar">Reativar áudio</button>' : ""}<button class="dw-btn peq" data-ra="excluir">Excluir</button></div></div>
       <div class="dw-bloco"><h4>Volume</h4>
-        <div class="dw-param"><span>Ganho</span><input type="range" min="-24" max="12" step="0.5" value="${r.ganho}" data-rg="ganho"><b>${r.ganho} dB</b></div>
-        <div class="dw-param"><span>Fade in</span><input type="range" min="0" max="5" step="0.05" value="${r.fi}" data-rg="fi"><b>${r.fi.toFixed(2)}s</b></div>
-        <div class="dw-param"><span>Fade out</span><input type="range" min="0" max="5" step="0.05" value="${r.fo}" data-rg="fo"><b>${r.fo.toFixed(2)}s</b></div></div>
+        <div class="dw-param"><span>Ganho</span>${knob("Ganho do trecho", r.ganho, -24, 12, 0.5, 'data-rg="ganho"', `${r.ganho} dB`)}<b>${r.ganho} dB</b></div>
+        <div class="dw-param"><span>Fade in</span>${knob("Fade in", r.fi, 0, 5, 0.05, 'data-rg="fi"', `${r.fi.toFixed(2)} s`)}<b>${r.fi.toFixed(2)}s</b></div>
+        <div class="dw-param"><span>Fade out</span>${knob("Fade out", r.fo, 0, 5, 0.05, 'data-rg="fo"', `${r.fo.toFixed(2)} s`)}<b>${r.fo.toFixed(2)}s</b></div></div>
       <div class="dw-bloco"><h4>Sincronia (posição fina)</h4>
         <div class="dw-dica">Começa em <b>${r.ini.toFixed(3)} s</b> (compasso ${(r.ini / BAR() + 1).toFixed(2)}). Se a voz gravada ficou atrasada em relação à música, empurre a região para a esquerda (valores negativos). Atalho: Alt + ← / → move 1 ms (com Shift, 10 ms).</div>
         <div class="dw-sinc"><button class="dw-btn peq" data-rs="-10">−10 ms</button><button class="dw-btn peq" data-rs="-1">−1 ms</button><input type="number" id="dwSincMs" value="0" step="1" title="Quantos milissegundos mover (negativo = para a esquerda)"><button class="dw-btn peq" data-rs="aplicar">Mover</button><button class="dw-btn peq" data-rs="1">+1 ms</button><button class="dw-btn peq" data-rs="10">+10 ms</button></div>
@@ -521,10 +605,10 @@
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
           <select id="dwLimpaInt" title="Quanto o ruído é atenuado">${[["0.6", "Leve"], ["0.8", "Média"], ["0.95", "Forte"]].map(([v, n]) => `<option value="${v}" ${+v === limpaInt ? "selected" : ""}>${n}</option>`).join("")}</select>
           <button class="dw-btn peq" data-ra="limpar" ${limpando || r.afin ? "disabled" : ""} ${r.afin ? 'title="Esta região tem afinação aplicada: desfaça a afinação antes de limpar o ruído"' : ""}>Limpar ruído</button>${limpando ? '<button class="dw-btn peq" data-ra="cancelar">Cancelar</button>' : ""}
-          ${r.alt ? `<button class="dw-btn peq" data-ra="alternar" title="Compara com a outra versão">Ouvir ${(r.afin ? r.afinada : r.limpo) ? (r.afin ? "a versão sem afinação" : "o original") : (r.afin ? "a versão afinada" : "a versão limpa")}</button><button class="dw-btn peq" data-ra="manter" title="Descarta a outra versão">Manter esta versão</button>` : ""}
+          ${r.alt ? `<button class="dw-btn peq" data-ra="alternar" title="Compara com a outra versão">Ouvir ${(r.afin ? r.afinada : (r.tomAjustado ?? r.limpo)) ? (r.afin || r.tomAjustado != null ? "a versão sem afinação" : "o original") : (r.afin || r.tomAjustado != null ? "a versão afinada" : "a versão limpa")}</button><button class="dw-btn peq" data-ra="manter" title="Descarta a outra versão">Manter esta versão</button>` : ""}
         </div>
         <div class="dw-dica" id="dwLimpaStatus">${esc(limpaTxt)}</div>
-        <div class="dw-dica">${r.alt ? `Toca agora: <b>${(r.afin ? r.afinada : r.limpo) ? (r.afin ? "a versão afinada ✓" : "a versão limpa ✓") : (r.afin ? "a versão sem afinação" : "o original")}</b>.` : "Mede o ruído nas pausas da gravação (respiros, silêncio). Pensado para voz; o original fica guardado."}</div>
+        <div class="dw-dica">${r.alt ? `Toca agora: <b>${(r.afin ? r.afinada : (r.tomAjustado ?? r.limpo)) ? (r.afin ? "a versão afinada ✓" : "a versão limpa ✓") : (r.afin || r.tomAjustado != null ? "a versão sem afinação" : "o original")}</b>.` : "Mede o ruído nas pausas da gravação (respiros, silêncio). Pensado para voz; o original fica guardado."}</div>
       </div>`;
   }
   function renderTudo() {
@@ -545,10 +629,16 @@
     S.faixas.forEach((f) => { const n = nos.get(f.id), v = vivo && n ? nivel(n.an) : 0, a = $(`[data-vu="${f.id}"]`), b = $(`[data-vu2="${f.id}"]`); if (a) a.style.width = v * 100 + "%"; if (b) b.style.height = Math.max(3, v * 100) + "%"; });
     const m = vivo && anMestre ? nivel(anMestre) : 0; const vm = $("#dwVuMestre"); if (vm) vm.style.height = Math.max(3, m * 100) + "%"; const bm = $('[data-vu2="mestre"]'); if (bm) bm.style.height = Math.max(3, m * 100) + "%";
   }
+  let fimPrevia = null;
   function tick() {
     if (!S.tocando) return;
     S.tAtual = base0 + (ctx.currentTime - baseCtx);
-    if (S.loop.on && !S.gravando && S.loop.fim > S.loop.ini && S.tAtual >= S.loop.fim) { ir(S.loop.ini); requestAnimationFrame(tick); return; }   // loop: volta ao início do trecho
+    if (fimPrevia != null && S.tAtual >= fimPrevia) {
+      const fim = fimPrevia;
+      pausar(); ir(fim);
+      return;
+    }
+    if (fimPrevia == null && S.loop.on && !S.gravando && S.loop.fim > S.loop.ini && S.tAtual >= S.loop.fim) { ir(S.loop.ini); requestAnimationFrame(tick); return; }   // loop: volta ao início do trecho
     if (!S.gravando && S.tAtual > fimProjeto() + 0.3) { pausar(); S.tAtual = Math.max(0, fimProjeto()); posicionar(); return; }
     posicionar(); agendarMetro(); if (S.gravando) atualizarGravacao();
     if (S.seguir) { const sc = $("#dwTlScroll"), x = px(S.tAtual); if (x > sc.scrollLeft + sc.clientWidth * 0.88 || x < sc.scrollLeft) sc.scrollLeft = Math.max(0, x - sc.clientWidth * 0.15); }
@@ -560,12 +650,12 @@
     $("#dwPlay").innerHTML = ic("pause"); $("#dwPlay").classList.add("on"); requestAnimationFrame(tick); dica("Tocando…");
   }
   function pausar() {
-    if (!S.tocando) return; S.tocando = false; pararFontes(); if (S.gravando) finalizarGravacao();
+    if (!S.tocando) return; S.tocando = false; fimPrevia = null; pararFontes(); if (S.gravando) finalizarGravacao();
     $("#dwPlay").innerHTML = ic("play"); $("#dwPlay").classList.remove("on"); medidores(false); posicionar(); dica("Pausado.");
   }
   function parar() { pausar(); S.tAtual = 0; posicionar(); $("#dwTlScroll").scrollLeft = 0; dica("Parado no início."); }
   function ir(t) { if (S.gravando) return; S.tAtual = Math.max(0, t); posicionar(); if (S.tocando) { base0 = S.tAtual; baseCtx = ctx.currentTime; agendarRegioes(S.tAtual); atualizarNos(); } }
-  function mudarZoom(v) { S.pps = Math.max(8, Math.min(120, v)); $("#dwZoom").value = S.pps; renderLinhas(); desenharLoop(); }
+  function mudarZoom(v) { S.pps = Math.max(8, Math.min(ZOOM_MAX, v)); $("#dwZoom").value = S.pps; renderLinhas(); desenharLoop(); }
 
   // ══ ENTRADA DE ÁUDIO ═══════════════════════════════════════════════════
   let entradaId = "", escutaEntrada = null, testeUrl = "", solicitandoGravacao = false;
@@ -805,6 +895,7 @@
   function criarFaixaVoz() { const n = S.faixas.filter((f) => f.gravada).length + 2; S.faixas.forEach((x) => { x.arm = false; }); return novaFaixa("Voz " + n, CORES[n % CORES.length], { arm: true, gravada: true }); }
   async function iniciarGravacao() {
     if (S.gravando || S.contando) return pararGravacao();
+    if (processandoTrecho) return dica("Aguarde o processamento do trecho antes de gravar.");
     if (solicitandoGravacao || gravacao) return;
     if (!window.MediaRecorder || !garantirAudio()) return dica("Este navegador não deixa gravar áudio.");
     if (S.tocando) pausar();
@@ -828,7 +919,7 @@
       let aec = null; try { const tr = stream.getAudioTracks()[0]; aec = tr && tr.getSettings ? tr.getSettings().echoCancellation : null; } catch (e) { aec = null; }
       aviso = aec === false ? " ⚠️ Este navegador não ativou o cancelamento de eco: a música pode vazar no microfone. Use fone de ouvido." : " Com caixa de som, parte da música ainda pode vazar no microfone; o fone deixa a gravação mais limpa.";
     }
-    gravacao = { aviso, antes, alvo, faixaCriada, projeto, latencia: S.latencia, stream, regiao: null, rec: null, chunks: [], an: null, dados: null, ini: snap(S.tAtual) };
+    gravacao = { aviso, antes, alvo, faixaCriada, projeto, latencia: S.latencia, stream, regiao: null, rec: null, chunks: [], an: null, dados: null, ini: alvo.backing ? S.tAtual : snap(S.tAtual) };
     $("#dwRec").classList.add("on");
     const total = S.contagem * COMPASSOS[S.compasso].n;
     if (!total) { comecarGravacao(); return; }
@@ -958,15 +1049,21 @@
   }
   function atualizarColab() {
     const card = $("#dwColab"); if (!card || !configEst) return;
-    if (configEst.modo !== "fila") { card.hidden = true; atualizarBotaoSep(); return; }
+    if (configEst.modo !== "fila") { card.hidden = true; atualizarBotaoSep(); atualizarAvisoModo(); return; }
     card.hidden = false; const on = !!(configEst.colab && configEst.colab.online);
     const comp = configEst.colab ? configEst.colab.completo : undefined;      // true = notebook novo (6 faixas); false = antigo; undefined = servidor ainda não informa
     card.classList.toggle("on", on); $("#dwColabPilula").textContent = on ? (configEst.colab.gpu ? "Ligado · GPU" : "Ligado") + (comp === true ? " · 6 faixas" : comp === false ? " · versão antiga (só 2 faixas)" : "") : "Desligado";
     $("#dwColabTexto").textContent = on && comp === false ? "O Colab que está ligado é a versão ANTIGA do notebook: ele só separa voz e instrumental. Pare-o (no Colab: Ambiente de execução → Desconectar e excluir ambiente de execução), abra o notebook novo pelo botão abaixo e rode Executar tudo." : on ? "Pronto! Escolha um áudio e clique em Separar." : "A separação roda no Google Colab (o servidor gratuito não tem memória para o Demucs). Ligue o separador uma vez: abra o Colab, use Ambiente de execução → Executar tudo e volte aqui. Este cartão fica verde sozinho.";
-    $("#dwColabLink").href = colabUrlFinal(); $("#dwColabLink").hidden = on && comp !== false; $("#dwColabUrlMsg").textContent = colabOrigemTexto(); const ui = $("#dwColabUrl"); if (ui && !ui.value && document.activeElement !== ui && colabUrlEscolhida()) ui.value = colabUrlEscolhida(); atualizarBotaoSep(); atualizarAvisoModo();
+    $("#dwColabLink").href = colabUrlFinal(); $("#dwColabLink").hidden = on && comp !== false && (modoSep() !== "backing" || configEst.colab.backing); $("#dwColabUrlMsg").textContent = colabOrigemTexto(); const ui = $("#dwColabUrl"); if (ui && !ui.value && document.activeElement !== ui && colabUrlEscolhida()) ui.value = colabUrlEscolhida(); atualizarBotaoSep(); atualizarAvisoModo();
   }
   function colabPronto() { return !configEst || configEst.modo !== "fila" || !!(configEst.colab && configEst.colab.online); }
-  function atualizarBotaoSep() { const b = $("#dwSepIniciar"); if (b) b.disabled = sepRodando || !sepArquivo || !colabPronto(); }
+  function backingDisponivel() {
+    return !!(configEst?.modo === "fila" ? configEst.colab?.backing : configEst?.backing);
+  }
+  function atualizarBotaoSep() {
+    const b = $("#dwSepIniciar");
+    if (b) b.disabled = sepRodando || !sepArquivo || !colabPronto() || (modoSep() === "backing" && !backingDisponivel());
+  }
   function abrirSeparar() {
     $("#dwModalSep").hidden = false; $("#dwPassos").hidden = true; $("#dwSepStatus").textContent = ""; sepCancelado = false;
     carregarConfig(); clearInterval(timerColab); timerColab = setInterval(() => { if ($("#dwModalSep").hidden) clearInterval(timerColab); else carregarConfig(); }, 5000);
@@ -975,17 +1072,25 @@
   function fecharSeparar() { $("#dwModalSep").hidden = true; clearInterval(timerColab); if (sepRodando) { sepCancelado = true; dica("A separação continua no servidor, mas o resultado será descartado."); } }
   function etapaSep(e) { const ordem = ["enviando", "fila", "separando", "baixando"], i = ordem.indexOf(e); $$("#dwPassos li").forEach((li, k) => { li.className = k < i ? "feito" : k === i ? "atual" : ""; }); }
   // ── modos de separação: rápido (2 faixas) ou completo (6 faixas, modelo htdemucs_6s) ──
-  const NOMES_FAIXA = {                       // nome do modelo -> [nome na tela, cor, volume inicial]
+  const NOMES_FAIXA = {
+    lead_vocals: ["Voz principal", "#f97316", 0.9],
+    backing_vocals: ["Backings", "#c084fc", 0.9],
+    instrumental: ["Instrumental", "#14b8a6", 0.9],                       // nome do modelo -> [nome na tela, cor, volume inicial]
     vocals: ["Voz", "#f97316", 0.9], drums: ["Bateria", "#ef4444", 0.85], bass: ["Baixo", "#38bdf8", 0.85],
     guitar: ["Guitarra", "#eab308", 0.85], piano: ["Piano", "#a855f7", 0.8], other: ["Outros", "#14b8a6", 0.8],
   };
-  const ORDEM_FAIXAS = ["vocals", "drums", "bass", "guitar", "piano", "other"];
+  const ORDEM_FAIXAS = ["lead_vocals", "backing_vocals", "instrumental", "vocals", "drums", "bass", "guitar", "piano", "other"];
   const aparelhoLeve = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || !!(navigator.deviceMemory && navigator.deviceMemory < 4);
   const modoSep = () => { const r = document.querySelector('input[name="dwModoSep"]:checked'); return r ? r.value : "rapido"; };
   function atualizarAvisoModo() {
     const el = $("#dwModoAviso"); if (!el) return;
     const m = modoSep(), c = configEst && configEst.colab; let t = "";
-    if (m === "completo") {
+    if (m === "backing") {
+      t = backingDisponivel()
+        ? "Os backings saem juntos em uma faixa de apoio."
+        : configEst?.modo === "fila" ? "Ligue o notebook atualizado do Colab para habilitar este modo."
+          : "O separador precisa do modelo de voz principal e backings para habilitar este modo.";
+    } else if (m === "completo") {
       if (aparelhoLeve()) t = "Atenção: neste aparelho o modo completo pode travar por falta de memória (são 6 faixas de áudio abertas ao mesmo tempo). Se travar, use o modo rápido.";
       if (configEst && configEst.modo === "fila" && c && c.online && c.completo === false) t = "O notebook do Colab está na versão antiga e vai entregar só voz e instrumental. Atualize o notebook e rode de novo para liberar as 6 faixas." + (t ? " " + t : "");
       if (!t) t = "O piano é a faixa menos confiável. Sintetizador, cordas e metais caem em “Outros”. Voz principal e backing vocal ficam juntas na faixa de voz. A faixa Original não é aberta neste modo, para poupar memória.";
@@ -994,13 +1099,13 @@
   }
   function ajustarModoInicial() {
     let m = null; try { m = localStorage.getItem("oh-dw-modosep"); } catch (e) { /* sem armazenamento */ }
-    if (m !== "rapido" && m !== "completo") m = aparelhoLeve() ? "rapido" : "completo";
+    if (!["rapido", "completo", "backing"].includes(m)) m = aparelhoLeve() ? "rapido" : "completo";
     const r = document.querySelector(`input[name="dwModoSep"][value="${m}"]`); if (r) r.checked = true; atualizarAvisoModo();
   }
   const rmsDe = (buf) => { const ch = buf.getChannelData(0); let s = 0, n = 0; for (let i = 0; i < ch.length; i += 37) { s += ch[i] * ch[i]; n++; } return Math.sqrt(s / Math.max(n, 1)); };
-  async function separarCompletoViaColab(arq, etapa) {
+  async function separarMultifaixaViaColab(arq, etapa, modo) {
     etapa("enviando");
-    const form = new FormData(); form.append("arquivo", arq); form.append("modo", "completo");
+    const form = new FormData(); form.append("arquivo", arq); form.append("modo", modo);
     const envio = await fetch(`${API_BASE}/api/estudio/fila`, { method: "POST", body: form });
     if (!envio.ok) { const erro = await envio.json().catch(() => ({})); throw new Error(erro.detail || "Não consegui enviar o áudio pro separador."); }
     const { job_id } = await envio.json(); etapa("fila");
@@ -1029,8 +1134,8 @@
       }
     }
   }
-  async function separarCompletoLocal(arq) {
-    const form = new FormData(); form.append("arquivo", arq); form.append("modo", "completo");
+  async function separarMultifaixaLocal(arq, modo) {
+    const form = new FormData(); form.append("arquivo", arq); form.append("modo", modo);
     const ctrl = new AbortController(), limite = setTimeout(() => ctrl.abort(), 10 * 60 * 1000);
     try {
       const resp = await fetch(`${API_BASE}/api/estudio/separar`, { method: "POST", body: form, signal: ctrl.signal });
@@ -1042,18 +1147,26 @@
   }
   // Abre as faixas separadas, uma por vez (poupa memória), com nome e cor de cada instrumento.
   async function aplicarSeparacaoCompleta(res, arq) {
-    if (S.regioes.length) novoProjeto();   // o projeto atual fica salvo: Arquivo → Abrir projeto
-    const antes = foto();
-    trechoSel = null; S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
-    const nomes = Object.keys(res.stems).sort((a, b) => { const ia = ORDEM_FAIXAS.indexOf(a), ib = ORDEM_FAIXAS.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
-    const feitas = [];
+    const nomes = Object.keys(res.stems).sort((a, b) => {
+      const ia = ORDEM_FAIXAS.indexOf(a), ib = ORDEM_FAIXAS.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+    const preparada = [];
     for (let k = 0; k < nomes.length; k++) {
       const n = nomes[k], def = NOMES_FAIXA[n] || [n.charAt(0).toUpperCase() + n.slice(1), CORES[k % CORES.length], 0.8];
       $("#dwSepStatus").textContent = `Abrindo as faixas… ${def[0]} (${k + 1} de ${nomes.length})`;
       const blob = res.stems[n], buf = await decodificar(await blob.arrayBuffer());
-      const f = novaFaixa(def[0], def[1], { vol: def[2] }); novaRegiao(f, guardarAudio(buf, blob), def[0], 0, 0);
-      feitas.push({ f, rms: rmsDe(buf) });
+      if (sepCancelado) return;
+      preparada.push({ def, blob, buf });
     }
+    if (S.regioes.length) novoProjeto();
+    const antes = foto();
+    trechoSel = null; mudoGeral = false; faixasMarcadas.clear(); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
+    const feitas = preparada.map(({ def, blob, buf }) => {
+      const f = novaFaixa(def[0], def[1], { vol: def[2] });
+      novaRegiao(f, guardarAudio(buf, blob), def[0], 0, 0);
+      return { f, rms: rmsDe(buf) };
+    });
     // faixa quase sem som (ex.: música sem piano): fica muda e marcada, para não sujar a mixagem
     const maior = Math.max(...feitas.map((x) => x.rms), 1e-9), vazias = [];
     feitas.forEach((x) => { if (x.rms < maior * 0.04) { x.f.mudo = true; x.f.vazia = true; vazias.push(x.f.nome); } });
@@ -1069,12 +1182,15 @@
     try {
       const modo = modoSep(), fila = !!(configEst && configEst.modo === "fila"), msgLocal = "Separando no servidor… isso pode levar alguns minutos.";
       let res;
-      if (modo === "completo") {
-        if (fila) res = await separarCompletoViaColab(sepArquivo, etapaSep);
-        else { $("#dwPassos").hidden = true; $("#dwSepStatus").textContent = msgLocal; res = await separarCompletoLocal(sepArquivo); }
+      if (modo === "completo" || modo === "backing") {
+        if (fila) res = await separarMultifaixaViaColab(sepArquivo, etapaSep, modo);
+        else { $("#dwPassos").hidden = true; $("#dwSepStatus").textContent = msgLocal; res = await separarMultifaixaLocal(sepArquivo, modo); }
       } else if (fila) res = await separarViaColab(sepArquivo, etapaSep);
       else { $("#dwPassos").hidden = true; $("#dwSepStatus").textContent = msgLocal; res = await separarLocal(sepArquivo); }
       if (sepCancelado) return;
+      if (modo === "backing" && !["lead_vocals", "backing_vocals", "instrumental"].every((chave) => res.stems?.[chave])) {
+        throw new Error("O separador não entregou as três faixas do modo backing.");
+      }
       $("#dwSepStatus").textContent = "Abrindo no Estúdio…";
       if (res.stems) await aplicarSeparacaoCompleta(res, sepArquivo);
       else {
@@ -1089,7 +1205,7 @@
   function aplicarSeparacao(bv, bi, bo, res, arq) {
     if (S.regioes.length) novoProjeto();   // o projeto atual fica salvo: Arquivo → Abrir projeto
     const antes = foto();
-    trechoSel = null; S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
+    trechoSel = null; mudoGeral = false; faixasMarcadas.clear(); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0;
     const voz = novaFaixa("Voz (stem vocal)", "#f97316", { vol: 0.9 }), inst = novaFaixa("Instrumental", "#14b8a6", { vol: 0.8 }), orig = novaFaixa("Original (referência)", "#94a3b8", { vol: 0.7, mudo: true });
     novaRegiao(voz, guardarAudio(bv, res.vozBlob), "Voz", 0, 0); novaRegiao(inst, guardarAudio(bi, res.instBlob), "Instrumental", 0, 0); novaRegiao(orig, guardarAudio(bo, arq), "Original (referência)", 0, 0);
     S.faixaSel = voz.id; S.nome = arq.name.replace(/\.[^.]+$/, "").slice(0, 40); $("#dwNome").value = S.nome;
@@ -1237,15 +1353,28 @@
     const ativo = !barra.hidden && !!trechoSel && !!alvo && trechoSel.fim - trechoSel.ini >= MIN_TRECHO;
     const pronto = ativo && !arrastandoTrecho;
     $("#dwTrechoDividir").disabled = !pronto;
-    $("#dwTrechoSilenciar").disabled = !pronto;
+    const partes = pronto ? recortesDoTrecho(trechoSel, todas) : [];
+    const temSom = partes.some(({ r }) => !r.silenciada);
+    const silenciar = $("#dwTrechoSilenciar");
+    silenciar.disabled = !partes.length;
+    silenciar.textContent = temSom ? "Silenciar trecho" : "Reativar trecho";
+    silenciar.setAttribute("aria-pressed", String(!!partes.length && !temSom));
+    ["dwTrechoOuvir", "dwTrechoCopiar", "dwTrechoRuido", "dwTrechoAfinar", "dwTrechoEfeito", "dwTrechoBacking"].forEach((id) => {
+      $("#" + id).disabled = !temSom || (todas && ["dwTrechoRuido", "dwTrechoAfinar", "dwTrechoEfeito", "dwTrechoBacking"].includes(id));
+    });
+    for (const [id, k] of [["dwTrechoInicio", "ini"], ["dwTrechoFim", "fim"]]) {
+      const campo = $("#" + id);
+      campo.disabled = !pronto;
+      campo.value = ativo ? (+trechoSel[k].toFixed(3)) : "";
+    }
     $("#dwTrechoLimpar").disabled = !pronto;
     $("#dwTrechoTodas").disabled = arrastandoTrecho || !S.faixas.length;
     $("#dwTrechoProjeto").disabled = arrastandoTrecho || fimMusica < MIN_TRECHO;
-    $("#dwTrechoExcluir").disabled = !pronto || !todas || Math.min(trechoSel.fim, fimMusica) - trechoSel.ini < MIN_TRECHO;
+    $("#dwTrechoExcluir").disabled = !pronto || Math.min(trechoSel.fim, fimMusica) - trechoSel.ini < MIN_TRECHO;
     if (!ativo) {
       $("#dwTrechoInfo").textContent = todas
         ? "Arraste o intervalo na linha do tempo para selecionar todas as faixas."
-        : "Arraste em uma faixa para selecionar um intervalo. Marque Todas as faixas para fechar espaços.";
+        : "Arraste em uma faixa para selecionar um intervalo.";
       return;
     }
     const { ini, fim } = trechoSel;
@@ -1256,22 +1385,32 @@
     el.style.left = px(ini) + "px";
     el.style.width = px(fim - ini) + "px";
     if (todas) el.style.bottom = "calc(var(--dw-alt-faixa) + 1px)";
+    for (const k of ["ini", "fim"]) {
+      const alca = document.createElement("i");
+      alca.className = "dw-trecho-alca " + k;
+      alca.dataset.bordaTrecho = k;
+      alca.title = k === "ini" ? "Ajustar início do trecho" : "Ajustar fim do trecho";
+      el.appendChild(alca);
+    }
     alvo.appendChild(el);
   }
 
   function arrastarTrecho(e) {
     const linha = e.target.closest(".dw-linha[data-lf]");
-    if (!linha || e.button !== 0 || !e.isPrimary || arrastandoTrecho) return;
+    const borda = e.target.dataset.bordaTrecho;
+    if ((!linha && !borda) || e.button !== 0 || !e.isPrimary || arrastandoTrecho) return;
     e.preventDefault();
-    const faixas = $("#dwFaixas"), faixa = linha.dataset.lf, projeto = S.id;
-    const tempo = (ev) => Math.max(0, snap((ev.clientX - $("#dwTl").getBoundingClientRect().left) / S.pps, ev.altKey));
+    const faixas = $("#dwFaixas"), faixa = borda ? trechoSel.faixa : linha.dataset.lf, projeto = S.id;
+    const tempo = (ev) => Math.min(duracaoTL(), Math.max(0, snap((ev.clientX - $("#dwTl").getBoundingClientRect().left) / S.pps, ev.altKey)));
     const inicio = tempo(e), anterior = trechoSel;
     faixas.setPointerCapture(e.pointerId);
     arrastandoTrecho = true;
     const mover = (ev) => {
       if (ev.pointerId !== e.pointerId || S.id !== projeto || S.ferr !== "trecho") return;
       const fim = tempo(ev);
-      trechoSel = { faixa, ini: Math.min(inicio, fim), fim: Math.max(inicio, fim) };
+      if (borda === "ini") trechoSel = { ...anterior, ini: Math.min(anterior.fim - MIN_TRECHO, fim) };
+      else if (borda === "fim") trechoSel = { ...anterior, fim: Math.max(anterior.ini + MIN_TRECHO, fim) };
+      else trechoSel = { faixa, ini: Math.min(inicio, fim), fim: Math.max(inicio, fim) };
       desenharTrecho();
     };
     const soltar = (ev) => {
@@ -1283,7 +1422,7 @@
       if (S.id === projeto && S.ferr === "trecho") {
         if (ev.type === "pointerup") {
           mover(ev);
-          if (trechoSel.fim - trechoSel.ini < MIN_TRECHO) trechoSel = null;
+          if (trechoSel.fim - trechoSel.ini < MIN_TRECHO - EPS_TRECHO) trechoSel = null;
         } else trechoSel = anterior;
         desenharTrecho();
       }
@@ -1324,7 +1463,7 @@
   }
 
   function bloqueioTrecho() {
-    if (S.gravando || S.contando || limpando || vozOcupado || prodOcupado || afinAplicando || sepRodando) {
+    if (S.gravando || S.contando || processandoTrecho || limpando || vozOcupado || prodOcupado || afinAplicando || sepRodando) {
       dica("Finalize a gravação ou o processamento em andamento antes de editar o trecho.");
       return true;
     }
@@ -1333,6 +1472,392 @@
       return true;
     }
     return false;
+  }
+
+  function recortesDoTrecho(selecao, todas = false) {
+    if (!selecao) return [];
+    return S.regioes.flatMap((r) => {
+      if (r.gravando || !bufs.has(r.buf)) return [];
+      if (selecao.regiao != null ? r.id !== selecao.regiao : !todas && r.f !== selecao.faixa) return [];
+      const ini = Math.max(r.ini, selecao.ini), fim = Math.min(r.ini + r.dur, selecao.fim);
+      return fim - ini > EPS_TRECHO ? [{ r, ini, fim }] : [];
+    });
+  }
+
+  function substituirRecorte({ r, ini, fim }, transformar) {
+    const partes = [];
+    if (ini - r.ini > EPS_TRECHO) partes.push(parteDoTrecho(r, r.ini, ini, r.id));
+    const centro = parteDoTrecho(r, ini, fim, partes.length ? proxId++ : r.id);
+    transformar(centro);
+    partes.push(centro);
+    if (r.ini + r.dur - fim > EPS_TRECHO) partes.push(parteDoTrecho(r, fim, r.ini + r.dur, proxId++));
+    return { partes, centro };
+  }
+
+  function aplicarRecortes(recortes, transformar) {
+    const porRegiao = new Map(recortes.map((item) => [item.r, item]));
+    S.regioes = S.regioes.flatMap((r) => {
+      const item = porRegiao.get(r);
+      return item ? substituirRecorte(item, (centro) => transformar(centro, item)).partes : [r];
+    });
+  }
+
+  function alternarSilencioTrecho() {
+    const todas = $("#dwTrechoTodas").checked;
+    const partes = recortesDoTrecho(trechoSel, todas);
+    if (!partes.length || bloqueioTrecho()) return;
+    const ligar = partes.some(({ r }) => !r.silenciada);
+    mudar(() => aplicarRecortes(partes.filter(({ r }) => !!r.silenciada !== ligar), (r) => { r.silenciada = ligar; }));
+    dica(ligar ? "Trecho silenciado." : "Áudio do trecho reativado.");
+  }
+
+  function copiarTrecho() {
+    const partes = recortesDoTrecho(trechoSel, $("#dwTrechoTodas").checked).filter(({ r }) => !r.silenciada);
+    if (!partes.length || bloqueioTrecho()) return;
+    mudar(() => {
+      const destinos = new Map();
+      for (const { r, ini, fim } of partes) {
+        if (!destinos.has(r.f)) {
+          const f = faixaPorId(r.f);
+          destinos.set(r.f, novaFaixa(f.nome + " · trecho", f.cor, { vol: f.vol, pan: f.pan }));
+        }
+        const copia = parteDoTrecho(r, ini, fim, proxId++);
+        copia.f = destinos.get(r.f).id;
+        S.regioes.push(copia);
+        S.faixaSel = copia.f; S.regiaoSel = copia.id;
+      }
+    });
+    dica("Trecho copiado para nova faixa na mesma posição.");
+  }
+
+  function afinarTrecho() {
+    const partes = recortesDoTrecho(trechoSel).filter(({ r }) => !r.silenciada);
+    if (bloqueioTrecho()) return;
+    if (partes.length !== 1) return dica("Para afinar, selecione um trecho dentro de uma única região vocal.");
+    const item = partes[0];
+    if (item.ini === item.r.ini && item.fim === item.r.ini + item.r.dur) {
+      S.faixaSel = item.r.f; S.regiaoSel = item.r.id;
+    } else {
+      mudar(() => aplicarRecortes(partes, (r) => { S.faixaSel = r.f; S.regiaoSel = r.id; }));
+    }
+    abrirAba("afin");
+  }
+
+  function ouvirTrecho() {
+    if (!trechoSel || S.gravando || S.contando) return;
+    const fim = Math.min(trechoSel.fim, fimProjeto());
+    if (fim <= trechoSel.ini) return;
+    if (S.tocando) pausar();
+    ir(trechoSel.ini);
+    if (!garantirAudio()) return;
+    fimPrevia = fim; tocar();
+  }
+
+  // ══ Processamento de recortes e camadas vocais ══
+  let processandoTrecho = false;
+  const BACKINGS = {
+    dobra: { nome: "Dobra", intervalos: [0, 0, 0], camadas: 1 },
+    harmonia: { nome: "Harmonia", intervalos: [2, -2, 4], camadas: 1 },
+    coro: { nome: "Coro", intervalos: [0, 2, -2], camadas: 3 },
+    vocalize: { nome: "Vocalize", camadas: 1 },
+  };
+  const PAN_BACKING = [0, -0.55, 0.55];
+
+  function lerRecorte({ r, ini, fim }) {
+    const buf = bufs.get(r.buf), sr = buf.sampleRate;
+    const inicio = Math.round((r.off + ini - r.ini) * sr);
+    const amostras = Math.max(1, Math.min(buf.length - inicio, Math.round((fim - ini) * sr)));
+    const canais = Array.from({ length: buf.numberOfChannels }, (_, i) => buf.getChannelData(i).slice(inicio, inicio + amostras));
+    return { canais, sr };
+  }
+
+  function bufferDeCanais(canais, sr) {
+    const audio = ctx.createBuffer(canais.length, canais[0].length, sr);
+    canais.forEach((canal, i) => audio.copyToChannel(canal, i));
+    return audio;
+  }
+
+  function trocarAudioRecortado(r, buffer) {
+    r.buf = guardarAudio(buffer, audioBufferParaWavBlob(buffer));
+    r.off = 0;
+    r.dur = Math.min(r.dur, buffer.duration);
+  }
+
+  async function processarRecortes(partes, mensagem, preparar, aplicar, concluido = "Edição aplicada ao trecho. Ctrl+Z desfaz.", comTransporte = false) {
+    if (!partes.length || bloqueioTrecho()) return;
+    if (!garantirAudio()) return dica("O navegador não liberou o áudio.");
+    processandoTrecho = true;
+    const projeto = S.id, estado = foto();
+    dica(mensagem);
+    try {
+      const processadas = [];
+      for (const item of partes) processadas.push(await preparar(item));
+      if (S.id !== projeto || estado !== foto() || S.gravando || S.contando) throw new Error("O projeto mudou durante o processamento. Selecione o trecho e tente novamente.");
+      mudar(() => aplicar(processadas), comTransporte);
+      dica(concluido);
+    } catch (erro) {
+      dica(erro.message || "Não consegui processar este trecho.");
+    } finally {
+      processandoTrecho = false;
+    }
+  }
+
+  const avisosRuido = {
+    sem_pausas: "O trecho precisa conter uma pausa com o ruído de fundo para medir.",
+    silencio: "O trecho já está em silêncio.",
+    curto: "A limpeza de ruído precisa de pelo menos um segundo.",
+  };
+
+  function limparRecortes(partes) {
+    if (partes.some(({ r }) => r.afin || r.limpo || r.tomAjustado != null)) return dica("Escolha áudio sem afinação ou limpeza aplicada. Use a versão original na aba Região.");
+    return processarRecortes(partes, "Limpando ruído no trecho…", async (item) => {
+      const { canais, sr } = lerRecorte(item);
+      const res = await EstudioDsp.limparRuido(canais, sr, { intensidade: limpaInt });
+      if (res.aviso) throw new Error(avisosRuido[res.aviso]);
+      return { ...item, buffer: bufferDeCanais(res.canais, sr) };
+    }, (itens) => aplicarRecortes(itens, (r, { buffer }) => {
+      r.alt = { buf: r.buf, off: r.off };
+      trocarAudioRecortado(r, buffer);
+      r.limpo = true;
+    }));
+  }
+
+  function prepararTrechoProcessado(r, buffer) {
+    trocarAudioRecortado(r, buffer);
+    // O histórico recupera também as versões e a curva anteriores à renderização.
+    delete r.alt; delete r.afin; delete r.afinada; delete r.limpo; delete r.tomAjustado;
+  }
+
+  async function renderEfeitoTrecho(item, tipo) {
+    const { canais, sr } = lerRecorte(item);
+    const entrada = bufferDeCanais(canais, sr);
+    const off = new OfflineAudioContext(canais.length, entrada.length, sr);
+    const fx = EstudioFx.novo(tipo);
+    if (EstudioFx.precisaWorklet([fx])) await EstudioFx.carregarWorklet(off);
+    const cadeia = EstudioFx.criarCadeia(off, [fx], { bpm: S.bpm, origem: -item.ini });
+    const src = off.createBufferSource();
+    src.buffer = entrada; src.connect(cadeia.entrada); cadeia.saida.connect(off.destination); src.start();
+    const buffer = await off.startRendering();
+    // Retoma o áudio seco nas bordas, para evitar estalos ao juntar os recortes.
+    const borda = Math.max(1, Math.round(sr * 0.008));
+    canais.forEach((seco, c) => {
+      const dados = buffer.getChannelData(c);
+      for (let i = 0; i < dados.length; i++) {
+        const peso = Math.min(1, i / borda, (dados.length - 1 - i) / borda);
+        dados[i] = seco[i] + (dados[i] - seco[i]) * peso;
+      }
+    });
+    return { ...item, buffer };
+  }
+
+  function notasDoTom(tom) {
+    const info = /^([A-G])([#b♯♭]?)(.*)$/i.exec(tom || "");
+    if (!info) return null;
+    const raiz = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[info[1].toUpperCase()];
+    const tonica = raiz + ({ "#": 1, "♯": 1, b: -1, "♭": -1 }[info[2]] || 0);
+    const escala = /menor|minor|^m$/i.test(info[3].trim()) ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11];
+    return (i) => tonica + 12 * Math.floor(i / 7) + escala[((i % 7) + 7) % 7];
+  }
+
+  function grauMaisProximo(nota, escala) {
+    let grau = Math.floor((nota - escala(0)) / 12) * 7;
+    while (escala(grau + 1) <= nota) grau++;
+    return nota - escala(grau) > escala(grau + 1) - nota ? grau + 1 : grau;
+  }
+
+  async function alinharTomRecorte(item, tom, semis) {
+    const { canais, sr } = lerRecorte(item);
+    const det = await EstudioAfinacao.detectarAltura(canais[0], sr, {});
+    if (!det.voz.some(Boolean)) throw new Error("Não encontrei voz cantada no recorte.");
+    const escala = notasDoTom(tom);
+    const cents = Float32Array.from(det.f0, (freq) => {
+      if (!freq) return 0;
+      if (semis != null) return semis * 100;
+      const nota = EstudioAfinacao.hzParaMidi(freq);
+      const alvo = escala ? escala(grauMaisProximo(nota, escala)) : Math.round(nota);
+      return Math.max(-150, Math.min(150, 75 * (alvo - nota)));
+    });
+    const buffer = bufferDeCanais(canais.map((canal) => EstudioAfinacao.corrigirAltura(canal, sr, det, cents)), sr);
+    return { ...item, buffer };
+  }
+
+  async function sintetizarBacking(item, preset, n, tom) {
+    const { canais, sr } = lerRecorte(item), mono = new Float32Array(canais[0].length);
+    for (const canal of canais) {
+      for (let i = 0; i < mono.length; i++) mono[i] += canal[i] / canais.length;
+    }
+    const det = await EstudioAfinacao.detectarAltura(mono, sr, {});
+    if (preset.intervalos.slice(0, n).some(Boolean) && !det.voz.some(Boolean)) {
+      throw new Error("Não encontrei uma nota cantada nesse trecho para criar harmonia.");
+    }
+    const escala = notasDoTom(tom);
+    const camadas = preset.intervalos.slice(0, n).map((intervalo, k) => {
+      const cents = Float32Array.from(det.f0, (freq) => {
+        if (!intervalo || !freq) return [7, -9, 12][k];
+        if (!escala) return 100 * (intervalo === 4 ? 7 : intervalo > 0 ? 4 : -3);
+        const grau = grauMaisProximo(EstudioAfinacao.hzParaMidi(freq), escala);
+        return 100 * (escala(grau + intervalo) - escala(grau));
+      });
+      const atraso = Math.round(sr * [0.009, 0.016, 0.023][k]);
+      return canais.map((canal) => {
+        const afinado = EstudioAfinacao.corrigirAltura(canal, sr, det, cents);
+        const camada = new Float32Array(canal.length);
+        const borda = Math.max(1, Math.round(sr * 0.008));
+        for (let i = atraso; i < camada.length; i++) {
+          const fade = Math.min(1, (i - atraso) / borda, (camada.length - 1 - i) / borda);
+          camada[i] = afinado[i - atraso] * fade;
+        }
+        return camada;
+      });
+    });
+    return { ...item, canais, sr, camadas };
+  }
+
+  function novaFaixaBacking(nome, k, n) {
+    const fx = [EstudioFx.novo("reverb", { tipo: "quarto", tempo: 0.65, mistura: 15 })];
+    const pan = n === 2 ? [-0.4, 0.4][k] : PAN_BACKING[k];
+    return novaFaixa(nome, "#c084fc", { vol: n > 1 ? 0.28 : 0.39, pan, fx, gravada: true, backing: true });
+  }
+
+  function inserirBacking(itens, preset, modo, n) {
+    if (modo === "trecho") {
+      aplicarRecortes(itens, (r, { canais, sr, camadas }) => {
+        const som = canais.map((seco, c) => seco.map((valor, i) => {
+          const extra = camadas.reduce((s, camada) => s + camada[c][i], 0) * (n === 1 ? 0.32 : 0.2);
+          return Math.max(-1, Math.min(1, valor + extra));
+        }));
+        prepararTrechoProcessado(r, bufferDeCanais(som, sr));
+      });
+      return;
+    }
+    const faixas = Array.from({ length: n }, (_, k) => novaFaixaBacking(`Backing · ${preset.nome}${n > 1 ? " " + (k + 1) : ""}`, k, n));
+    for (const { r, ini, fim, sr, camadas } of itens) {
+      camadas.forEach((canais, k) => {
+        const audio = bufferDeCanais(canais, sr);
+        const parte = parteDoTrecho(r, ini, fim, proxId++);
+        prepararTrechoProcessado(parte, audio);
+        parte.f = faixas[k].id; parte.nome = faixas[k].nome;
+        S.regioes.push(parte);
+      });
+    }
+    S.faixaSel = faixas[0].id;
+    S.regiaoSel = S.regioes.find((r) => r.f === S.faixaSel)?.id ?? null;
+  }
+
+  function armarVocalize(n) {
+    if (bloqueioTrecho()) return;
+    const ini = trechoSel.ini;
+    mudar(() => {
+      S.faixas.forEach((f) => { f.arm = false; });
+      const faixas = Array.from({ length: n }, (_, k) => novaFaixaBacking(`Backing · Vocalize${n > 1 ? " " + (k + 1) : ""}`, k, n));
+      faixas[0].arm = true; S.faixaSel = faixas[0].id;
+    });
+    if (S.tocando) pausar();
+    ir(ini);
+    dica("Vocalize armado no início do trecho. Pressione R para gravar ah, oh ou uh. Use R na faixa para armar a próxima camada.");
+  }
+
+  function ligarEdicaoBacking() {
+    const painel = $("#dwBackingPainel"), efeito = $("#dwEfeitoTrechoPainel");
+    const preset = $("#dwBackingPreset");
+    const configurar = () => {
+      const vocalize = preset.value === "vocalize";
+      $("#dwBackingModoLabel").hidden = vocalize;
+      $("#dwBackingN").value = BACKINGS[preset.value].camadas;
+      $("#dwBackingCriar").textContent = vocalize ? "Armar gravação" : "Criar backing";
+      $("#dwBackingDica").textContent = vocalize
+        ? "Grave ah, oh ou uh em cima do trecho."
+        : "As camadas seguem o ritmo e as pausas da gravação.";
+    };
+    $("#dwTrechoBacking").addEventListener("click", () => { configurar(); painel.showModal(); });
+    $("#dwBackingFechar").addEventListener("click", () => painel.close());
+    preset.addEventListener("change", configurar);
+    $("#dwBackingForm").addEventListener("submit", (e) => {
+      e.preventDefault(); painel.close();
+      const escolhido = BACKINGS[preset.value], modo = $("#dwBackingModo").value, n = +$("#dwBackingN").value;
+      if (preset.value === "vocalize") return armarVocalize(n);
+      const partes = recortesDoTrecho(trechoSel).filter(({ r }) => !r.silenciada);
+      const tom = S.tom;
+      processarRecortes(partes, "Criando backing vocal…", (item) => sintetizarBacking(item, escolhido, n, tom),
+        (itens) => inserirBacking(itens, escolhido, modo, n));
+    });
+    $("#dwTrechoEfeito").addEventListener("click", () => efeito.showModal());
+    $("#dwEfeitoTrechoFechar").addEventListener("click", () => efeito.close());
+    $("#dwEfeitoTrechoForm").addEventListener("submit", (e) => {
+      e.preventDefault(); efeito.close();
+      const tipo = $("#dwEfeitoTrechoTipo").value;
+      const partes = recortesDoTrecho(trechoSel).filter(({ r }) => !r.silenciada);
+      processarRecortes(partes, "Renderizando efeito no trecho…", (item) => renderEfeitoTrecho(item, tipo),
+        (itens) => aplicarRecortes(itens, (r, { buffer }) => prepararTrechoProcessado(r, buffer)));
+    });
+  }
+
+  async function ajustarBpmAudio(faixa, origem, destino) {
+    const fator = origem / destino, todoProjeto = !faixa;
+    const regioes = S.regioes.filter((r) => !faixa || r.f === faixa.id);
+    if (fator === 1) return dica("O BPM de origem e de destino são iguais.");
+    if (!regioes.length && !todoProjeto) return dica("A faixa selecionada ainda não tem áudio.");
+    if (!regioes.length) {
+      mudar(() => { S.bpm = destino; $("#dwBpm").value = destino; });
+      return;
+    }
+    const processados = new Map();
+    const converter = async (id) => {
+      if (processados.has(id)) return processados.get(id);
+      const audio = bufs.get(id);
+      const canais = Array.from({ length: audio.numberOfChannels }, (_, i) => audio.getChannelData(i));
+      const dados = await EstudioDsp.ajustarAndamento(canais, audio.sampleRate, 1 / fator);
+      const novo = bufferDeCanais(dados, audio.sampleRate);
+      processados.set(id, novo);
+      return novo;
+    };
+    await processarRecortes(regioes, "Ajustando BPM do áudio…", async (r) => {
+      await converter(r.buf);
+      if (r.alt) await converter(r.alt.buf);
+    }, () => {
+      const ids = new Map();
+      for (const [id, buffer] of processados) ids.set(id, guardarAudio(buffer, audioBufferParaWavBlob(buffer)));
+      const ancora = todoProjeto ? 0 : Math.min(...regioes.map((r) => r.ini));
+      for (const r of regioes) {
+        r.ini = ancora + (r.ini - ancora) * fator;
+        r.dur *= fator; r.off *= fator; r.fi *= fator; r.fo *= fator;
+        r.buf = ids.get(r.buf);
+        if (r.alt) r.alt = { buf: ids.get(r.alt.buf), off: r.alt.off * fator };
+        if (r.fadeTrecho) r.fadeTrecho = Object.fromEntries(Object.entries(r.fadeTrecho).map(([k, v]) => [k, v * fator]));
+        if (r.afin) {
+          if (r.alt) r.tomAjustado = !!r.afinada;
+          delete r.afin; delete r.afinada;
+        }
+      }
+      if (todoProjeto) {
+        S.bpm = destino;
+        $("#dwBpm").value = destino;
+        S.faixas.forEach((f) => { if (f.bpm) f.bpm = Math.round(f.bpm / fator); });
+        S.loop = { on: S.loop.on, ini: S.loop.ini * fator, fim: S.loop.fim * fator };
+        if (fimPrevia != null) fimPrevia *= fator;
+        ir(Math.min(fimProjeto(), S.tAtual * fator));
+      } else faixa.bpm = destino;
+      trechoSel = null;
+    }, "BPM do áudio ajustado. Ctrl+Z desfaz.", todoProjeto);
+  }
+
+  function ligarAjusteBpm() {
+    const painel = $("#dwBpmPainel"), escopo = $("#dwBpmEscopo"), origem = $("#dwBpmOrigem"), destino = $("#dwBpmDestino");
+    const preencher = () => {
+      const faixa = escopo.value === "faixa" ? faixaPorId(S.faixaSel) : null;
+      origem.value = faixa?.bpm || S.bpm; destino.value = S.bpm;
+    };
+    $("#dwAjustarBpm").addEventListener("click", () => {
+      if (bloqueioTrecho()) return;
+      escopo.querySelector('[value="faixa"]').disabled = !faixaPorId(S.faixaSel);
+      escopo.value = "projeto"; preencher(); painel.showModal();
+    });
+    escopo.addEventListener("change", preencher);
+    $("#dwBpmFechar").addEventListener("click", () => painel.close());
+    $("#dwBpmForm").addEventListener("submit", (e) => {
+      e.preventDefault(); painel.close();
+      ajustarBpmAudio(escopo.value === "faixa" ? faixaPorId(S.faixaSel) : null, origem.valueAsNumber, destino.valueAsNumber);
+    });
   }
 
   function editarTrecho(silenciar, selecao = trechoSel, todas = $("#dwTrechoTodas").checked) {
@@ -1358,14 +1883,18 @@
     mudar(() => { S.regioes = regioes; S.faixaSel = primeira.f; S.regiaoSel = primeira.id; });
     dica(silenciar ? "Trecho silenciado. Use Desfazer ou Reativar áudio na aba Região." : "Áudio dividido nos limites da seleção.");
   }
-  function excluirTrechoGlobal() {
-    if (!trechoSel || arrastandoTrecho || !$("#dwTrechoTodas").checked || bloqueioTrecho()) return;
-    const { ini } = trechoSel, fim = Math.min(trechoSel.fim, fimProjeto()), dur = fim - ini;
+  function excluirTrecho() {
+    if (!trechoSel || arrastandoTrecho || bloqueioTrecho()) return;
+    const todas = $("#dwTrechoTodas").checked;
+    const alvo = todas ? S.regioes : S.regioes.filter((r) => r.f === trechoSel.faixa);
+    if (!alvo.length) return;
+    const { ini } = trechoSel, fim = Math.min(trechoSel.fim, Math.max(...alvo.map((r) => r.ini + r.dur))), dur = fim - ini;
     if (dur < MIN_TRECHO) return;
     // O mesmo deslocamento vale para todas as faixas e para as marcas do transporte.
     const reencaixar = (t) => t <= ini ? t : t < fim ? ini : t - dur;
     const antes = foto(true);
     S.regioes = S.regioes.flatMap((r) => {
+      if (!todas && r.f !== trechoSel.faixa) return [r];
       const fimRegiao = r.ini + r.dur;
       if (fimRegiao <= ini + EPS_TRECHO) return [r];
       if (r.ini >= fim - EPS_TRECHO) return [{ ...r, ini: Math.max(ini, r.ini - dur) }];
@@ -1380,7 +1909,7 @@
     });
     if (!regiaoPorId(S.regiaoSel)) S.regiaoSel = null;
     const loopIni = reencaixar(S.loop.ini), loopFim = reencaixar(S.loop.fim);
-    S.loop = loopFim - loopIni >= 0.1
+    if (todas) S.loop = loopFim - loopIni >= 0.1
       ? { on: S.loop.on, ini: loopIni, fim: loopFim }
       : { on: false, ini: 0, fim: 0 };
     trechoSel = null;
@@ -1388,7 +1917,7 @@
     renderTudo();
     if (!S.regioes.length && S.tocando) pausar();
     ir(Math.min(ini, fimProjeto()));
-    dica(`Intervalo de ${dur.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} s removido em todas as faixas. Ctrl+Z desfaz o corte.`);
+    dica(`Intervalo de ${dur.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} s removido ${todas ? "em todas as faixas" : "na faixa selecionada"}. Ctrl+Z desfaz o corte.`);
   }
   function dividirRegiao(r, t) {
     if (t <= r.ini + 0.02 || t >= r.ini + r.dur - 0.02) return dica("Coloque o cursor (ou clique) dentro da região para dividir.");
@@ -1408,7 +1937,6 @@
   function excluirRegiao(id) { mudar(() => { S.regioes = S.regioes.filter((x) => x.id !== id); S.regiaoSel = null; }); dica("Região excluída."); }
   function duplicarRegiao(r) { mudar(() => { const n = { ...r, id: proxId++, ini: r.ini + r.dur, nome: r.nome + " (cópia)" }; if (n.alt) n.alt = { ...n.alt }; S.regioes.push(n); S.regiaoSel = n.id; }); dica("Região duplicada logo depois da original."); }
   function usarFerramenta(k) {
-    if (k !== S.ferr) trechoSel = null;
     S.ferr = k;
     $$("#dwFerr [data-f]").forEach((b) => b.classList.toggle("on", b.dataset.f === k));
     $('#dwFerr [data-f="trecho"]').setAttribute("aria-pressed", k === "trecho");
@@ -1460,6 +1988,14 @@
     $("#dwFerr").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (b) usarFerramenta(b.dataset.f); });
     $("#dwUndo").addEventListener("click", desfazer); $("#dwRedo").addEventListener("click", refazer);
     $("#dwMutarTodas").addEventListener("click", mutarTodas);
+    $("#dwMutarMarcadas").addEventListener("click", mutarMarcadas);
+    $("#dwCabLista").addEventListener("change", (e) => {
+      const id = e.target.dataset.marcar;
+      if (!id) return;
+      if (e.target.checked) faixasMarcadas.add(id); else faixasMarcadas.delete(id);
+      renderCab();
+      $(`[data-marcar="${id}"]`)?.focus();
+    });
     ligarAgenteStudio();
     ligarPainelEntrada();
     ligarLarguraFaixas();
@@ -1482,13 +2018,30 @@
       trechoSel = { faixa: S.faixaSel || S.faixas[0].id, ini: 0, fim };
       desenharTrecho();
     });
-    $("#dwTrechoExcluir").addEventListener("click", excluirTrechoGlobal);
+    $("#dwTrechoExcluir").addEventListener("click", excluirTrecho);
     $("#dwTrechoDividir").addEventListener("click", () => editarTrecho(false));
-    $("#dwTrechoSilenciar").addEventListener("click", () => editarTrecho(true));
+    $("#dwTrechoSilenciar").addEventListener("click", alternarSilencioTrecho);
+    $("#dwTrechoOuvir").addEventListener("click", ouvirTrecho);
+    $("#dwTrechoCopiar").addEventListener("click", copiarTrecho);
+    $("#dwTrechoAfinar").addEventListener("click", afinarTrecho);
+    $("#dwTrechoRuido").addEventListener("click", () => limparRecortes(recortesDoTrecho(trechoSel).filter(({ r }) => !r.silenciada)));
+    ligarEdicaoBacking();
+    ligarAjusteBpm();
+    for (const [id, k] of [["dwTrechoInicio", "ini"], ["dwTrechoFim", "fim"]]) {
+      $("#" + id).addEventListener("change", (e) => {
+        if (!trechoSel) return;
+        const v = e.target.valueAsNumber;
+        if (Number.isFinite(v)) {
+          trechoSel[k] = k === "ini" ? Math.max(0, Math.min(v, trechoSel.fim - MIN_TRECHO))
+            : Math.max(trechoSel.ini + MIN_TRECHO, Math.min(v, duracaoTL()));
+        }
+        desenharTrecho();
+      });
+    }
     $("#dwTrechoLimpar").addEventListener("click", () => { trechoSel = null; desenharTrecho(); });
     $("#dwRegua").addEventListener("pointerdown", (e) => {
       const rg = $("#dwRegua"), tDe = (ev) => snap(Math.max(0, (ev.clientX - rg.getBoundingClientRect().left) / S.pps), ev.altKey);
-      if (!e.shiftKey) return void ir(tDe(e));
+      if (!e.shiftKey) { fimPrevia = null; return void ir(tDe(e)); }
       e.preventDefault(); const t0 = tDe(e); rg.setPointerCapture(e.pointerId);
       const mover = (ev) => { const t1 = tDe(ev); S.loop.ini = Math.min(t0, t1); S.loop.fim = Math.max(t0, t1); S.loop.on = true; desenharLoop(); };
       const soltar = () => { rg.removeEventListener("pointermove", mover); rg.removeEventListener("pointerup", soltar); rg.removeEventListener("pointercancel", soltar); if (S.loop.fim - S.loop.ini < 0.1) { S.loop.ini = S.loop.fim = 0; S.loop.on = false; } desenharLoop(); if (S.loop.fim > S.loop.ini) dica(`Loop de ${fmt(S.loop.ini)} a ${fmt(S.loop.fim)} ligado. A tecla L liga e desliga.`); };
@@ -1509,18 +2062,19 @@
       if (m) { const f = faixaPorId(m); mudar(() => { f.mudo = !f.mudo; }); atualizarNos(); return; }
       if (s) { const f = faixaPorId(s); mudar(() => { f.solo = !f.solo; }); atualizarNos(); return; }
       if (r) { const f = faixaPorId(r); mudar(() => { const novo = !f.arm; S.faixas.forEach((x) => { x.arm = false; }); f.arm = novo; }); dica(f.arm ? `Faixa "${f.nome}" armada: o botão vermelho grava nela.` : "Faixa desarmada."); return; }
-      if (del) { const f = faixaPorId(del); mudar(() => { S.faixas = S.faixas.filter((x) => x.id !== del); S.regioes = S.regioes.filter((x) => x.f !== del); if (S.faixaSel === del) S.faixaSel = S.faixas[0] ? S.faixas[0].id : null; }); dica(`Faixa "${f.nome}" excluída (Ctrl+Z traz de volta).`); return; }
+      if (del) { const f = faixaPorId(del); faixasMarcadas.delete(del); mudar(() => { S.faixas = S.faixas.filter((x) => x.id !== del); S.regioes = S.regioes.filter((x) => x.f !== del); if (S.faixaSel === del) S.faixaSel = S.faixas[0] ? S.faixas[0].id : null; }); dica(`Faixa "${f.nome}" excluída (Ctrl+Z traz de volta).`); return; }
       const cab = t.closest(".dw-cab"); if (cab && !t.closest("input")) { S.faixaSel = cab.dataset.f; S.regiaoSel = null; renderTudo(); }
     }
     $("#dwCabLista").addEventListener("click", aoClicarFaixaUI); $("#dwMix").addEventListener("click", aoClicarFaixaUI);
+    $("#dwRaiz").addEventListener("pointerdown", girarKnob);
     $("#dwRaiz").addEventListener("input", (e) => {
       const t = e.target;
-      if (t.dataset.vol) { const f = faixaPorId(t.dataset.vol); f.vol = +t.value; $$(`[data-vol="${f.id}"]`).forEach((i) => { if (i !== t) i.value = t.value; }); const db = $(`[data-db="${f.id}"]`); if (db) db.textContent = dbTxt(f.vol); atualizarNos(); agendarSalvar(); }
-      if (t.dataset.pan) { faixaPorId(t.dataset.pan).pan = +t.value; atualizarNos(); agendarSalvar(); }
+      if (t.dataset.vol) { const f = faixaPorId(t.dataset.vol); f.vol = +t.value; $$(`[data-vol="${f.id}"]`).forEach((i) => { if (i !== t) i.value = t.value; atualizarKnob(i, dbTxt(f.vol)); }); const db = $(`[data-db="${f.id}"]`); if (db) db.textContent = dbTxt(f.vol); atualizarNos(); agendarSalvar(); }
+      if (t.dataset.pan) { faixaPorId(t.dataset.pan).pan = +t.value; atualizarKnob(t); atualizarNos(); agendarSalvar(); }
       if (t.dataset.nome) { faixaPorId(t.dataset.nome).nome = t.value; delete catFxMap[t.dataset.nome]; agendarSalvar(); }   // renomear a faixa refaz a sugestão de instrumento
       if (t.id === "dwLimpaInt") limpaInt = +t.value;
-      if (t.id === "dwMestreVol") { S.mestreVol = +t.value; if (mestre) mestre.gain.value = S.mestreVol; }
-      if (t.dataset.rg) { const r = regiaoPorId(S.regiaoSel); r[t.dataset.rg] = +t.value; if (t.dataset.rg !== "ganho") delete r.fadeTrecho; const b = t.parentElement.querySelector("b"); b.textContent = t.dataset.rg === "ganho" ? t.value + " dB" : (+t.value).toFixed(2) + "s"; if (t.dataset.rg !== "ganho") renderLinhas(); agendarSalvar(); if (S.tocando) reagendar(); }
+      if (t.id === "dwMestreVol") { S.mestreVol = +t.value; if (mestre) mestre.gain.value = S.mestreVol; atualizarKnob(t, dbTxt(S.mestreVol)); $("#dwMestreDb").textContent = dbTxt(S.mestreVol); agendarSalvar(); }
+      if (t.dataset.rg) { const r = regiaoPorId(S.regiaoSel); r[t.dataset.rg] = +t.value; if (t.dataset.rg !== "ganho") delete r.fadeTrecho; const b = t.closest(".dw-param").querySelector("b"); b.textContent = t.dataset.rg === "ganho" ? t.value + " dB" : (+t.value).toFixed(2) + " s"; atualizarKnob(t, b.textContent); if (t.dataset.rg !== "ganho") renderLinhas(); agendarSalvar(); if (S.tocando) reagendar(); }
       if (t.hasAttribute("data-rnome")) { const r = regiaoPorId(S.regiaoSel); r.nome = t.value; const rot = $(`.dw-regiao[data-r="${r.id}"] .rot`); if (rot) rot.textContent = t.value; agendarSalvar(); }
     });
     $("#dwRegp").addEventListener("click", (e) => { const rs = e.target.closest("[data-rs]"); if (rs) { const r0 = regiaoPorId(S.regiaoSel); if (r0) acaoSinc(r0, rs.dataset.rs); return; } const b = e.target.closest("[data-ra]"); const r = regiaoPorId(S.regiaoSel); if (!b || !r) return; const acao = b.dataset.ra;
@@ -1584,7 +2138,7 @@
     }
     $("#dwCalibrar").addEventListener("click", () => { $("#dwCalRes").textContent = ""; $("#dwModalCal").hidden = false; });
     $("#dwCalFechar").addEventListener("click", () => { $("#dwModalCal").hidden = true; }); $("#dwCalFechar2").addEventListener("click", () => { $("#dwModalCal").hidden = true; }); $("#dwCalIniciar").addEventListener("click", calibrarAtraso);
-    $("#dwModos").addEventListener("change", () => { try { localStorage.setItem("oh-dw-modosep", modoSep()); } catch (e) { /* sem armazenamento */ } atualizarAvisoModo(); });
+    $("#dwModos").addEventListener("change", () => { try { localStorage.setItem("oh-dw-modosep", modoSep()); } catch (e) { /* sem armazenamento */ } atualizarAvisoModo(); atualizarColab(); atualizarBotaoSep(); });
     $("#dwProjFechar").addEventListener("click", () => { $("#dwModalProj").hidden = true; });
     $("#dwProjLista").addEventListener("click", async (e) => {
       const a = e.target.closest("[data-abrir]"), x = e.target.closest("[data-excluir]");
@@ -1594,8 +2148,20 @@
     // teclado
     document.addEventListener("keydown", (e) => {
       const pag = $("#page-estudio"); if (!pag || !pag.classList.contains("oh-page-ativa")) return;
-      if ((/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !(e.target.tagName === "INPUT" && e.target.type === "range" && (e.ctrlKey || e.metaKey))) || e.target.isContentEditable) return;
-      if ($("#dwAgentePainel").open || !$("#dwModalSep").hidden || !$("#dwModalProj").hidden || !$("#dwModalCal").hidden || !$("#dwModalExp").hidden) return;
+      const salto = e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && ["ArrowLeft", "ArrowRight"].includes(e.key);
+      const atalhoNoRange = e.target.type === "range" && (e.ctrlKey || e.metaKey || salto || e.code === "Space");
+      if ((/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !atalhoNoRange) || e.target.isContentEditable) return;
+      if ($("#dwAgentePainel").open || $("#dwBpmPainel").open || $("#dwBackingPainel").open || $("#dwEfeitoTrechoPainel").open || !$("#dwModalSep").hidden || !$("#dwModalProj").hidden || !$("#dwModalCal").hidden || !$("#dwModalExp").hidden) return;
+      if (salto) {
+        e.preventDefault();
+        if (!S.gravando && !S.contando) {
+          fimPrevia = null;
+          ir(Math.min(fimProjeto(), S.tAtual + (e.key === "ArrowLeft" ? -1 : 1) * SALTO_TRANSPORTE));
+          const scroll = $("#dwTlScroll"), x = px(S.tAtual);
+          if (x < scroll.scrollLeft || x > scroll.scrollLeft + scroll.clientWidth) scroll.scrollLeft = Math.max(0, x - scroll.clientWidth * 0.15);
+        }
+        return;
+      }
       if (abaAtiva === "afin") {
         if (afin && afin.tecla(e)) return;
         if (e.code === "Space") { if (!/^(BUTTON|A)$/.test(e.target.tagName)) { e.preventDefault(); const p = document.getElementById("afPlay"); if (p) p.click(); } return; }
@@ -1632,7 +2198,7 @@
   function novoProjeto() {
     salvarProjeto();                                   // o projeto atual fica guardado (Arquivo → Abrir projeto)
     if (S.tocando) pausar(); pararFontes(); descartarNos();
-    trechoSel = null; S.id = "p" + Date.now().toString(36); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0; S.nome = "Meu projeto"; S.tom = ""; S.bpm = 100; S.sujo = false;
+    trechoSel = null; mudoGeral = false; faixasMarcadas.clear(); S.id = "p" + Date.now().toString(36); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0; S.nome = "Meu projeto"; S.tom = ""; S.bpm = 100; S.sujo = false;
     bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); pilha.length = 0; refaz.length = 0;
     try { localStorage.removeItem("oh-dw-ultimo"); } catch (e) { /* sem armazenamento */ }
     $("#dwNome").value = S.nome; $("#dwBpm").value = S.bpm; $("#dwTom").textContent = "—"; mostrarSalvo(""); renderTudo(); dica("Projeto novo. O anterior ficou salvo em Arquivo → Abrir projeto.");
@@ -1703,7 +2269,7 @@
     if (S.tocando) pausar(); pararFontes(); descartarNos();
     bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); novosBufs.forEach((v, k) => { bufs.set(k, v); picos.set(k, novosPicos.get(k)); blobs.set(k, novosBlobs.get(k)); noBanco.add(k); });
     const faltaram = proj.regioes.filter((r) => !bufs.has(r.buf)).length;
-    trechoSel = null; S.id = proj.id; S.nome = proj.nome; S.faixas = proj.faixas; S.regioes = proj.regioes.filter((r) => bufs.has(r.buf)); S.regioes.forEach((r) => { if (r.alt && !bufs.has(r.alt.buf)) { r.alt = null; } }); S.bpm = proj.bpm; S.compasso = proj.compasso; S.tom = proj.tom || ""; S.mestreVol = proj.mestreVol == null ? 0.9 : proj.mestreVol;
+    trechoSel = null; mudoGeral = false; faixasMarcadas.clear(); S.id = proj.id; S.nome = proj.nome; S.faixas = proj.faixas; S.regioes = proj.regioes.filter((r) => bufs.has(r.buf)); S.regioes.forEach((r) => { if (r.alt && !bufs.has(r.alt.buf)) { r.alt = null; } }); S.bpm = proj.bpm; S.compasso = proj.compasso; S.tom = proj.tom || ""; S.mestreVol = proj.mestreVol == null ? 0.9 : proj.mestreVol;
     proxId = Math.max(proxId, proj.proxId || 0) + 1; S.faixaSel = S.faixas[0] ? S.faixas[0].id : null; S.regiaoSel = null; S.tAtual = 0; S.sujo = false; pilha.length = 0; refaz.length = 0;
     $("#dwNome").value = S.nome; $("#dwBpm").value = S.bpm; $("#dwComp").value = S.compasso; $("#dwTom").textContent = S.tom || "—";
     try { localStorage.setItem("oh-dw-ultimo", S.id); } catch (e) { /* sem armazenamento */ }
@@ -1729,7 +2295,7 @@
   function msgLimpa(t) { limpaTxt = t; const e = $("#dwLimpaStatus"); if (e) e.textContent = t; dica(t); }
   async function limparRegiao(r) {
     if (limpando) return;
-    if (r.afin) return msgLimpa("Esta região tem afinação aplicada. Desfaça a afinação (aba Afinação → Reverter tudo → Aplicar, ou Ctrl+Z) antes de limpar o ruído.");
+    if (r.afin || r.tomAjustado != null) return msgLimpa("Esta região tem afinação aplicada. Desfaça a afinação (aba Afinação → Reverter tudo → Aplicar, ou Ctrl+Z) antes de limpar o ruído.");
     if (S.gravando || S.contando) return dica("Pare a gravação antes de limpar o ruído.");
     if (!window.EstudioDsp) return msgLimpa("O módulo de limpeza não carregou. Atualize a página.");
     const buf = bufs.get(r.buf); if (!buf) return msgLimpa("Esta região ainda não tem áudio gravado.");
@@ -1758,10 +2324,11 @@
   }
   function alternarLimpeza(r) {
     if (!r.alt) return;
-    mudar(() => { const a = r.alt; r.alt = { buf: r.buf, off: r.off }; r.buf = a.buf; r.off = a.off; if (r.afin) r.afinada = !r.afinada; else r.limpo = !r.limpo; const b = bufs.get(r.buf); if (b) r.dur = Math.min(r.dur, b.duration - r.off); });
+    mudar(() => { const a = r.alt; r.alt = { buf: r.buf, off: r.off }; r.buf = a.buf; r.off = a.off; if (r.afin) r.afinada = !r.afinada; else if (r.tomAjustado != null) r.tomAjustado = !r.tomAjustado; else r.limpo = !r.limpo; const b = bufs.get(r.buf); if (b) r.dur = Math.min(r.dur, b.duration - r.off); });
+    if (r.tomAjustado != null) return dica(r.tomAjustado ? "Tocando a versão com o tom ajustado." : "Tocando a versão original.");
     dica(r.afin ? (r.afinada ? "Tocando a versão afinada." : "Tocando a versão sem afinação.") : (r.limpo ? "Tocando a versão limpa." : "Tocando o original (sem limpeza)."));
   }
-  function manterVersao(r) { if (!r.alt) return; const tipo = r.afin ? "afinação" : "limpeza", ativa = r.afin ? r.afinada : r.limpo; mudar(() => { r.alt = null; if (r.afin) delete r.afin; }); dica(ativa ? `Mantive a versão com ${tipo} e descartei a outra desta região.` : `Mantive a versão sem ${tipo} e descartei a outra.`); }
+  function manterVersao(r) { if (!r.alt) return; const tipo = r.afin || r.tomAjustado != null ? "afinação" : "limpeza", ativa = r.afin ? r.afinada : (r.tomAjustado ?? r.limpo); mudar(() => { r.alt = null; if (r.afin) delete r.afin; delete r.tomAjustado; }); dica(ativa ? `Mantive a versão com ${tipo} e descartei a outra desta região.` : `Mantive a versão sem ${tipo} e descartei a outra.`); }
 
   // ══ AFINAÇÃO (aba Afinação: editor de linha contínua; o resultado é gravado na região e a versão sem afinação fica guardada) ═══
   let afin = null, afinAplicando = false, abaAtiva = "mix", afinTutVisto = false;
@@ -1823,7 +2390,7 @@
       garantirAudio(); const nc = base.buf.numberOfChannels, n = base.fim - base.ini, novo = ctx.createBuffer(nc, n, base.sr);
       for (let c = 0; c < nc; c++) novo.copyToChannel(EstudioAfinacao.corrigirAltura(base.buf.getChannelData(c).slice(base.ini, base.fim), base.sr, det, cents), c);
       const blob = audioBufferParaWavBlob(novo), guardar = Array.from(cents, (v) => Math.round(v * 10) / 10);
-      mudar(() => { const id = guardarAudio(novo, blob); if (!r.afinada) r.alt = { buf: r.buf, off: r.off }; r.buf = id; r.off = 0; r.dur = Math.min(r.dur, novo.duration); r.afinada = true; r.limpo = false; r.afin = { cents: guardar, n: det.n, hop: det.hop }; if (temIgnorados) r.afin.ignorados = Array.from(ignorados); });
+      mudar(() => { const id = guardarAudio(novo, blob); if (!r.afinada) r.alt = { buf: r.buf, off: r.off }; r.buf = id; r.off = 0; r.dur = Math.min(r.dur, novo.duration); r.afinada = true; r.limpo = false; delete r.tomAjustado; r.afin = { cents: guardar, n: det.n, hop: det.hop }; if (temIgnorados) r.afin.ignorados = Array.from(ignorados); });
       if (afin && S.regiaoSel === r.id && abaAtiva === "afin") afin.zerarHistorico();
       dica("Afinação aplicada ✓. Ouça a região; em Região você compara com “Ouvir a versão sem afinação”. Ctrl+Z desfaz.");
     } catch (e) { dica("Não consegui aplicar a afinação: " + ((e && e.message) || "erro inesperado") + "."); }
@@ -1854,7 +2421,7 @@
     for (const q of R.params) {
       if (q.mostrarSe && !(q.mostrarSe[0] === "!" ? !p[q.mostrarSe.slice(1)] : !!p[q.mostrarSe])) continue;
       if (q.grupo && q.grupo !== ult) { h += `<h5>${esc(q.grupo)}</h5>`; ult = q.grupo; }
-      if (q.tipo === "num") h += `<label class="par"><span>${esc(q.rotulo)}</span><input type="range" min="0" max="1000" step="1" value="${Math.round(posFx(q, p[q.id]))}" data-fxi="${fx.id}" data-fxp="${q.id}"><b data-fxv="${fx.id}:${q.id}">${fmtFx(q, p[q.id])}</b></label>`;
+      if (q.tipo === "num") h += `<label class="par"><span>${esc(q.rotulo)}</span>${knob(q.rotulo, Math.round(posFx(q, p[q.id])), 0, 1000, 1, `data-fxi="${fx.id}" data-fxp="${q.id}"`, fmtFx(q, p[q.id]))}<b data-fxv="${fx.id}:${q.id}">${fmtFx(q, p[q.id])}</b></label>`;
       else if (q.tipo === "sel") h += `<label class="par sel"><span>${esc(q.rotulo)}</span><select data-fxi="${fx.id}" data-fxp="${q.id}">${q.opcoes.map(([v, nome]) => `<option value="${v}" ${String(v) === String(p[q.id]) ? "selected" : ""}>${esc(nome)}</option>`).join("")}</select></label>`;
       else h += `<label class="par bool"><input type="checkbox" data-fxi="${fx.id}" data-fxp="${q.id}" ${p[q.id] ? "checked" : ""}><span>${esc(q.rotulo)}</span></label>`;
     }
@@ -1891,7 +2458,7 @@
       const f = faixaFx(), fx = (f.fx || []).find((x) => x.id === fid); if (!fx) return; const q = EstudioFx.REGISTRO[fx.tipo].params.find((z) => z.id === t.dataset.fxp);
       if (arrastandoFx === null) arrastandoFx = foto();
       const v = valFx(q, +t.value); fx.p[q.id] = v; const lab = el.querySelector(`[data-fxv="${fid}:${q.id}"]`); if (lab) lab.textContent = fmtFx(q, v);
-      aplicarFxVivo(f, fx); if (fx.tipo === "eq") { const sv = el.querySelector(`[data-fxc="${fid}"] svg.curva`); if (sv) sv.outerHTML = curvaEqSvg(Object.assign(EstudioFx.padroes("eq"), fx.p)); } agendarSalvar();
+      atualizarKnob(t, fmtFx(q, v)); aplicarFxVivo(f, fx); if (fx.tipo === "eq") { const sv = el.querySelector(`[data-fxc="${fid}"] svg.curva`); if (sv) sv.outerHTML = curvaEqSvg(Object.assign(EstudioFx.padroes("eq"), fx.p)); } agendarSalvar();
     });
     el.addEventListener("change", (e) => {
       const t = e.target, f = faixaFx(); if (!f) return;
@@ -2174,7 +2741,8 @@
   // ══ LARANJINHA DO STUDIO: interpreta texto e propõe edições locais ══
   function contextoAgenteStudio() {
     const faixaAtiva = faixaPorId(trechoSel?.faixa || S.faixaSel);
-    const regiaoAtiva = regiaoPorId(S.regiaoSel);
+    const alvo = trechoSel && recortesDoTrecho(trechoSel, $("#dwTrechoTodas").checked);
+    const regiaoAtiva = alvo?.[0]?.r || regiaoPorId(S.regiaoSel);
     const faixas = [faixaAtiva, ...S.faixas.filter((f) => f !== faixaAtiva)].filter(Boolean).slice(0, 60);
     const ids = new Set(faixas.map((f) => f.id));
     const regioes = [regiaoAtiva, ...S.regioes.filter((r) => r !== regiaoAtiva)]
@@ -2205,6 +2773,47 @@
     }
     const obter = (id) => contexto.regioes.some((r) => r.id === id) ? regiaoPorId(id) : null;
     const r = obter(plano?.regiao);
+    const editarSelecao = ["limpar_ruido", "alinhar_tom", "sincronizar_base"].includes(plano?.acao);
+    const partes = editarSelecao && contexto.trecho
+      ? recortesDoTrecho(contexto.trecho, contexto.trecho.todas).filter(({ r: regiao }) => !regiao.silenciada)
+      : r && !r.silenciada ? [{ r, ini: r.ini, fim: r.ini + r.dur }] : [];
+    if (editarSelecao && !partes.length) return erro("Selecione um trecho com áudio na linha do tempo.");
+    if (plano?.acao === "limpar_ruido" && contexto.trecho) {
+      if (partes.some(({ r: regiao, ini, fim }) => regiao.afin || regiao.limpo || regiao.tomAjustado != null || fim - ini < 1)) return erro("A limpeza precisa de recortes de pelo menos 1 s, sem afinação ou limpeza aplicada.");
+      return {
+        descricao: `Reduzir ruído no trecho de ${tempo(contexto.trecho.ini)} a ${tempo(contexto.trecho.fim)}. É preciso haver pausa para medir o ruído.`,
+        executar: () => limparRecortes(partes),
+      };
+    }
+    if (plano?.acao === "alinhar_tom") {
+      if (plano.semis != null && !limite(plano.semis, -12, 12)) return erro("Indique de −12 a +12 semitons.");
+      const tom = S.tom;
+      return {
+        descricao: plano.semis != null ? `Mudar o tom do áudio selecionado em ${plano.semis} semitons.`
+          : `Corrigir a afinação do áudio selecionado ${tom ? "no tom de " + tom : "para as notas mais próximas"}.`,
+        executar: () => processarRecortes(partes, "Alinhando o tom…", (item) => alinharTomRecorte(item, tom, plano.semis),
+          (itens) => aplicarRecortes(itens, (centro, { buffer }) => {
+            centro.alt = { buf: centro.buf, off: centro.off };
+            delete centro.afin; delete centro.afinada;
+            trocarAudioRecortado(centro, buffer);
+            centro.limpo = false; centro.tomAjustado = true;
+          })),
+      };
+    }
+    if (plano?.acao === "sincronizar_base") {
+      const referencias = contexto.regioes.filter((x) => !partes.some(({ r: regiao }) => x.faixa === regiao.f) && /instrumental|^base\b/i.test(contexto.faixas.find((f) => f.id === x.faixa)?.nome || ""));
+      const ref = plano.referencia != null ? obter(plano.referencia) : referencias.length === 1 ? obter(referencias[0].id) : null;
+      if (!ref || partes.some(({ r: regiao }) => regiao.f === ref.f)) return erro("Indique qual região da base quer usar como referência.");
+      const ini = Math.min(...partes.map((item) => item.ini)), passo = beatDur();
+      const batida = Math.max(0, Math.round((ini - ref.ini) / passo));
+      const destino = ref.ini + batida * passo;
+      const delta = destino - ini;
+      if (Math.abs(delta) < .0005) return erro("O trecho já está alinhado à grade da base.");
+      return {
+        descricao: `Encaixar o início do trecho na batida mais próxima da grade de “${ref.nome}”, de ${tempo(ini)} para ${tempo(destino)}.`,
+        executar: () => mudar(() => aplicarRecortes(partes, (centro) => { centro.ini += delta; })),
+      };
+    }
     if (!r) return erro("Selecione a região na linha do tempo e tente de novo.");
     const alvo = `“${r.nome}” na faixa “${faixaPorId(r.f)?.nome}”`;
     switch (plano.acao) {
@@ -2329,6 +2938,17 @@
       const contexto = contextoAgenteStudio();
       if (!contexto.faixas.length) { mostrar("Adicione uma faixa antes de pedir uma edição."); return; }
       descartar();
+      const chave = mensagem.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[!.?]+$/g, "").trim();
+      const comandos = {
+        "limpar ruido": "limpar_ruido", "limpar o ruido": "limpar_ruido",
+        "alinhar tom": "alinhar_tom", "alinhar o tom": "alinhar_tom",
+        "sincronizar base": "sincronizar_base", "sincronizar com a base": "sincronizar_base",
+      };
+      if (Object.hasOwn(comandos, chave)) {
+        try { proporPlano({ acao: comandos[chave], regiao: contexto.regiaoSelecionada }, contexto, foto(), S.id); }
+        catch (e) { mostrar(e.message); }
+        return;
+      }
       const controller = new AbortController(); consulta = controller;
       const projeto = S.id, estado = foto();
       const form = new FormData(); form.append("mensagem", mensagem); form.append("contexto", JSON.stringify(contexto));

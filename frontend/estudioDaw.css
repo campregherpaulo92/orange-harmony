@@ -160,7 +160,6 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-strip .nome { font-weight: 800; font-size: 12px; text-align: center; min-height: 28px; overflow: hidden; }
 .dw-strip .fw { flex: 1; display: flex; gap: 10px; align-items: stretch; min-height: 0; }
 .dw-strip .fader { width: 26px; display: grid; place-items: center; }
-.dw-strip .fader input { width: 100px; transform: rotate(-90deg); accent-color: var(--dw-laranja); }
 .dw-strip .vu { width: 11px; background: #0a0705; border-radius: 3px; position: relative; overflow: hidden; }
 .dw-strip .vu i { position: absolute; left: 0; right: 0; bottom: 0; height: 3%; background: linear-gradient(0deg, var(--dw-turq) 0 60%, #eab308 60% 85%, #ef4444 85%); }
 .dw-strip .db { font-size: 11px; color: var(--dw-suave); font-variant-numeric: tabular-nums; }
@@ -387,3 +386,78 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 @media (max-width: 860px) {
   .dw-painel-entrada { position: absolute; inset: 0 0 0 auto; z-index: 24; width: min(302px, 100%); box-shadow: -14px 0 28px #0009; }
 }
+
+/* Controles giratórios do mixer e dos efeitos */
+.dw-knob {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border: 1px solid #77757d;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 27%, #56545d, #242329 68%, #15151a);
+  box-shadow: 0 2px 4px #0009;
+}
+.dw-knob input[type=range] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  margin: 0;
+  opacity: 0;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.dw-knob i { position: absolute; inset: 2px; transform: rotate(var(--angulo)); pointer-events: none; }
+.dw-knob i::before {
+  content: "";
+  position: absolute;
+  left: calc(50% - 1px);
+  top: 1px;
+  width: 2px;
+  height: 7px;
+  border-radius: 2px;
+  background: #ff9b54;
+}
+.dw-knob:focus-within { outline: 2px solid #ff9b54; outline-offset: 2px; }
+.dw-knob output {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  z-index: 7;
+  transform: translateX(-50%);
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: #191820;
+  color: #fff;
+  font: 11px system-ui;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.dw-knob:hover output, .dw-knob:focus-within output { display: block; }
+.dw-cab .l2 .dw-knob input[type=range] { height: 100%; }
+.dw-strip .fader .dw-knob { align-self: center; }
+.dw-fxc .par .dw-knob output { display: none; }
+
+.dw-trecho-alca {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+.dw-trecho-alca.ini { left: -4px; }
+.dw-trecho-alca.fim { right: -4px; }
+.dw-trecho-barra input[type=number] { width: 68px; }
+#dwBackingPainel form, #dwEfeitoTrechoPainel form, #dwBpmPainel form { display: grid; gap: 10px; }
+#dwBackingPainel label, #dwEfeitoTrechoPainel label, #dwBpmPainel label { display: flex; align-items: center; gap: 8px; }
+#dwBackingPainel [hidden] { display: none; }
+
+#dwMutarMarcadas[hidden] { display: none; }
+#dwMutarTodas.on { color: var(--dw-laranja); border-color: var(--dw-laranja); }
