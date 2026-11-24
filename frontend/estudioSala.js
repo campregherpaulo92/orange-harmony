@@ -9,7 +9,7 @@
     const $ = (id) => dialog.querySelector("#" + id);
     const projetos = new Map();
     let projeto = null, sessao = null, entrada = null, ativando = null, gravacao = null;
-    let transporte = null, frame = 0, operacao = "", contador = 0, moduloCaptura;
+    let transporte = null, frame = 0, operacao = "", contador = 0, moduloCaptura, calibrando = false, carregando = false, enviando = false;
     const nomePadrao = (n) => "Tomada " + n;
     const duracaoMinima = 0.05;
     const ganhoBase = ctx.createGain(), ganhoClique = ctx.createGain(), ganhoEntrada = ctx.createGain(), ganhoTomada = ctx.createGain();
@@ -45,8 +45,13 @@
           <fieldset class="ds-bloco" id="dsRitmoConfig">
             <legend>Metrônomo e alinhamento</legend>
             <label>Pré-contagem <select id="dsConta"><option value="0">Nenhuma</option><option value="1">1 compasso</option><option value="2">2 compassos</option></select></label>
-            <label>Clique <select id="dsClique"><option value="contagem">Só na contagem</option><option value="sempre">Durante a gravação também</option></select></label>
-            <label title="Compensação de captura, iniciada com o último valor calibrado no Studio">Atraso (ms) <input id="dsAtraso" type="number" value="0" step="1" min="0" max="500" required></label>
+            <label>Metrônomo <select id="dsClique"><option value="off">Desligado</option><option value="on">Ligado</option><option value="rec">Só ao gravar</option></select></label>
+            <label>BPM <input id="dsBpm" type="number" min="40" max="220" step="1" required></label>
+            <label>Compasso <select id="dsCompasso"></select></label>
+            <div class="ds-linha">
+              <label title="Compensação aplicada às próximas gravações">Atraso (ms) <input id="dsAtraso" type="number" step="1" min="0" max="500" required></label>
+              <button type="button" class="dw-btn peq" id="dsCalibrar">${ic("calibrar")} Calibrar</button>
+            </div>
           </fieldset>
         </aside>
         <main class="ds-principal">
@@ -92,7 +97,7 @@
           </section>
         </main>
       </div>
-      <footer class="ds-status" id="dsStatus" role="status" aria-live="polite"></footer>`;
+      <footer class="ds-status" role="status" aria-live="polite"><span id="dsStatus"></span> <span id="dsSalvo"></span></footer>`;
 
     const texto = (id, valor) => { $(id).textContent = valor; };
     const estado = (msg) => texto("dsStatus", msg);
@@ -104,14 +109,108 @@
     const inicioDaTomada = (t) => t.inicio + t.deslocamento + t.a;
     const tomadaAtual = () => sessao?.tomadas.find((t) => t.id === sessao.selecionada);
     const faixasMarcadas = () => [...dialog.querySelectorAll("#dsFaixas input:checked")].map((el) => el.value);
-    const ocupado = () => !!gravacao || !!operacao;
+    const ocupado = () => !!gravacao || !!operacao || calibrando || carregando || enviando;
     const pararStream = (stream) => stream?.getTracks().forEach((track) => track.stop());
+
+    async function restaurarTomadas(atual) {
+      const salvo = await motor.lerTomadas(atual.id);
+      if (!salvo) return;
+      const fontes = new Map();
+      for (const [id, audio] of salvo.fontes) {
+        if (!audio) throw new Error("Falta o áudio de uma tomada salva.");
+        const { taxa, canais } = audio;
+        const fonte = ctx.createBuffer(canais.length, canais[0].length, taxa);
+        canais.forEach((canal, c) => fonte.copyToChannel(canal, c));
+        fontes.set(id, fonte);
+      }
+      atual.tomadas = salvo.tomadas.map((t) => ({ ...t, fonte: fontes.get(t.fonteId) }));
+      atual.selecionada = atual.tomadas.find((t) => t.id === salvo.selecionada)?.id ?? atual.tomadas.at(-1)?.id ?? null;
+      atual.numero = salvo.numero;
+      atual.revisao = salvo.revisao;
+      atual.fontesSalvas = new Set(fontes.keys());
+      contador = Math.max(contador, salvo.contador);
+    }
+
+    function salvarTomadas(atual = sessao) {
+      const tomadas = atual.tomadas.filter((t) => !t.teste);
+      const fontes = new Map(tomadas.map((t) => [t.fonteId, t.fonte]));
+      const dados = {
+        tomadas: tomadas.map(({ fonte, inserida, ...metadados }) => metadados),
+        fontes: [...fontes.keys()], selecionada: atual.selecionada, numero: atual.numero, contador,
+      };
+      atual.pendente = true;
+      const mostrar = (msg) => { if (sessao === atual && dialog.open) texto("dsSalvo", msg); };
+      mostrar("Salvando tomadas neste aparelho…");
+      const trabalho = atual.fila.then(async () => {
+        if (!atual.revisao) await motor.garantirProjeto(atual.id);
+        const novas = [...fontes].filter(([id]) => !atual.fontesSalvas.has(id)).map(([id, fonte]) => [
+          id, { taxa: fonte.sampleRate, canais: Array.from({ length: fonte.numberOfChannels }, (_, c) => fonte.getChannelData(c)) },
+        ]);
+        await motor.gravarTomadas(atual.id, atual.revisao, { ...dados, revisao: atual.revisao + 1 }, novas);
+        atual.revisao++;
+        atual.fontesSalvas = new Set(dados.fontes);
+      });
+      atual.fila = trabalho.then(() => {
+        if (atual.ultimo === trabalho) {
+          atual.pendente = false;
+          mostrar("Tomadas salvas neste aparelho.");
+        }
+        return true;
+      }, (erro) => {
+        if (atual.ultimo === trabalho) mostrar(`Tomadas ainda na memória. Baixe o WAV antes de sair. ${erro?.message || ""}`);
+        return false;
+      });
+      atual.ultimo = trabalho;
+      return atual.fila;
+    }
+
+    function mostrarRitmo() {
+      texto("dsProjeto", `${projeto.nome} · ${projeto.bpm} BPM · ${projeto.compasso}`);
+      $("dsBpm").value = projeto.bpm;
+      $("dsCompasso").value = projeto.compasso;
+      $("dsConta").value = projeto.ritmo.contagem;
+      $("dsClique").value = projeto.ritmo.metro;
+      $("dsAtraso").value = projeto.ritmo.latencia;
+    }
+
+    function mudarRitmo(ajuste) {
+      pararTransporte();
+      projeto.ritmo = motor.definirRitmo(ajuste);
+      mostrarRitmo();
+      controles();
+    }
+
+    function mudarTempo(ajuste) {
+      pararTransporte();
+      Object.assign(projeto, motor.definirTempo(ajuste));
+      mostrarRitmo();
+      controles();
+    }
+
+    async function calibrar() {
+      if (ocupado()) return;
+      pararTransporte();
+      calibrando = true;
+      ganhoEntrada.gain.setTargetAtTime(0, ctx.currentTime, 0.012);
+      controles();
+      try {
+        const latencia = await motor.calibrar($("dsDispositivo").value);
+        if (Number.isFinite(latencia)) {
+          projeto.ritmo.latencia = latencia;
+          mostrarRitmo();
+        }
+      } finally {
+        calibrando = false;
+        atualizarMix();
+        controles();
+      }
+    }
 
     function atualizarMix() {
       for (const [tipo, node] of [["Base", ganhoBase], ["Entrada", ganhoEntrada], ["Clique", ganhoClique]]) {
         const valor = Number($("dsVol" + tipo).value);
         texto("dsPct" + tipo, valor + "%");
-        const mudo = tipo === "Entrada" && $("dsMonitor").value !== "app";
+        const mudo = tipo === "Entrada" && (calibrando || $("dsMonitor").value !== "app");
         node.gain.setTargetAtTime(mudo ? 0 : valor / 100, ctx.currentTime, 0.012);
       }
       $("dsVolEntrada").disabled = $("dsMonitor").value !== "app";
@@ -128,7 +227,7 @@
       ["dsEntradaConfig", "dsRitmoConfig", "dsReferenciaConfig"].forEach((id) => { $(id).disabled = travado; });
       $("dsAtivar").disabled = !!ativando || !!entrada;
       $("dsTeste").disabled = !entrada;
-      $("dsGravar").disabled = travado;
+      $("dsGravar").disabled = travado || !projetos.has(projeto.projeto);
       $("dsFechar").disabled = travado;
       const finalizando = !!gravacao?.encerrando;
       $("dsParar").disabled = finalizando || !(operacao || gravacao || transporte);
@@ -230,36 +329,39 @@
       atualizarMarcador();
     }
 
-    function iniciarBase(inicio, fim, quando, repetir = false) {
+    function iniciarBase(inicio, fim, quando, repetir = false, ouvirClique = false) {
       const ids = faixasMarcadas();
       const ate = Math.min(fim, projeto.fim);
-      let parar = () => {};
-      if (ids.length && ate > inicio) parar = motor.tocarReferencia(ids, inicio, ate, quando, ganhoBase);
-      transporte = { tipo: "base", inicio, fim: ate, quando, parar, repetir };
+      const pararBase = ids.length && ate > inicio ? motor.tocarReferencia(ids, inicio, ate, quando, ganhoBase) : null;
+      const pararClique = ouvirClique && projeto.ritmo.metro === "on"
+        ? agendarClique({ inicio, fim: ate, quando, pre: 0 }, true) : null;
+      transporte = { tipo: "base", inicio, fim: ate, quando, repetir, parar() { pararBase?.(); pararClique?.(); } };
     }
 
-    function agendarClique(g) {
-      g.clickBus = ctx.createGain();
-      g.clickBus.connect(ganhoClique);
+    function agendarClique(g, durante) {
+      if (!g.pre && !durante) return;
+      const bus = ctx.createGain();
+      bus.connect(ganhoClique);
       const { tempos, passo } = projeto;
-      for (let i = 0; i < g.pre; i++) motor.cliqueEm(g.primeiro + i * passo, i % tempos === 0, g.clickBus);
-      if ($("dsClique").value !== "sempre") return;
+      for (let i = 0; i < g.pre; i++) motor.cliqueEm(g.primeiro + i * passo, i % tempos === 0, bus);
       let batida = Math.ceil(g.inicio / passo - 0.00001);
       const avancar = () => {
+        const agora = ctx.currentTime;
+        batida = Math.max(batida, Math.ceil((g.inicio + agora - g.quando) / passo - 0.00001));
         let t = g.quando + batida * passo - g.inicio;
-        while (t < ctx.currentTime + 0.18 && batida * passo < g.fim) {
-          if (t >= ctx.currentTime) motor.cliqueEm(t, batida % tempos === 0, g.clickBus);
+        while (t < agora + 0.18 && batida * passo < g.fim) {
+          if (t >= agora) motor.cliqueEm(t, batida % tempos === 0, bus);
           t = g.quando + ++batida * passo - g.inicio;
         }
       };
-      avancar();
-      g.metro = setInterval(avancar, 30);
+      let timer;
+      if (durante) { avancar(); timer = setInterval(avancar, 30); }
+      return () => { clearInterval(timer); bus.disconnect(); };
     }
 
     function pararRetornoCaptura(g) {
-      clearInterval(g.metro);
-      g.clickBus?.disconnect();
-      g.clickBus = null;
+      g.pararClique?.();
+      g.pararClique = null;
       pararTransporte();
     }
 
@@ -291,12 +393,11 @@
     }
 
     async function iniciarGravacao(teste) {
-      if (ocupado()) return;
+      if (ocupado() || !projetos.has(projeto.projeto)) return;
       const pedido = {};
       try {
         const intervaloAtual = teste ? { inicio: 0, fim: 3 } : intervalo();
-        const atraso = $("dsAtraso").valueAsNumber;
-        if (!teste && (!Number.isFinite(atraso) || atraso < 0 || atraso > 500)) throw new Error("Informe um atraso entre 0 e 500 ms.");
+        const { latencia, contagem, metro } = projeto.ritmo;
         pararTransporte();
         operacao = pedido;
         controles();
@@ -312,11 +413,11 @@
         }
         if (operacao !== pedido || !dialog.open || entrada !== dispositivo) return;
         const g = { ...intervaloAtual, teste, partes: [], amostras: 0, sessao, fonte: dispositivo.fonte,
-          pre: teste ? 0 : Number($("dsConta").value) * projeto.tempos };
+          pre: teste ? 0 : contagem * projeto.tempos };
         g.primeiro = ctx.currentTime + 0.12;
         const inicio = Math.round((g.primeiro + g.pre * projeto.passo) * ctx.sampleRate);
         g.quando = inicio / ctx.sampleRate;
-        g.inicioCaptura = inicio + Math.round((teste ? 0 : atraso / 1000) * ctx.sampleRate);
+        g.inicioCaptura = inicio + Math.round((teste ? 0 : latencia / 1000) * ctx.sampleRate);
         const fim = g.inicioCaptura + Math.round((g.fim - g.inicio) * ctx.sampleRate);
         g.captura = new AudioWorkletNode(ctx, "oh-sala-captura", {
           outputChannelCount: [1], processorOptions: { inicio: g.inicioCaptura, fim },
@@ -338,7 +439,10 @@
           estado("O navegador interrompeu a captura. Tente gravar novamente.");
           controles();
         };
-        if (!teste) { iniciarBase(g.inicio, g.fim, g.quando); agendarClique(g); }
+        if (!teste) {
+          iniciarBase(g.inicio, g.fim, g.quando);
+          g.pararClique = agendarClique(g, metro !== "off");
+        }
         estado(teste ? "Gravando o teste de entrada." : "Preparando a tomada…");
       } catch (erro) {
         if (operacao === pedido) {
@@ -371,12 +475,13 @@
           if (pos === amostras) break;
         }
         const tomada = {
-          id: ++contador, nome: g.teste ? "Teste de entrada" : nomePadrao(++g.sessao.numero),
+          id: ++contador, fonteId: contador, nome: g.teste ? "Teste de entrada" : nomePadrao(++g.sessao.numero),
           fonte, comprimento: amostras, a: 0, b: amostras / fonte.sampleRate,
           inicio: g.inicio, deslocamento: 0, enviada: false, teste: g.teste,
         };
         g.sessao.tomadas.push(tomada);
         g.sessao.selecionada = tomada.id;
+        if (!g.teste) salvarTomadas(g.sessao);
         if (dialog.open) {
           renderTomadas();
           estado(g.teste ? "Teste pronto. Use Ouvir teste para conferir a entrada." : "Tomada pronta. Ouça, ajuste o recorte ou envie ao projeto.");
@@ -408,11 +513,11 @@
         }
         if (pos >= fim) {
           pararTransporte();
-          if (repetir && fim > inicio) iniciarBase(inicio, fim, agora + 0.026, true);
+          if (repetir && fim > inicio) iniciarBase(inicio, fim, agora + 0.026, true, true);
           controles();
         }
       } else {
-        texto("dsFase", gravacao?.encerrando ? "Finalizando gravação" : ocupado() ? "Preparando entrada" : "Pronto para gravar");
+        texto("dsFase", gravacao?.encerrando ? "Finalizando gravação" : calibrando ? "Calibrando atraso" : ocupado() ? "Preparando entrada" : "Pronto para gravar");
       }
       frame = requestAnimationFrame(animar);
     }
@@ -469,10 +574,12 @@
       pararTransporte();
       const indice = sessao.tomadas.indexOf(tomada);
       sessao.tomadas.splice(indice, 1);
+      if (!sessao.tomadas.some((t) => !t.teste)) sessao.numero = 0;
       sessao.selecionada = (sessao.tomadas[indice] || sessao.tomadas[indice - 1])?.id ?? null;
       renderTomadas();
       (tomadaAtual() ? $("dsTomada") : $("dsGravar")).focus();
       estado(`“${tomada.nome}” excluída da sala.`);
+      if (!tomada.teste) salvarTomadas();
     }
 
     function atualizarMarcador(tempo = $("dsDivisao").valueAsNumber) {
@@ -505,6 +612,7 @@
       t.a = a; t.b = Math.min(b, total); t.enviada = false;
       atualizarDestino(t);
       estado("Recorte ajustado.");
+      if (!t.teste) salvarTomadas();
     }
 
     function dividir() {
@@ -516,6 +624,7 @@
       sessao.tomadas.splice(sessao.tomadas.indexOf(t) + 1, 0, direita);
       renderTomadas();
       estado("Tomada dividida. Escolha a parte que quer ouvir ou enviar.");
+      if (!t.teste) salvarTomadas();
     }
 
     function tocarTomada() {
@@ -524,7 +633,7 @@
       pararTransporte();
       ctx.resume();
       const inicio = inicioDaTomada(t), fim = inicio + t.b - t.a, quando = ctx.currentTime + 0.05;
-      if (!t.teste) iniciarBase(inicio, fim, quando);
+      if (!t.teste) iniciarBase(inicio, fim, quando, false, true);
       const pararBase = transporte?.parar;
       const src = ctx.createBufferSource();
       src.buffer = t.fonte;
@@ -542,12 +651,17 @@
       cancelAnimationFrame(frame);
     }
 
-    function abrir(dados) {
+    async function abrir(dados) {
       if (dialog.open || ocupado()) return;
       projeto = dados;
-      if (!projetos.has(dados.projeto)) projetos.set(dados.projeto, { tomadas: [], selecionada: null, numero: 0, dispositivo: dados.entrada, referencias: null });
+      const nova = !projetos.has(dados.projeto);
+      if (nova) projetos.set(dados.projeto, {
+        id: dados.projeto, tomadas: [], selecionada: null, numero: 0, dispositivo: dados.entrada, referencias: null,
+        revisao: 0, fontesSalvas: new Set(), fila: Promise.resolve(), pendente: false,
+      });
       sessao = projetos.get(dados.projeto);
-      texto("dsProjeto", `${dados.nome} · ${dados.bpm} BPM · ${dados.compasso}`);
+      $("dsCompasso").replaceChildren(...dados.compassos.map((compasso) => new Option(compasso, compasso)));
+      mostrarRitmo();
       const referencias = dados.selecao ? null : sessao.referencias;
       const validar = referencias && (!referencias.length || dados.faixas.some((f) => referencias.includes(f.id)));
       $("dsFaixas").innerHTML = dados.faixas.length ? dados.faixas.map((f) => {
@@ -557,14 +671,26 @@
       sessao.referencias = dados.faixas.length ? faixasMarcadas() : null;
       $("dsInicio").value = segundos(dados.selecao?.inicio ?? dados.cursor);
       $("dsFim").value = dados.selecao ? segundos(dados.selecao.fim) : "";
-      $("dsConta").value = dados.contagem;
-      $("dsAtraso").value = dados.atraso;
       $("dsDispositivo").replaceChildren(new Option("Padrão do sistema", ""));
       if (sessao.dispositivo) $("dsDispositivo").add(new Option("Entrada selecionada", sessao.dispositivo));
       $("dsDispositivo").value = sessao.dispositivo;
       texto("dsPos", relogio(dados.selecao?.inicio ?? dados.cursor));
       estado("Escolha a referência e confira o sinal antes de gravar.");
+      carregando = nova;
+      texto("dsSalvo", "");
       dialog.showModal();
+      if (nova) {
+        controles();
+        try {
+          await restaurarTomadas(sessao);
+          if (sessao.tomadas.length) estado(`${sessao.tomadas.length} tomada(s) recuperada(s) neste aparelho.`);
+        } catch (erro) {
+          projetos.delete(dados.projeto);
+          estado(`Não consegui recuperar as tomadas. Feche e abra a Sala para tentar de novo. ${erro?.message || ""}`);
+        } finally { carregando = false; }
+        if (!dialog.open) return;
+      }
+      if (sessao.pendente) texto("dsSalvo", "Há alterações nas tomadas aguardando salvamento neste aparelho.");
       listarEntradas();
       atualizarMix();
       renderTomadas();
@@ -577,6 +703,12 @@
     dialog.addEventListener("close", fechar);
     $("dsDispositivo").onchange = (e) => { fecharEntrada(); sessao.dispositivo = e.target.value; estado("Ative a entrada escolhida para conferir o sinal."); controles(); };
     $("dsAtivar").onclick = ativarEntrada;
+    $("dsConta").onchange = (e) => mudarRitmo({ contagem: Number(e.target.value) });
+    $("dsClique").onchange = (e) => mudarRitmo({ metro: e.target.value });
+    $("dsAtraso").onchange = (e) => mudarRitmo({ latencia: e.target.valueAsNumber });
+    $("dsBpm").onchange = (e) => mudarTempo({ bpm: e.target.valueAsNumber });
+    $("dsCompasso").onchange = (e) => mudarTempo({ compasso: e.target.value });
+    $("dsCalibrar").onclick = calibrar;
     $("dsGravar").onclick = () => iniciarGravacao(false);
     $("dsTeste").onclick = () => iniciarGravacao(true);
     $("dsParar").onclick = () => {
@@ -592,14 +724,14 @@
         if (inicio >= Math.min(fim, projeto.fim)) return estado("Escolha um intervalo dentro da referência.");
         pararTransporte();
         ctx.resume();
-        iniciarBase(inicio, fim, ctx.currentTime + 0.05, $("dsLoop").checked);
+        iniciarBase(inicio, fim, ctx.currentTime + 0.05, $("dsLoop").checked, true);
         controles();
       } catch (erro) { estado(erro.message); }
     };
     ["dsVolBase", "dsVolEntrada", "dsVolClique", "dsMonitor"].forEach((id) => { $(id).oninput = atualizarMix; });
     $("dsExcluirTomada").onclick = excluirTomada;
     $("dsTomada").onchange = (e) => { pararTransporte(); sessao.selecionada = +e.target.value; renderTomadas(); };
-    $("dsNome").onchange = (e) => { const t = tomadaAtual(); t.nome = e.target.value.trim() || nomePadrao(t.id); renderTomadas(); };
+    $("dsNome").onchange = (e) => { const t = tomadaAtual(); t.nome = e.target.value.trim() || t.nome; renderTomadas(); if (!t.teste) salvarTomadas(); };
     $("dsCorteA").onchange = $("dsCorteB").onchange = editarRecorte;
     $("dsDividir").onclick = dividir;
     $("dsDivisao").oninput = () => atualizarMarcador();
@@ -622,27 +754,43 @@
       t.deslocamento = ms / 1000; t.enviada = false;
       atualizarDestino(t);
       estado("Posição ajustada. Ouça a tomada com a base para conferir.");
+      salvarTomadas();
     };
     $("dsOuvirTomada").onclick = tocarTomada;
     $("dsWav").onclick = () => {
       try { const t = tomadaAtual(); motor.exportar(copiarAudio(t), t.nome); } catch (erro) { estado(erro.message); }
     };
-    $("dsEnviar").onclick = () => {
+    $("dsEnviar").onclick = async () => {
+      const t = tomadaAtual();
+      if (!t || ocupado() || t.enviada || t.teste) return;
+      pararTransporte();
+      enviando = true;
+      controles();
       try {
-        const t = tomadaAtual();
-        if (t.enviada) return;
-        if (t.teste) return estado("Grave uma tomada para enviar ao projeto. O teste pode ser salvo em WAV.");
-        pararTransporte();
-        motor.receberTomada(projeto.projeto, t.nome, copiarAudio(t), inicioDaTomada(t));
+        if (!motor.temRegiao(t.inserida)) {
+          t.inserida = motor.receberTomada(projeto.projeto, t.nome, copiarAudio(t), inicioDaTomada(t));
+        }
+        if (!await motor.salvarProjeto()) {
+          estado("A faixa entrou na linha do tempo. O projeto ainda precisa ser salvo. A tomada permanece aqui.");
+          return;
+        }
         t.enviada = true;
-        dialog.close();
+        delete t.inserida;
+        if (await salvarTomadas()) dialog.close();
+        else estado("A faixa foi salva no projeto. Confira o aviso sobre as tomadas.");
+
       } catch (erro) { estado(erro.message); }
+      finally { enviando = false; controles(); }
     };
     new MutationObserver(() => {
       if (dialog.open && !dialog.closest("#page-estudio").classList.contains("oh-page-ativa")) dialog.close();
     }).observe(dialog.closest("#page-estudio"), { attributes: true, attributeFilter: ["class", "hidden"] });
 
-    return { abrir, temRascunhos: () => [...projetos.values()].some((p) => p.tomadas.some((t) => !t.enviada && !t.teste)) };
+    return {
+      abrir,
+      esquecerProjeto: (id) => projetos.delete(id),
+      temRascunhos: () => [...projetos.values()].some((p) => p.pendente),
+    };
   }
 
   window.EstudioSala = { criar };

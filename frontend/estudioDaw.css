@@ -344,6 +344,7 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 
 /* Agente do Studio */
 .dw-agente { width: min(600px, calc(100% - 24px)); max-height: calc(100% - 24px); padding: clamp(14px, 3vw, 24px); background: linear-gradient(155deg, var(--dw-painel2), var(--dw-fundo) 75%); color: var(--dw-texto); border: 1px solid var(--dw-borda-forte); border-radius: 20px; box-shadow: 0 24px 85px #000b; }
+.dw-cal-conteudo { display: grid; gap: 12px; }
 .dw-agente::backdrop { background: rgba(0, 0, 0, .62); }
 .dw-agente-topo { justify-content: flex-start; gap: 12px; }
 .dw-agente-topo img { width: 48px; height: 48px; object-fit: cover; border-radius: 14px; }
