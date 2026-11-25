@@ -512,3 +512,18 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw button:focus-visible { outline: 2px solid #ffb077; outline-offset: 2px; }
 .dw .dw-cab-topo .dw-icon { height: 24px; width: 28px; min-width: 28px; }
 .dw .dw-cab-topo .dw-icon svg { width: 15px; height: 15px; }
+
+
+/* O cabeçalho fica acessível enquanto os canais rolam. */
+#dwP-mix.on { display: flex; flex-direction: column; overflow: hidden; }
+#dwEquilibrar { align-self: flex-start; margin: 7px 12px 3px; flex: none; }
+#dwMix { height: auto; flex: 1; min-height: 0; overflow: auto; padding: 5px 14px 10px; }
+#dwMix .dw-strip { min-height: 248px; flex-basis: 146px; border-top: 3px solid var(--canal, var(--dw-laranja)); }
+#dwMix .master { position: sticky; right: 0; margin-left: auto; background: #211710; }
+.dw-bandas label { display: flex; align-items: center; justify-content: space-between; gap: 4px; font-size: 11px; }
+.dw-bandas input { width: 55px; background: var(--dw-painel); border: 1px solid var(--dw-borda); border-radius: 4px; }
+.dw-controles-canal { display: flex; justify-content: center; align-items: center; gap: 5px; font-size: 11px; }
+.dw-nivel-canal { flex: 1; display: flex; justify-content: center; align-items: stretch; gap: 12px; min-height: 64px; }
+.dw-nivel-canal .fader input { writing-mode: vertical-lr; direction: rtl; height: 100%; min-height: 64px; accent-color: var(--dw-laranja); margin: 0; }
+.dw-nivel-canal .vu.clip { box-shadow: 0 0 0 2px #ff5858; }
+#dwMix .db { text-align: center; }
