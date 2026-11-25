@@ -80,6 +80,7 @@
                 <button type="button" class="dw-btn peq" id="dsOuvirTomada">${ic("play")} Ouvir com a base</button>
               </div>
               <div class="ds-onda"><canvas id="dsOnda" width="900" height="94" aria-label="Forma de onda da tomada. Clique para posicionar a divisão." title="Clique para posicionar a divisão"></canvas><i id="dsCursorOnda" hidden></i></div>
+              <label>Posição de reprodução <input id="dsReproducao" type="range" min="0" max="1" step="any" value="0"></label>
               <div class="ds-linha ds-tempos">
                 <label>Início do recorte (s) <input id="dsCorteA" type="number" min="0" step="0.001" required></label>
                 <label>Fim do recorte (s) <input id="dsCorteB" type="number" min="0" step="0.001" required></label>
@@ -509,10 +510,12 @@
         texto("dsFase", tipo === "base" ? "Ouvindo a referência" : "Ouvindo a tomada");
         texto("dsPos", relogio(Math.min(fim, pos)));
         if (tomada) {
-          atualizarMarcador(pos - tomada.inicio - tomada.deslocamento);
+          const ponto = Math.min(tomada.b, pos - tomada.inicio - tomada.deslocamento);
+          if (!arrastandoReproducao) $("dsReproducao").value = ponto;
         }
         if (pos >= fim) {
           pararTransporte();
+          if (tomada && !arrastandoReproducao) $("dsReproducao").value = tomada.a;
           if (repetir && fim > inicio) iniciarBase(inicio, fim, agora + 0.026, true, true);
           controles();
         }
@@ -590,6 +593,9 @@
 
     function atualizarDestino(t) {
       const pos = inicioDaTomada(t);
+      $("dsReproducao").min = t.a;
+      $("dsReproducao").max = t.b;
+      $("dsReproducao").value = t.a;
       $("dsAlinhar").min = Math.ceil(-(t.inicio + t.a) * 1000);
       texto("dsDestino", t.enviada ? "Enviada ao projeto em " + segundos(pos) + " s."
         : (t.teste ? "Teste de entrada · " : "Entrada na linha do tempo em " + segundos(pos) + " s · ") + segundos(t.b - t.a) + " s de áudio");
@@ -627,18 +633,27 @@
       if (!t.teste) salvarTomadas();
     }
 
+    let arrastandoReproducao = false;
+    const barraReproducao = $("dsReproducao");
+    barraReproducao.addEventListener("pointerdown", (e) => { arrastandoReproducao = true; barraReproducao.setPointerCapture(e.pointerId); });
+    barraReproducao.addEventListener("lostpointercapture", () => { arrastandoReproducao = false; });
+    barraReproducao.onchange = () => { if (transporte?.tipo === "tomada") tocarTomada(); };
+
     function tocarTomada() {
       const t = tomadaAtual();
       if (!t || ocupado()) return;
       pararTransporte();
       ctx.resume();
-      const inicio = inicioDaTomada(t), fim = inicio + t.b - t.a, quando = ctx.currentTime + 0.05;
+      const amostra = barraReproducao.valueAsNumber;
+      const ponto = amostra < t.b ? Math.max(t.a, amostra) : t.a;
+      const inicio = t.inicio + t.deslocamento + ponto;
+      const fim = inicio + t.b - ponto, quando = ctx.currentTime + 0.05;
       if (!t.teste) iniciarBase(inicio, fim, quando, false, true);
       const pararBase = transporte?.parar;
       const src = ctx.createBufferSource();
       src.buffer = t.fonte;
       src.connect(ganhoTomada);
-      src.start(quando, t.a, t.b - t.a);
+      src.start(quando, ponto, t.b - ponto);
       transporte = { tipo: "tomada", inicio, fim, quando, tomada: t, parar() { pararBase?.(); src.stop(); src.disconnect(); } };
       controles();
     }
