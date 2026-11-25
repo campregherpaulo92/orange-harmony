@@ -183,35 +183,134 @@ def _nova_trilha(audio, sr):
 
 
 # ─────────────────────────── bateria ───────────────────────────
-def gerar_bateria_estilo(audio, sr, bpm, beat_times, estilo):
+def sugerir_secoes(grade):
+    """Sugestões por contraste sustentado. Não presume a função harmônica da seção."""
+    compassos = grade.compassos
+    niveis = [grade.din.get(c, 1.0) for c in compassos]
+    if len(niveis) < 4:
+        return []
+    baixa, alta = np.percentile(niveis, [25, 75])
+    if alta - baixa < 0.045:
+        return []
+    limiar = (baixa + alta) / 2
+    classes = ["pausa" if n < 0.59 else "refrao" if n > limiar else "verso" for n in niveis]
+    grupos = []
+    for c, tipo in zip(compassos, classes):
+        if grupos and grupos[-1][1] == tipo:
+            grupos[-1][2] += 1
+        else:
+            grupos.append([c + 1, tipo, 1])
+    sugestoes = []
+    for compasso, tipo, duracao in grupos:
+        if duracao < 2 or (sugestoes and sugestoes[-1][1] == tipo):
+            continue
+        sugestoes.append((compasso, tipo))
+    return sugestoes[:120]
+
+
+def plano_arranjo(grade, complexidade, liberdade, instrucoes, secoes=()):
+    """Distribui densidade e viradas conforme a energia medida em cada compasso."""
+    import unicodedata
+
+    texto = unicodedata.normalize("NFKD", instrucoes.lower()).encode("ascii", "ignore").decode()
+    energia = [grade.din.get(c, 1.0) for c in grade.compassos]
+    if not energia:
+        return {}
+    baixa, alta = np.percentile(energia, [25, 75])
+    contraste = alta - baixa >= 0.045
+    limiar = (baixa + alta) / 2
+    plano = {}
+    secoes = dict(secoes)
+    tipos = []
+    tipo = ""
+    for c in grade.compassos:
+        tipo = secoes.get(c + 1, tipo)
+        tipos.append(tipo)
+    fortes = [
+        tipo == "refrao" or (not tipo and contraste and nivel > limiar)
+        for tipo, nivel in zip(tipos, energia)
+    ]
+    for i, c in enumerate(grade.compassos):
+        forte = fortes[i]
+        anterior = i > 0 and fortes[i - 1]
+        seguinte = i + 1 < len(energia) and (fortes[i + 1] or tipos[i + 1] != tipos[i])
+        pausa = tipos[i] == "pausa" or (not tipos[i] and contraste and energia[i] < 0.59)
+        virada = seguinte and (not forte or tipos[i + 1] != tipos[i]) and ("virad" in texto or liberdade >= 0.5)
+        densidade = min(1, 0.42 + 0.42 * complexidade + (0.20 if forte else 0))
+        suave = 0.68 if any(x in texto for x in ("suav", "acustic", "discret")) else 0.83
+        plano[c] = (pausa, forte, virada, forte and not anterior, densidade, 1.0 if forte else suave)
+    return plano
+
+
+def preparar_arranjo(audio, sr, bpm, beat_times, estilo, ajustes):
+    grade = _Grade(audio, sr, bpm, beat_times, R.obter(estilo))
+    return grade, plano_arranjo(grade, *ajustes)
+
+
+def _apoio(plano, compasso, eventos, instrumento):
+    if plano is None or not eventos:
+        return eventos, 1.0
+    pausa, forte, virada, _, densidade, intensidade = plano[compasso]
+    if pausa:
+        return [], 0.0
+    if forte:
+        return eventos, intensidade
+    # Mantém a fundação harmônica e abre espaço entre os ataques nos trechos suaves.
+    fracao = densidade if instrumento == "baixo" else densidade * 0.8
+    limite = max(1, round(len(eventos) * fracao))
+    escolhidos = [eventos[i * len(eventos) // limite] for i in range(limite)]
+    if virada and instrumento == "baixo" and eventos[-1] not in escolhidos:
+        escolhidos.append(eventos[-1])
+    return escolhidos, intensidade
+
+
+def gerar_bateria_estilo(audio, sr, bpm, beat_times, estilo, arranjo=None):
     esp = R.obter(estilo)
     sr = int(sr)
-    g = _Grade(audio, sr, bpm, beat_times, esp)
+    g, plano = arranjo if arranjo is not None else (_Grade(audio, sr, bpm, beat_times, esp), None)
     trilha = _nova_trilha(audio, sr)
     rng = np.random.default_rng(7)
     for inst, padrao in esp["bateria"].items():
         barras = R.parse_padrao(padrao, esp["passos"])
         amostra, ganho = som(inst, sr), GANHO[inst]
         for ti, ci, pi in zip(g.t, g.comp, g.passo):
-            letra = barras[int(ci) % len(barras)][int(pi)]
+            c, p = int(ci), int(pi)
+            letra = barras[c % len(barras)][p]
+            intensidade = 1.0
+            if plano is not None:
+                pausa, forte, _, _, densidade, intensidade = plano[c]
+                if pausa or (p % g.spb and rng.random() > densidade):
+                    continue
             if letra == ".":
                 continue
             idx = int((ti + rng.normal(0, 0.003)) * sr)
-            _somar(trilha, amostra, idx, VEL[letra] * ganho * g.din.get(int(ci), 1.0) * rng.uniform(0.93, 1.05))
-    if esp["crash"]:                                                  # prato de condução a cada N compassos
-        crash = som("crash", sr) * GANHO["crash"]
+            _somar(trilha, amostra, idx, VEL[letra] * ganho * intensidade * g.din.get(c, 1.0) * rng.uniform(0.93, 1.05))
+    crash = som("crash", sr) * GANHO["crash"]
+    if plano is None and esp["crash"]:
         for ti, ci, pi in zip(g.t, g.comp, g.passo):
             if pi == 0 and int(ci) % esp["crash"] == 0:
                 _somar(trilha, crash, int(ti * sr), 0.7 * g.din.get(int(ci), 1.0))
+    for c, (pausa, _, virada, entrada, _, intensidade) in (plano or {}).items():
+        if pausa:
+            continue
+        inicio = g.tempo(c, 0)
+        if entrada and inicio is not None:
+            _somar(trilha, crash, int(inicio * sr), 0.58)
+        if virada:
+            caixa = som("snare", sr) * GANHO["snare"]
+            for p in range(esp["passos"] - g.spb, esp["passos"]):
+                tempo = g.tempo(c, p)
+                if tempo is not None:
+                    _somar(trilha, caixa, int(tempo * sr), intensidade * (0.45 + 0.4 * (p % g.spb) / g.spb))
     return trilha[:len(audio)]
 
 
 # ─────────────────────────── baixo ───────────────────────────
-def gerar_baixo_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None):
+def gerar_baixo_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, arranjo=None):
     esp = R.obter(estilo)
     sr = int(sr)
     tonica = NOMES_NOTAS.index(tom) if tom in NOMES_NOTAS else 0
-    g = _Grade(audio, sr, bpm, beat_times, esp)
+    g, plano = arranjo if arranjo is not None else (_Grade(audio, sr, bpm, beat_times, esp), None)
     trilha = _nova_trilha(audio, sr)
     barras = R.parse_padrao(esp["baixo"], esp["passos"])
     for c in g.compassos:
@@ -220,7 +319,7 @@ def gerar_baixo_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None):
         prox_pc, _ = _acorde(esp, tonica, c + 1, harmonia)
         terca = 3 if qual in R.QUALIDADES_MENORES else 4
         notas = {"r": raiz, "5": raiz + 7, "8": raiz + 12, "3": raiz + terca, "6": raiz + 9, "7": raiz + 10, "a": 36 + prox_pc - 1}
-        eventos = _eventos(barras[c % len(barras)], notas)
+        eventos, intensidade = _apoio(plano, c, _eventos(barras[c % len(barras)], notas), "baixo")
         fim_barra = g.fim_do_compasso(c)
         for k, (passo, letra) in enumerate(eventos):
             t0 = g.tempo(c, passo)
@@ -229,7 +328,7 @@ def gerar_baixo_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None):
             t1 = g.tempo(c, eventos[k + 1][0]) if k + 1 < len(eventos) else fim_barra
             gap = (t1 - t0) if t1 is not None else g.dur_passo * 4
             dur = max(0.09, min(gap * esp["baixo_dur"], gap * 2.0))
-            vol = (1.0 if k == 0 else 0.85) * (0.7 if letra == "a" else 1.0) * g.din.get(c, 1.0)
+            vol = (1.0 if k == 0 else 0.85) * (0.7 if letra == "a" else 1.0) * g.din.get(c, 1.0) * intensidade
             freq = D.midi_para_freq(notas[letra])
             _somar(trilha, D.gerar_nota_baixo_encorpada(freq, dur, sr), int(t0 * sr), vol)
     return trilha[:len(audio)]
@@ -256,20 +355,20 @@ def _intervalos(qual):
     return R.QUALIDADES[qual]
 
 
-def gerar_acordes_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None):
+def gerar_acordes_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, arranjo=None):
     esp = R.obter(estilo)
     sr = int(sr)
     tonica = NOMES_NOTAS.index(tom) if tom in NOMES_NOTAS else 0
-    g = _Grade(audio, sr, bpm, beat_times, esp)
+    g, plano = arranjo if arranjo is not None else (_Grade(audio, sr, bpm, beat_times, esp), None)
     trilha = _nova_trilha(audio, sr)
     barras = R.parse_padrao(esp["acordes"], esp["passos"])
     for c in g.compassos:
         raiz_pc, qual = _acorde(esp, tonica, c, harmonia)
         iv = _intervalos(qual)
-        din = g.din.get(c, 1.0)
         base = 48 + raiz_pc                                           # C3..B3
         barra = barras[c % len(barras)]
-        eventos = _eventos(barra, set("Xxo1234"))
+        eventos, intensidade = _apoio(plano, c, _eventos(barra, set("Xxo1234")), "acordes")
+        din = g.din.get(c, 1.0) * intensidade
         fim_barra = g.fim_do_compasso(c)
         for k, (passo, letra) in enumerate(eventos):
             t0 = g.tempo(c, passo)
@@ -291,18 +390,18 @@ def gerar_acordes_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None)
     return trilha[:len(audio)]
 
 
-def gerar_teclado_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None):
+def gerar_teclado_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, arranjo=None):
     """Arpejo de teclado sobre os mesmos acordes do estilo (uma oitava acima dos acordes)."""
     esp = R.obter(estilo)
     sr = int(sr)
     tonica = NOMES_NOTAS.index(tom) if tom in NOMES_NOTAS else 0
-    g = _Grade(audio, sr, bpm, beat_times, esp)
+    g, plano = arranjo if arranjo is not None else (_Grade(audio, sr, bpm, beat_times, esp), None)
     trilha = _nova_trilha(audio, sr)
     barras = R.parse_padrao(esp["teclado"], esp["passos"])
     for c in g.compassos:
         raiz_pc, qual = _acorde(esp, tonica, c, harmonia)
         iv = _intervalos(qual)
-        eventos = _eventos(barras[c % len(barras)], set("1234"))
+        eventos, intensidade = _apoio(plano, c, _eventos(barras[c % len(barras)], set("1234")), "teclado")
         fim_barra = g.fim_do_compasso(c)
         for k, (passo, letra) in enumerate(eventos):
             t0 = g.tempo(c, passo)
@@ -311,7 +410,7 @@ def gerar_teclado_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None)
             t1 = g.tempo(c, eventos[k + 1][0]) if k + 1 < len(eventos) else fim_barra
             dur = max(0.1, ((t1 - t0) if t1 is not None else g.dur_passo * 2) * 0.95)
             semitom = {"1": iv[0], "2": iv[1], "3": iv[2], "4": iv[0] + 12}[letra]
-            _somar(trilha, D.gerar_nota_teclado(D.midi_para_freq(60 + raiz_pc + semitom), dur, sr, volume=0.28), int(t0 * sr), g.din.get(c, 1.0))
+            _somar(trilha, D.gerar_nota_teclado(D.midi_para_freq(60 + raiz_pc + semitom), dur, sr, volume=0.28), int(t0 * sr), g.din.get(c, 1.0) * intensidade)
     return trilha[:len(audio)]
 
 
@@ -344,7 +443,7 @@ def _escala_para_modo(nome, modo):
     return nome
 
 
-def solo_eventos(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, modo="maior"):
+def solo_eventos(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, modo="maior", arranjo=None):
     """As notas do solo: [(tempo_s, duração_s, nota_midi, volume)].
     A linha caminha pela escala do estilo, mas RESPEITA a gravação: nos tempos fortes pousa numa nota do ACORDE daquele
     compasso (o mesmo que o baixo e o teclado tocam) e dá espaço à sua voz (mais pausas e volume menor quando você canta forte)."""
@@ -353,7 +452,7 @@ def solo_eventos(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, modo="m
     tonica = NOMES_NOTAS.index(tom) if tom in NOMES_NOTAS else 0
     nome_escala, por_compasso = esp["solo"]
     escala = [60 + tonica + i for i in R.ESCALAS_SOLO[_escala_para_modo(nome_escala, modo)]]
-    g = _Grade(audio, sr, bpm, beat_times, esp)
+    g, plano = arranjo if arranjo is not None else (_Grade(audio, sr, bpm, beat_times, esp), None)
     quadros, dt = _voz_por_quadro(audio, sr)
     rng = np.random.default_rng(21)
     espaco = esp["passos"] / por_compasso
@@ -362,7 +461,8 @@ def solo_eventos(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, modo="m
     for c in g.compassos:
         raiz_pc, qual = _acorde(esp, tonica, c, harmonia)
         tons_do_acorde = {(raiz_pc + i) % 12 for i in R.QUALIDADES[qual]}
-        for i in range(por_compasso):
+        candidatos_compasso, intensidade = _apoio(plano, c, list(range(por_compasso)), "solo")
+        for i in candidatos_compasso:
             t0 = g.tempo(c, int(round(i * espaco)))
             if t0 is None:
                 continue
@@ -375,15 +475,15 @@ def solo_eventos(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, modo="m
                 candidatos = [k for k, n in enumerate(escala) if n % 12 in tons_do_acorde]
                 if candidatos:
                     indice = min(candidatos, key=lambda k: abs(k - indice))
-            eventos.append((t0, dur, escala[indice], 0.20 * (1.0 - 0.30 * voz) * g.din.get(c, 1.0)))
+            eventos.append((t0, dur, escala[indice], 0.20 * (1.0 - 0.30 * voz) * g.din.get(c, 1.0) * intensidade))
     return eventos
 
 
-def gerar_solo_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, modo="maior"):
+def gerar_solo_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, modo="maior", arranjo=None):
     """Linha melódica de solo (veja solo_eventos): escala do estilo + acordes do compasso + espaço para a sua voz."""
     sr = int(sr)
     trilha = _nova_trilha(audio, sr)
-    for t0, dur, nota, vol in solo_eventos(audio, sr, tom, bpm, beat_times, estilo, harmonia, modo):
+    for t0, dur, nota, vol in solo_eventos(audio, sr, tom, bpm, beat_times, estilo, harmonia, modo, arranjo):
         _somar(trilha, D.gerar_nota_solo(D.midi_para_freq(nota), dur, sr, volume=vol), int(t0 * sr), 1.0)
     return trilha[:len(audio)]
 

@@ -687,6 +687,37 @@ def gerar_producao_rota(
     return Response(content=wav_bytes, media_type="audio/wav", headers=cabecalhos)
 
 
+@app.post("/api/estudio/medir-master")
+@somente_uma_pesada
+def medir_master_rota(arquivo: UploadFile = File(...)):
+    import json
+    import math
+    import subprocess
+    import imageio_ffmpeg
+
+    limite = 64 * 1024 * 1024
+    dados = arquivo.file.read(limite + 1)
+    if len(dados) > limite:
+        raise HTTPException(status_code=413, detail="A mixagem excede 64 MiB para análise de loudness.")
+    if dados[:4] != b"RIFF" or dados[8:12] != b"WAVE":
+        raise HTTPException(status_code=422, detail="Envie uma mixagem WAV.")
+    try:
+        processo = subprocess.run(
+            [imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-nostdin", "-f", "wav",
+             "-i", "pipe:0", "-af", "loudnorm=I=-14:TP=-1:LRA=11:print_format=json",
+             "-f", "null", "-"],
+            input=dados, capture_output=True, timeout=90, check=True,
+        )
+        stderr = processo.stderr.decode("utf-8", errors="replace")
+        relatorio = json.loads(stderr[stderr.rindex("{"):stderr.rindex("}") + 1])
+        def medida(chave):
+            valor = float(relatorio[chave])
+            return valor if math.isfinite(valor) else None
+        return {"lufs": medida("input_i"), "true_peak": medida("input_tp")}
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, RuntimeError):
+        raise HTTPException(status_code=422, detail="Não consegui medir LUFS e true peak dessa mixagem.")
+
+
 @app.post("/api/producao/camadas")
 @somente_uma_pesada
 def gerar_producao_camadas_rota(
@@ -700,12 +731,30 @@ def gerar_producao_camadas_rota(
     qualidade_pro: bool = Form(True),
     acordes_modo: str = Form("melodia"),
     bpm_manual: float = Form(0.0),
+    bateria_contextual: bool = Form(False),
+    arranjo_contextual: bool = Form(False),
+    complexidade: int = Form(44, ge=0, le=100),
+    liberdade: int = Form(65, ge=0, le=100),
+    instrucoes: str = Form("", max_length=1000),
+    secoes: str = Form("", max_length=2500),
+    apenas_analisar: bool = Form(False),
 ):
     """Igual a /api/producao, mas devolve cada instrumento como um WAV SEPARADO dentro de um .zip (sem compressão):
     é o que o Estúdio usa para criar uma faixa por instrumento em cima de uma faixa que já existe."""
     import io as _io, zipfile as _zip
-    if not (com_baixo or com_bateria or com_acordes or com_teclado or com_solo):
+    if not apenas_analisar and not (com_baixo or com_bateria or com_acordes or com_teclado or com_solo):
         raise HTTPException(status_code=400, detail="Escolha ao menos um instrumento para gerar.")
+    import re
+    import unicodedata
+    marcacoes = {}
+    for linha in secoes.splitlines():
+        if not linha.strip():
+            continue
+        normal = unicodedata.normalize("NFKD", linha.strip().lower()).encode("ascii", "ignore").decode()
+        marca = re.fullmatch(r"([1-9][0-9]{0,3})\s*[:=]\s*(introducao|verso|pre-refrao|refrao|ponte|solo|final|pausa)", normal)
+        if not marca or int(marca[1]) in marcacoes:
+            raise HTTPException(status_code=422, detail=f"Marcação inválida ou repetida: {linha}")
+        marcacoes[int(marca[1])] = marca[2]
     pedido = estilo
     estilo, achou = ritmos.resolver(estilo)
     dados = arquivo.file.read()
@@ -714,11 +763,14 @@ def gerar_producao_camadas_rota(
     if audio is None:
         raise HTTPException(status_code=400, detail="Não foi possível ler o áudio. Tente outro formato.")
     audio, aviso = _limitar_duracao(audio, sr)
+    if apenas_analisar:
+        return {**producao_pipeline.analisar_secoes(audio, sr, estilo, bpm_manual), "aviso": aviso or ""}
     try:
         camadas, resumo = producao_pipeline.produzir_camadas(
             audio, sr, estilo, com_baixo=com_baixo, com_bateria=com_bateria, com_acordes=com_acordes,
             com_teclado=com_teclado, com_solo=com_solo, qualidade_pro=qualidade_pro,
-            acordes_modo=acordes_modo, bpm_manual=bpm_manual)
+            acordes_modo=acordes_modo, bpm_manual=bpm_manual,
+            arranjo_contextual=(complexidade / 100, liberdade / 100, instrucoes, sorted(marcacoes.items())) if (arranjo_contextual or bateria_contextual) else None)
     except producao_pipeline.ErroProducao as e:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar produção: {e}")
     duracao = len(audio) / float(sr)

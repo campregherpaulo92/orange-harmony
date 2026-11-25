@@ -62,8 +62,14 @@ def produzir(audio, sr, estilo, com_baixo=True, com_bateria=True, com_acordes=Tr
                        "acordes": info["acordes"], "estilo": estilo}
 
 
+def analisar_secoes(audio, sr, estilo, bpm_manual=0.0):
+    bpm, batidas = detectar_bpm_e_beats(audio, sr, bpm_manual if 40 <= bpm_manual <= 220 else None)
+    grade, _ = producao_ritmos.preparar_arranjo(audio, sr, bpm, batidas, estilo, (0.44, 0.65, ""))
+    return {"bpm": float(bpm), "secoes": producao_ritmos.sugerir_secoes(grade)}
+
+
 def produzir_camadas(audio, sr, estilo, com_baixo=True, com_bateria=True, com_acordes=True, com_teclado=False, com_solo=False,
-                     qualidade_pro=True, acordes_modo="melodia", bpm_manual=0.0):
+                     qualidade_pro=True, acordes_modo="melodia", bpm_manual=0.0, arranjo_contextual=None):
     """O MESMO caminho de `produzir`, mas devolve cada camada SEPARADA (para o Estúdio criar uma faixa por instrumento).
     Cada camada sai com o ducking (se qualidade_pro) e no volume certo EM RELAÇÃO AO ÁUDIO ORIGINAL (a voz não é mexida: o equilíbrio
     entre as camadas e o original é o mesmo da mixagem pronta). Não há reverb nem limitador finais: o Estúdio tem os próprios.
@@ -78,14 +84,15 @@ def produzir_camadas(audio, sr, estilo, com_baixo=True, com_bateria=True, com_ac
     ref = producao_ritmos.rms_voz(producao_dsp.iniciar_mix(audio))     # volume médio da voz já normalizada (como na mixagem pronta)
     escala = pico / 0.70                                              # volta ao volume do áudio ORIGINAL (a mixagem normaliza a voz para 0,70)
     n = len(audio)
+    arranjo = producao_ritmos.preparar_arranjo(audio, sr, bpm, beat_times, estilo, arranjo_contextual) if arranjo_contextual is not None else None
     camadas = {}
     try:
         lista = [
-            (com_baixo,   "baixo",   lambda: producao_ritmos.gerar_baixo_estilo(audio, sr, tom, bpm, beat_times, estilo, harm),   0.30),
-            (com_bateria, "bateria", lambda: producao_ritmos.gerar_bateria_estilo(audio, sr, bpm, beat_times, estilo),      None),
-            (com_acordes, "acordes", lambda: producao_ritmos.gerar_acordes_estilo(audio, sr, tom, bpm, beat_times, estilo, harm), 0.40),
-            (com_teclado, "teclado", lambda: producao_ritmos.gerar_teclado_estilo(audio, sr, tom, bpm, beat_times, estilo, harm), 0.35),
-            (com_solo,    "solo",    lambda: producao_ritmos.gerar_solo_estilo(audio, sr, tom, bpm, beat_times, estilo, harm, info["modo"]),     0.30),
+            (com_baixo,   "baixo",   lambda: producao_ritmos.gerar_baixo_estilo(audio, sr, tom, bpm, beat_times, estilo, harm, arranjo),   0.30),
+            (com_bateria, "bateria", lambda: producao_ritmos.gerar_bateria_estilo(audio, sr, bpm, beat_times, estilo, arranjo),      None),
+            (com_acordes, "acordes", lambda: producao_ritmos.gerar_acordes_estilo(audio, sr, tom, bpm, beat_times, estilo, harm, arranjo), 0.40),
+            (com_teclado, "teclado", lambda: producao_ritmos.gerar_teclado_estilo(audio, sr, tom, bpm, beat_times, estilo, harm, arranjo), 0.35),
+            (com_solo,    "solo",    lambda: producao_ritmos.gerar_solo_estilo(audio, sr, tom, bpm, beat_times, estilo, harm, info["modo"], arranjo),     0.30),
         ]
         for ativa, nome, gerar, ducking in lista:
             if not ativa:
