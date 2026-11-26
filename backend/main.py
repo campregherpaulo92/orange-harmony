@@ -783,7 +783,8 @@ def gerar_producao_camadas_rota(
     cabecalhos = {
         "X-BPM": f"{resumo['bpm']:.1f}", "X-Tom": quote(resumo["tom_detectado"]), "X-Modo": quote(resumo["modo_detectado"] or ""),
         "X-Estilo": quote(estilo), "X-Acordes": quote(" – ".join(resumo["acordes"])), "X-Duracao": f"{duracao:.3f}",
-        "Access-Control-Expose-Headers": "X-BPM, X-Tom, X-Modo, X-Aviso, X-Estilo, X-Acordes, X-Aviso-Estilo, X-Duracao",
+        "X-Plano-Arranjo": quote(resumo["plano"]),
+        "Access-Control-Expose-Headers": "X-BPM, X-Tom, X-Modo, X-Aviso, X-Estilo, X-Acordes, X-Aviso-Estilo, X-Duracao, X-Plano-Arranjo",
     }
     if aviso:
         cabecalhos["X-Aviso"] = aviso

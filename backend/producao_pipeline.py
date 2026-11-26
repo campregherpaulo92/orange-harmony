@@ -111,4 +111,5 @@ def produzir_camadas(audio, sr, estilo, com_baixo=True, com_bateria=True, com_ac
     except Exception as e:
         raise ErroProducao(str(e)) from e
     return camadas, {"bpm": bpm, "tom_detectado": info["tom_detectado"], "modo_detectado": info["modo_detectado"],
-                     "acordes": info["acordes"], "estilo": estilo}
+                     "acordes": info["acordes"], "estilo": estilo,
+                     "plano": producao_ritmos.resumo_arranjo(arranjo[1]) if arranjo else ""}

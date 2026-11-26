@@ -3,6 +3,10 @@
 # por ESTILO, sobre a grade de batidas detectada na gravação do usuário.
 # Todos os sons são sintetizados aqui (percussão) ou em producao_dsp (kick, caixa, chimbal, baixo...).
 # ══════════════════════════════════════════════════════════════
+import re
+import unicodedata
+from typing import NamedTuple
+
 import numpy as np
 from scipy.signal import butter, lfilter
 
@@ -208,37 +212,60 @@ def sugerir_secoes(grade):
     return sugestoes[:120]
 
 
-def plano_arranjo(grade, complexidade, liberdade, instrucoes, secoes=()):
-    """Distribui densidade e viradas conforme a energia medida em cada compasso."""
-    import unicodedata
+class CompassoArranjo(NamedTuple):
+    secao: str
+    virada: bool
+    entrada: bool
+    densidade: float
+    intensidade: float
+    intro_percussao: bool = False
+    sem_bateria: bool = False
 
+
+def plano_arranjo(grade, complexidade, liberdade, instrucoes, secoes=()):
+    """Transforma as seções e os pedidos reconhecidos em decisões de execução."""
     texto = unicodedata.normalize("NFKD", instrucoes.lower()).encode("ascii", "ignore").decode()
-    energia = [grade.din.get(c, 1.0) for c in grade.compassos]
-    if not energia:
-        return {}
-    baixa, alta = np.percentile(energia, [25, 75])
-    contraste = alta - baixa >= 0.045
-    limiar = (baixa + alta) / 2
+    suave = bool(re.search(r"\b(suav\w*|discret\w*|leve\w*|acustic\w*)\b", texto))
+    intro_silencio = bool(re.search(r"intro\w* sem acompanhamento", texto))
+    intro_sem_bateria = bool(re.search(r"intro\w* sem bateria", texto))
+    intro_percussao = bool(re.search(r"(?:so|apenas|somente) (?:uma )?percussao[^.!;]*intro|intro\w* (?:com )?(?:so|apenas|somente) percussao", texto))
+    sem_viradas = bool(re.search(r"\bsem (?:as )?viradas?\b", texto))
+    com_viradas = "virad" in texto and not sem_viradas
+
+    # O mapa explícito define a forma. De outro modo, agrupa contrastes sustentados.
+    marcas = dict(secoes or sugerir_secoes(grade))
     plano = {}
-    secoes = dict(secoes)
     tipos = []
-    tipo = ""
+    tipo = "base"
     for c in grade.compassos:
-        tipo = secoes.get(c + 1, tipo)
+        tipo = marcas.get(c + 1, tipo)
         tipos.append(tipo)
-    fortes = [
-        tipo == "refrao" or (not tipo and contraste and nivel > limiar)
-        for tipo, nivel in zip(tipos, energia)
-    ]
+
+    perfis = {
+        "base": (0.75, 0.86), "introducao": (0.35, 0.58), "verso": (0.58, 0.76),
+        "pre-refrao": (0.83, 0.88), "refrao": (1.0, 1.0), "ponte": (0.51, 0.73),
+        "solo": (0.78, 0.86), "final": (0.4, 0.70), "pausa": (0.0, 0.0),
+    }
     for i, c in enumerate(grade.compassos):
-        forte = fortes[i]
-        anterior = i > 0 and fortes[i - 1]
-        seguinte = i + 1 < len(energia) and (fortes[i + 1] or tipos[i + 1] != tipos[i])
-        pausa = tipos[i] == "pausa" or (not tipos[i] and contraste and energia[i] < 0.59)
-        virada = seguinte and (not forte or tipos[i + 1] != tipos[i]) and ("virad" in texto or liberdade >= 0.5)
-        densidade = min(1, 0.42 + 0.42 * complexidade + (0.20 if forte else 0))
-        suave = 0.68 if any(x in texto for x in ("suav", "acustic", "discret")) else 0.83
-        plano[c] = (pausa, forte, virada, forte and not anterior, densidade, 1.0 if forte else suave)
+        tipo = tipos[i]
+        anterior = tipos[i - 1] if i > 0 else None
+        seguinte = tipos[i + 1] if i + 1 < len(tipos) else None
+        pausa_intro = tipo == "introducao" and intro_silencio
+        densidade, intensidade = perfis[tipo]
+        if suave and tipo in ("introducao", "verso", "ponte", "base"):
+            intensidade *= 0.85
+            densidade *= 0.85
+        virada = (not sem_viradas and seguinte in ("refrao", "solo", "final", "verso")
+                  and seguinte != tipo and (com_viradas or liberdade >= 0.5))
+        plano[c] = CompassoArranjo(
+            "pausa" if pausa_intro else tipo,
+            virada and not pausa_intro,
+            anterior != tipo and tipo in ("refrao", "final"),
+            densidade * (0.63 + 0.37 * complexidade),
+            intensidade,
+            tipo == "introducao" and intro_percussao,
+            tipo == "introducao" and intro_sem_bateria,
+        )
     return plano
 
 
@@ -247,21 +274,66 @@ def preparar_arranjo(audio, sr, bpm, beat_times, estilo, ajustes):
     return grade, plano_arranjo(grade, *ajustes)
 
 
+def resumo_arranjo(plano):
+    rotulos = {"introducao": "introdução", "pre-refrao": "pré-refrão", "refrao": "refrão"}
+    secoes = []
+    for c, barra in plano.items():
+        nome = "percussão leve" if barra.intro_percussao and barra.secao != "pausa" else rotulos.get(barra.secao, barra.secao)
+        if not secoes or secoes[-1][1] != nome:
+            secoes.append((c + 1, nome))
+    return " / ".join(f"{c} {nome}" for c, nome in secoes[:16]) + (" / …" if len(secoes) > 16 else "")
+
+
 def _apoio(plano, compasso, eventos, instrumento):
-    if plano is None or not eventos:
+    if plano is None:
         return eventos, 1.0
-    pausa, forte, virada, _, densidade, intensidade = plano[compasso]
-    if pausa:
+    barra = plano[compasso]
+    if barra.secao == "pausa" or barra.intro_percussao:
         return [], 0.0
-    if forte:
-        return eventos, intensidade
-    # Mantém a fundação harmônica e abre espaço entre os ataques nos trechos suaves.
-    fracao = densidade if instrumento == "baixo" else densidade * 0.8
-    limite = max(1, round(len(eventos) * fracao))
+    if not eventos:
+        return eventos, barra.intensidade
+    if barra.secao in ("introducao", "final") and instrumento != "teclado":
+        limite = 1
+    else:
+        limite = max(1, round(len(eventos) * barra.densidade))
     escolhidos = [eventos[i * len(eventos) // limite] for i in range(limite)]
-    if virada and instrumento == "baixo" and eventos[-1] not in escolhidos:
+    if barra.virada and eventos[-1] not in escolhidos:
         escolhidos.append(eventos[-1])
-    return escolhidos, intensidade
+    return escolhidos, barra.intensidade
+
+
+def _batida_contextual(inst, letra, p, g, barra):
+    if barra.secao == "pausa" or barra.sem_bateria:
+        return None
+    if barra.intro_percussao:
+        return ("shaker", "o") if inst == next(iter(g.esp["bateria"])) and p % g.spb == 0 else None
+
+    metades = {0, (g.esp["batidas"] // 2) * g.spb}
+    if barra.secao == "final":
+        return (inst, "X") if barra.entrada and p == 0 and inst in ("kick", "surdo", "zabumba") else None
+    if barra.virada and "snare" in g.esp["bateria"] and p >= g.esp["passos"] - g.spb and inst in ("snare", "rim", "clap", "hat", "open", "ride"):
+        return None
+    if barra.secao in ("introducao", "verso", "ponte"):
+        if p % g.spb and (barra.densidade < 0.45 or p % g.spb != g.spb // 2):
+            return None
+        if barra.secao == "introducao" and p not in metades:
+            return None
+        if inst == "snare" and letra != ".":
+            return ("rim", "x")
+        if inst in ("open", "ride"):
+            return None
+    if barra.secao == "refrao":
+        if inst == "kick" and p in metades and letra == ".":
+            return (inst, "x")
+        if inst == "hat" and letra != ".":
+            # Abre o chimbal no contratempo que antecede a próxima metade da barra.
+            if p in {m + g.spb - 1 for m in metades} or p == g.esp["passos"] - max(1, g.spb // 2):
+                return ("open", "x")
+    if letra == ".":
+        return None
+    if p % g.spb and barra.densidade < 0.6 and p % g.spb != g.spb // 2:
+        return None
+    return (inst, letra)
 
 
 def gerar_bateria_estilo(audio, sr, bpm, beat_times, estilo, arranjo=None):
@@ -272,36 +344,39 @@ def gerar_bateria_estilo(audio, sr, bpm, beat_times, estilo, arranjo=None):
     rng = np.random.default_rng(7)
     for inst, padrao in esp["bateria"].items():
         barras = R.parse_padrao(padrao, esp["passos"])
-        amostra, ganho = som(inst, sr), GANHO[inst]
         for ti, ci, pi in zip(g.t, g.comp, g.passo):
             c, p = int(ci), int(pi)
             letra = barras[c % len(barras)][p]
-            intensidade = 1.0
-            if plano is not None:
-                pausa, forte, _, _, densidade, intensidade = plano[c]
-                if pausa or (p % g.spb and rng.random() > densidade):
-                    continue
-            if letra == ".":
+            barra = plano[c] if plano is not None else None
+            evento = _batida_contextual(inst, letra, p, g, barra) if barra is not None else (inst, letra) if letra != "." else None
+            if evento is None:
                 continue
-            idx = int((ti + rng.normal(0, 0.003)) * sr)
-            _somar(trilha, amostra, idx, VEL[letra] * ganho * intensidade * g.din.get(c, 1.0) * rng.uniform(0.93, 1.05))
+            instrumento, ataque = evento
+            intensidade = barra.intensidade if barra is not None else 1.0
+            idx = max(0, int((ti + rng.normal(0, 0.003)) * sr))
+            volume = VEL[ataque] * GANHO[instrumento] * intensidade * g.din.get(c, 1.0) * rng.uniform(0.93, 1.05)
+            _somar(trilha, som(instrumento, sr), idx, volume)
     crash = som("crash", sr) * GANHO["crash"]
     if plano is None and esp["crash"]:
         for ti, ci, pi in zip(g.t, g.comp, g.passo):
             if pi == 0 and int(ci) % esp["crash"] == 0:
                 _somar(trilha, crash, int(ti * sr), 0.7 * g.din.get(int(ci), 1.0))
-    for c, (pausa, _, virada, entrada, _, intensidade) in (plano or {}).items():
-        if pausa:
+    kit_com_caixa = "snare" in esp["bateria"]
+    for c, barra in (plano or {}).items():
+        if barra.secao == "pausa" or barra.intro_percussao or barra.sem_bateria:
             continue
         inicio = g.tempo(c, 0)
-        if entrada and inicio is not None:
+        if barra.entrada and inicio is not None and kit_com_caixa:
             _somar(trilha, crash, int(inicio * sr), 0.58)
-        if virada:
-            caixa = som("snare", sr) * GANHO["snare"]
-            for p in range(esp["passos"] - g.spb, esp["passos"]):
+        if barra.virada and kit_com_caixa:
+            ultimo_tempo = esp["passos"] - g.spb
+            inicio_virada = ultimo_tempo + (g.spb // 2 if barra.densidade < 0.5 else 0)
+            for p in range(inicio_virada, esp["passos"]):
                 tempo = g.tempo(c, p)
                 if tempo is not None:
-                    _somar(trilha, caixa, int(tempo * sr), intensidade * (0.45 + 0.4 * (p % g.spb) / g.spb))
+                    instrumento = "tom" if p >= ultimo_tempo + max(1, g.spb // 2) else "snare"
+                    ganho = GANHO[instrumento] * barra.intensidade * (0.55 + 0.4 * (p % g.spb) / g.spb)
+                    _somar(trilha, som(instrumento, sr), int(tempo * sr), ganho)
     return trilha[:len(audio)]
 
 
@@ -320,6 +395,10 @@ def gerar_baixo_estilo(audio, sr, tom, bpm, beat_times, estilo, harmonia=None, a
         terca = 3 if qual in R.QUALIDADES_MENORES else 4
         notas = {"r": raiz, "5": raiz + 7, "8": raiz + 12, "3": raiz + terca, "6": raiz + 9, "7": raiz + 10, "a": 36 + prox_pc - 1}
         eventos, intensidade = _apoio(plano, c, _eventos(barras[c % len(barras)], notas), "baixo")
+        if eventos and plano and plano[c].virada:
+            passo_final = esp["passos"] - max(1, g.spb // 2)
+            if eventos[-1][0] < passo_final and g.tempo(c, passo_final) is not None:
+                eventos.append((passo_final, "a"))
         fim_barra = g.fim_do_compasso(c)
         for k, (passo, letra) in enumerate(eventos):
             t0 = g.tempo(c, passo)
