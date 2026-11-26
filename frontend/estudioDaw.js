@@ -3401,7 +3401,7 @@
             <div class="linha"><button class="dw-btn peq" id="dwProdOuvirBase" title="Ouvir a referência sozinha ou retirar o arranjo da prévia">Só referência</button><button class="dw-btn peq" id="dwProdOuvir" title="Ouvir a referência e o arranjo juntos">Referência + arranjo</button><button class="dw-btn peq" id="dwProdParar">Parar prévia</button><button class="dw-btn cheio" id="dwProdInserir">Inserir faixas</button></div>
           </div>` : ""}</div>
       </div>
-      <div class="dw-vz-msg" id="dwProdMsg">${prodOcupado ? (hf ? "Processando a referência… a geração com IA pode levar alguns minutos." : "Processando a referência…") : esc(prodMsg)}</div>`;
+      <div class="dw-vz-msg" id="dwProdMsg">${prodOcupado ? (hf ? "Preparando a referência. Se o Space estiver dormindo, o Produtor vai tentar acordá-lo e aguardar o ACE-Step." : "Processando a referência…") : esc(prodMsg)}</div>`;
     const sel = $("#dwProdEstilo"); if (typeof preencherSelectEstilos === "function") preencherSelectEstilos(sel);
     if ([...sel.options].some((o) => o.value === F.estilo)) sel.value = F.estilo; else F.estilo = sel.value;
     const dsc = $("#dwProdEstiloDesc"); if (dsc && typeof ESTILOS_MUSICAIS !== "undefined") dsc.textContent = ESTILOS_MUSICAIS[sel.value] || "";
@@ -3449,7 +3449,7 @@
         fd.append("apenas_analisar", String(apenasAnalisar));
         for (const [instrumento] of PROD_CAMADAS) fd.append("com_" + instrumento, String(F[instrumento]));
       }
-      dica(hf ? "Gerando a faixa no Hugging Face…" : "Gerando o acompanhamento no servidor…");
+      dica(hf ? "Conectando ao Hugging Face e aguardando a faixa…" : "Gerando o acompanhamento no servidor…");
       const rota = hf ? "hugging-face" : "camadas";
       let resp;
       try {
