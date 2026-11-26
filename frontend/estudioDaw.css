@@ -527,3 +527,38 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-nivel-canal .fader input { writing-mode: vertical-lr; direction: rtl; height: 100%; min-height: 64px; accent-color: var(--dw-laranja); margin: 0; }
 .dw-nivel-canal .vu.clip { box-shadow: 0 0 0 2px #ff5858; }
 #dwMix .db { text-align: center; }
+
+/* Campos de edição do Studio: fundo, texto e cursor usam a mesma paleta. */
+#dw :is(textarea, input:not([type]), input:is([type="text"], [type="number"], [type="url"], [type="search"])) {
+  color-scheme: light;
+  background: #fff;
+  color: #171717;
+  caret-color: currentColor;
+  border-color: var(--dw-borda-forte);
+}
+
+#dw :is(textarea, input:not([type]), input:is([type="text"], [type="number"], [type="url"], [type="search"]))::placeholder {
+  color: #595959;
+  opacity: 1;
+}
+
+#dw :is(textarea, input:not([type]), input:is([type="text"], [type="number"], [type="url"], [type="search"])):focus {
+  outline: 2px solid var(--dw-laranja);
+  outline-offset: 1px;
+}
+
+#dw :is(textarea, input:not([type]), input:is([type="text"], [type="number"], [type="url"], [type="search"])):disabled {
+  background: #e7e3df;
+  color: #54504c;
+  opacity: 1;
+}
+
+#dwProdSecoes {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--dw-borda-forte);
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
