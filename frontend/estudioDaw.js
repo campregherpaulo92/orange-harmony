@@ -889,6 +889,7 @@
   }
   function tocar() {
     if (S.tocando) return; if (!garantirAudio()) return dica("Este navegador não toca áudio aqui.");
+    pararPreviaProd();
     atualizarNos(); S.tocando = true; base0 = S.tAtual; baseCtx = ctx.currentTime; agendarRegioes(S.tAtual); atualizarNos();   // 2ª vez: agora os efeitos presos ao andamento conhecem a origem do play
     $("#dwPlay").innerHTML = ic("pause"); $("#dwPlay").classList.add("on"); requestAnimationFrame(tick); dica("Tocando…");
   }
@@ -3274,26 +3275,42 @@
   // ══ PRODUTOR: gera instrumentos em cima da região selecionada; cada instrumento vira uma FAIXA nova, alinhada com ela ═══
   let prodMsg = "", prodOcupado = false, prodEstilosPedidos = false, prodForm = { estilo: "Pop", baixo: true, bateria: true, acordes: true, teclado: false, solo: false, pro: true, modoAcordes: "melodia", bpmModo: "detectar", bpmManual: "", ajustar: false, descricao: "", referencia: "regiao", secoes: "", complexidade: 44, liberdade: 65 };
   const PROD_CAMADAS = [["bateria", "Bateria"], ["baixo", "Baixo"], ["acordes", "Acordes"], ["teclado", "Teclado"], ["solo", "Solo"]];
-  let propostaProd = null, fontesProd = [];
+  let propostaProd = null, previaProd = null;
   function pararPreviaProd() {
-    for (const fonte of fontesProd) { try { fonte.stop(); } catch (_) { } fonte.disconnect(); }
-    fontesProd = [];
+    if (!previaProd) return;
+    const { fontes, instrumentos } = previaProd;
+    previaProd = null;
+    for (const fonte of fontes) {
+      fonte.onended = null;
+      fonte.stop();
+      fonte.disconnect();
+    }
+    instrumentos.disconnect();
   }
 
-  function ouvirPropostaProd() {
-    if (propostaProd?.projeto !== S.id || !garantirAudio()) return;
-    pararPreviaProd();
+  function ouvirPropostaProd(comArranjo) {
+    const proposta = propostaProd;
+    if (proposta?.projeto !== S.id || S.gravando || !garantirAudio()) return;
+    if (previaProd) {
+      previaProd.instrumentos.gain.setTargetAtTime(comArranjo ? 0.8 : 0, ctx.currentTime, 0.015);
+      return;
+    }
     if (S.tocando) pausar();
     const quando = ctx.currentTime + 0.06;
-    for (const { buf } of propostaProd.camadas) {
-      const fonte = ctx.createBufferSource(), ganho = ctx.createGain();
+    const instrumentos = ctx.createGain();
+    instrumentos.gain.value = comArranjo ? 0.8 : 0;
+    instrumentos.connect(mestre);
+    previaProd = { instrumentos, fontes: [] };
+    const tocarBuffer = (buf, destino) => {
+      const fonte = ctx.createBufferSource();
       fonte.buffer = buf;
-      ganho.gain.value = 0.8;
-      fonte.connect(ganho).connect(mestre);
-      fonte.onended = () => { fonte.disconnect(); ganho.disconnect(); fontesProd = fontesProd.filter((f) => f !== fonte); };
-      fonte.start(quando, 0, Math.min(buf.duration, propostaProd.duracao));
-      fontesProd.push(fonte);
-    }
+      fonte.connect(destino);
+      fonte.start(quando, 0, Math.min(buf.duration, proposta.duracao));
+      previaProd.fontes.push(fonte);
+      return fonte;
+    };
+    tocarBuffer(proposta.referencia, mestre).onended = pararPreviaProd;
+    for (const { buf } of proposta.camadas) tocarBuffer(buf, instrumentos);
   }
 
   function inserirPropostaProd() {
@@ -3326,7 +3343,7 @@
     el.innerHTML = `<div class="dw-fx-barra"><span class="dw-dica">${r ? `Gerar em cima de: <b>${esc(r.nome)}</b> (${fmt(r.dur)}). Cada instrumento vira uma faixa nova, no mesmo ponto da linha do tempo.` : "Selecione, na linha do tempo, a região (voz, violão…) sobre a qual gerar o acompanhamento."}</span></div>
       <div class="dw-vz-corpo">
         <div class="dw-vz-cartao"><h4>Estilo</h4>
-          <div class="linha"><input type="text" id="dwProdDesc" maxlength="1000" value="${esc(F.descricao)}" placeholder="Descreva: ex. um funk animado com bateria forte" ${prodOcupado ? "disabled" : ""}><button class="dw-btn" id="dwProdIA" ${prodOcupado ? "disabled" : ""}>Sugerir com IA</button></div>
+          <div class="linha"><input type="text" id="dwProdDesc" maxlength="1000" value="${esc(F.descricao)}" placeholder="Ex.: versos suaves, refrão mais intenso e viradas nas transições" ${prodOcupado ? "disabled" : ""}><button class="dw-btn" id="dwProdIA" ${prodOcupado ? "disabled" : ""}>Sugerir com IA</button></div>
           <div class="linha"><select id="dwProdEstilo" ${prodOcupado ? "disabled" : ""}></select></div><div class="dw-dica" id="dwProdEstiloDesc"></div>
           <div class="linha"><label>Referência <select id="dwProdRef"><option value="regiao" ${F.referencia === "regiao" ? "selected" : ""}>Região selecionada</option><option value="mix" ${F.referencia === "mix" ? "selected" : ""}>Faixas audíveis · música completa</option><option value="trecho" ${F.referencia === "trecho" ? "selected" : ""}>Faixas audíveis · trecho marcado</option></select></label></div>
           <div class="linha"><label>Complexidade do arranjo (%) <input id="dwProdComplexidade" type="number" min="0" max="100" value="${F.complexidade}"></label><label>Liberdade criativa (%) <input id="dwProdLiberdade" type="number" min="0" max="100" value="${F.liberdade}"></label></div>
@@ -3334,14 +3351,14 @@
             <textarea id="dwProdSecoes" maxlength="2500" rows="3" placeholder="1: introdução&#10;5: verso&#10;13: refrão">${esc(F.secoes)}</textarea>
           </label>
           <button type="button" class="dw-btn peq" id="dwProdAnalisar" ${ok ? "" : "disabled"}>Sugerir seções</button>
-          <div class="dw-dica">O compasso 1 começa na referência escolhida. Em branco, usa a dinâmica detectada.</div>
+          <div class="dw-dica">O compasso 1 começa na primeira batida usada na referência. Em branco, usa contrastes de intensidade. Marque as seções para controlar o resultado.</div>
           <h4 style="margin-top:10px">Instrumentos</h4><div class="grade">${caixa("bateria", "Bateria")}${caixa("baixo", "Baixo")}${caixa("acordes", "Acordes")}${caixa("teclado", "Teclado")}${caixa("solo", "Solo")}${caixa("pro", "Qualidade profissional (abre espaço para a voz)")}</div></div>
         <div class="dw-vz-cartao"><h4>Harmonia e andamento</h4>
           <div class="linha"><label class="num">Os acordes <select id="dwProdModoAc"><option value="melodia" ${F.modoAcordes === "melodia" ? "selected" : ""}>seguem a sua melodia</option><option value="estilo" ${F.modoAcordes === "estilo" ? "selected" : ""}>seguem a sequência do estilo</option></select></label></div>
           <div class="radios"><label><input type="radio" name="dwProdBpm" value="projeto" ${F.bpmModo === "projeto" ? "checked" : ""}> Usar o andamento do projeto (<b>${S.bpm}</b> BPM)</label><label><input type="radio" name="dwProdBpm" value="detectar" ${F.bpmModo === "detectar" ? "checked" : ""}> Detectar na região (estimativa)</label><label><input type="radio" name="dwProdBpm" value="manual" ${F.bpmModo === "manual" ? "checked" : ""}> Digitar: <input type="number" id="dwProdBpmManual" min="40" max="220" value="${esc(F.bpmManual)}" placeholder="BPM"></label></div>
           <label class="bool"><input type="checkbox" data-pf="ajustar" ${F.ajustar ? "checked" : ""}> Ajustar o andamento e o tom do projeto ao que for detectado</label>
           <div class="linha"><button class="dw-btn cheio" id="dwProdGerar" ${ok ? "" : "disabled"}>Gerar proposta</button></div>
-          ${propostaProd?.projeto === S.id ? '<div class="linha"><button class="dw-btn peq" id="dwProdOuvir">Ouvir proposta</button><button class="dw-btn peq" id="dwProdParar">Parar prévia</button><button class="dw-btn cheio" id="dwProdInserir">Inserir faixas</button></div>' : ""}</div>
+          ${propostaProd?.projeto === S.id ? '<div class="linha"><button class="dw-btn peq" id="dwProdOuvirBase" title="Ouvir a referência sozinha ou retirar o arranjo da prévia">Só referência</button><button class="dw-btn peq" id="dwProdOuvir" title="Ouvir a referência e o arranjo juntos">Referência + arranjo</button><button class="dw-btn peq" id="dwProdParar">Parar prévia</button><button class="dw-btn cheio" id="dwProdInserir">Inserir faixas</button></div>' : ""}</div>
       </div>
       <div class="dw-vz-msg" id="dwProdMsg">${prodOcupado ? "Gerando o acompanhamento… pode levar alguns segundos (até 1 minuto em regiões longas)." : esc(prodMsg)}</div>`;
     const sel = $("#dwProdEstilo"); if (typeof preencherSelectEstilos === "function") preencherSelectEstilos(sel);
@@ -3353,7 +3370,7 @@
     prodOcupado = true; renderProd(); dica("Pensando na melhor combinação…");
     try { const fd = new FormData(); fd.append("descricao", d); const resp = await fetch(`${API_BASE}/api/producao/interpretar`, { method: "POST", body: fd }); if (!resp.ok) throw new Error("http " + resp.status); const j = await resp.json();
       if (j.estilo) prodForm.estilo = j.estilo; if ("com_baixo" in j) { prodForm.baixo = !!j.com_baixo; prodForm.bateria = !!j.com_bateria; prodForm.acordes = !!j.com_acordes; prodForm.teclado = !!j.com_teclado; prodForm.solo = !!j.com_solo; prodForm.pro = !!j.qualidade_pro; }
-      prodMsg = `Sugestão da IA aplicada (${prodForm.estilo}). Revise e clique em “Gerar faixas”.`; }
+      prodMsg = `Sugestão da IA aplicada (${prodForm.estilo}). Revise e clique em “Gerar proposta”.`; }
     catch (e) { prodMsg = "Não consegui falar com a IA agora. Escolha o estilo e os instrumentos à mão."; }
     finally { prodOcupado = false; renderProd(); dica(prodMsg); }
   }
@@ -3370,7 +3387,7 @@
     pararPreviaProd();
     prodOcupado = true; prodMsg = ""; renderProd();
     try {
-      dica("Preparando o áudio da região…"); const full = mix ? await renderizarMixagem({ ini: inicio, fim: inicio + Math.min(120, duracao) }) : await renderizarRegiao(r, false), maxN = Math.round(120 * full.sampleRate), n = Math.min(full.length, maxN, Math.round(duracao * full.sampleRate)), enviado = ctx.createBuffer(full.numberOfChannels, n, full.sampleRate);
+      dica("Preparando o áudio da região…"); const full = mix ? await renderizarMixagem({ ini: inicio, fim: inicio + Math.min(120, duracao), semMestre: true }) : await renderizarRegiao(r, false), maxN = Math.round(120 * full.sampleRate), n = Math.min(full.length, maxN, Math.round(duracao * full.sampleRate)), enviado = ctx.createBuffer(full.numberOfChannels, n, full.sampleRate);
       for (let c = 0; c < full.numberOfChannels; c++) enviado.copyToChannel(full.getChannelData(c).subarray(0, n), c);
       const fd = new FormData(); fd.append("arquivo", new File([audioBufferParaWavBlob(enviado)], "regiao.wav", { type: "audio/wav" })); fd.append("estilo", F.estilo); fd.append("acordes_modo", F.modoAcordes);
       fd.append("arranjo_contextual", "true"); fd.append("complexidade", F.complexidade); fd.append("liberdade", F.liberdade); fd.append("instrucoes", F.descricao); fd.append("secoes", apenasAnalisar ? "" : F.secoes); fd.append("apenas_analisar", String(apenasAnalisar));
@@ -3393,6 +3410,7 @@
         return;
       }
       const cab = (k) => decodeURIComponent(resp.headers.get(k) || ""), bpm = parseFloat(cab("X-BPM")) || 0, tom = cab("X-Tom"), modo = cab("X-Modo"), acordes = cab("X-Acordes"), aviso = cab("X-Aviso"), avisoEstilo = cab("X-Aviso-Estilo"), estiloUsado = cab("X-Estilo") || F.estilo;
+      const plano = cab("X-Plano-Arranjo");
       const mapa = await lerZip(await resp.arrayBuffer());
       const camadas = [];
       for (const [chave, rotulo] of PROD_CAMADAS) {
@@ -3401,9 +3419,9 @@
       }
       if (S.id !== projetoGeracao || (!mix && regiaoPorId(r.id) !== r)) throw new Error("A região de referência mudou. Selecione-a e tente de novo.");
       if (!camadas.length) throw new Error("O servidor não devolveu nenhum instrumento.");
-      propostaProd = { projeto: projetoGeracao, camadas, estilo: estiloUsado, inicio, duracao,
+      propostaProd = { projeto: projetoGeracao, camadas, estilo: estiloUsado, inicio, duracao: Math.min(enviado.duration, parseFloat(cab("X-Duracao")) || enviado.duration), referencia: enviado,
         ajustar: F.ajustar, bpm, tom: tom ? [tom, modo].filter(Boolean).join(" ") : "" };
-      prodMsg = `Proposta pronta: ${camadas.map(({ rotulo }) => rotulo).join(", ")}.${duracao > 120 ? " Foram gerados até 2 minutos da referência." : ""}${bpm ? " · " + bpm.toFixed(0) + " BPM" : ""}${acordes ? " · Acordes: " + acordes : ""} ${aviso || ""} ${avisoEstilo || ""}`;
+      prodMsg = `Proposta pronta: ${camadas.map(({ rotulo }) => rotulo).join(", ")}.${duracao > 120 ? " Foram gerados até 2 minutos da referência." : ""}${bpm ? " · " + bpm.toFixed(0) + " BPM" : ""}${acordes ? " · Acordes: " + acordes : ""} ${plano ? " · Seções: " + plano : ""} ${aviso || ""} ${avisoEstilo || ""}`;
 
     } catch (e) { prodMsg = (e && e.message) || "Não consegui gerar o acompanhamento."; }
     finally { prodOcupado = false; renderProd(); dica(prodMsg); }
@@ -3420,7 +3438,7 @@
         t.value = prodForm[chave];
       }
       else if (t.id === "dwProdModoAc") prodForm.modoAcordes = t.value; else if (t.name === "dwProdBpm") prodForm.bpmModo = t.value; });
-    el.addEventListener("click", (e) => { if (e.target.id === "dwProdOuvir" && !prodOcupado) ouvirPropostaProd(); else if (e.target.id === "dwProdParar") pararPreviaProd(); else if (e.target.id === "dwProdInserir" && !prodOcupado) inserirPropostaProd(); else if (e.target.id === "dwProdGerar") gerarProducao(); else if (e.target.id === "dwProdAnalisar" && (!prodForm.secoes.trim() || confirm("Substituir as marcações atuais pela sugestão?"))) gerarProducao(true); else if (e.target.id === "dwProdIA") sugerirProducao(); });
+    el.addEventListener("click", (e) => { if (["dwProdOuvir", "dwProdOuvirBase"].includes(e.target.id) && !prodOcupado) ouvirPropostaProd(e.target.id === "dwProdOuvir"); else if (e.target.id === "dwProdParar") pararPreviaProd(); else if (e.target.id === "dwProdInserir" && !prodOcupado) inserirPropostaProd(); else if (e.target.id === "dwProdGerar") gerarProducao(); else if (e.target.id === "dwProdAnalisar" && (!prodForm.secoes.trim() || confirm("Substituir as marcações atuais pela sugestão?"))) gerarProducao(true); else if (e.target.id === "dwProdIA") sugerirProducao(); });
   }
 
   // ══ CIFRA: tom, andamento e acordes + a letra com os acordes rolando junto com a música (a tela mora em estudioCifra.js) ═══
