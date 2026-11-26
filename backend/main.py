@@ -41,6 +41,7 @@ import ritmos
 import harmonia
 import producao_ritmos
 import producao_pipeline
+import producao_hf
 import transcricao
 import singergame
 import chats
@@ -718,6 +719,21 @@ def medir_master_rota(arquivo: UploadFile = File(...)):
         raise HTTPException(status_code=422, detail="Não consegui medir LUFS e true peak dessa mixagem.")
 
 
+def _marcacoes_producao(secoes):
+    import re
+    import unicodedata
+    marcacoes = {}
+    for linha in secoes.splitlines():
+        if not linha.strip():
+            continue
+        normal = unicodedata.normalize("NFKD", linha.strip().lower()).encode("ascii", "ignore").decode()
+        marca = re.fullmatch(r"([1-9][0-9]{0,3})\s*[:=]\s*(introducao|verso|pre-refrao|refrao|ponte|solo|final|pausa)", normal)
+        if not marca or int(marca[1]) in marcacoes:
+            raise HTTPException(status_code=422, detail=f"Marcação inválida ou repetida: {linha}")
+        marcacoes[int(marca[1])] = marca[2]
+    return sorted(marcacoes.items())
+
+
 @app.post("/api/producao/camadas")
 @somente_uma_pesada
 def gerar_producao_camadas_rota(
@@ -741,20 +757,9 @@ def gerar_producao_camadas_rota(
 ):
     """Igual a /api/producao, mas devolve cada instrumento como um WAV SEPARADO dentro de um .zip (sem compressão):
     é o que o Estúdio usa para criar uma faixa por instrumento em cima de uma faixa que já existe."""
-    import io as _io, zipfile as _zip
     if not apenas_analisar and not (com_baixo or com_bateria or com_acordes or com_teclado or com_solo):
         raise HTTPException(status_code=400, detail="Escolha ao menos um instrumento para gerar.")
-    import re
-    import unicodedata
-    marcacoes = {}
-    for linha in secoes.splitlines():
-        if not linha.strip():
-            continue
-        normal = unicodedata.normalize("NFKD", linha.strip().lower()).encode("ascii", "ignore").decode()
-        marca = re.fullmatch(r"([1-9][0-9]{0,3})\s*[:=]\s*(introducao|verso|pre-refrao|refrao|ponte|solo|final|pausa)", normal)
-        if not marca or int(marca[1]) in marcacoes:
-            raise HTTPException(status_code=422, detail=f"Marcação inválida ou repetida: {linha}")
-        marcacoes[int(marca[1])] = marca[2]
+    marcacoes = _marcacoes_producao(secoes)
     pedido = estilo
     estilo, achou = ritmos.resolver(estilo)
     dados = arquivo.file.read()
@@ -770,16 +775,71 @@ def gerar_producao_camadas_rota(
             audio, sr, estilo, com_baixo=com_baixo, com_bateria=com_bateria, com_acordes=com_acordes,
             com_teclado=com_teclado, com_solo=com_solo, qualidade_pro=qualidade_pro,
             acordes_modo=acordes_modo, bpm_manual=bpm_manual,
-            arranjo_contextual=(complexidade / 100, liberdade / 100, instrucoes, sorted(marcacoes.items())) if (arranjo_contextual or bateria_contextual) else None)
+            arranjo_contextual=(complexidade / 100, liberdade / 100, instrucoes, marcacoes) if (arranjo_contextual or bateria_contextual) else None)
     except producao_pipeline.ErroProducao as e:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar produção: {e}")
     duracao = len(audio) / float(sr)
     del audio
-    saida = _io.BytesIO()
-    with _zip.ZipFile(saida, "w", _zip.ZIP_STORED) as z:
-        for nome in list(camadas.keys()):
-            z.writestr(f"{nome}.wav", converter_audio.audio_para_wav_bytes(camadas.pop(nome), sr))     # uma por vez: libera a memória logo
+
+    def arquivos_wav():
+        for nome in list(camadas):
+            yield nome, converter_audio.audio_para_wav_bytes(camadas.pop(nome), sr)
             liberar_memoria()
+
+    return _zip_producao(arquivos_wav(), resumo, duracao, aviso, pedido, achou)
+
+
+@app.post("/api/producao/hugging-face")
+def gerar_producao_hf_rota(
+    arquivo: UploadFile = File(...),
+    instrumento: str = Form(...),
+    estilo: str = Form("Pop"),
+    qualidade_pro: bool = Form(True),
+    bpm_manual: float = Form(0.0),
+    instrucoes: str = Form("", max_length=1000),
+    secoes: str = Form("", max_length=2500),
+):
+    if instrumento not in producao_hf.INSTRUMENTOS:
+        raise HTTPException(status_code=422, detail="Escolha um instrumento para gerar com IA.")
+    marcacoes = _marcacoes_producao(secoes)
+    if not producao_hf.PERMITE_GERACAO.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="Já existe uma geração no Hugging Face. Aguarde o resultado e tente novamente.")
+    try:
+        space = producao_hf.space_configurado()
+        pedido = estilo
+        estilo, achou = ritmos.resolver(estilo)
+        with tarefa_pesada():
+            limite = 28 * 1024 * 1024
+            dados = arquivo.file.read(limite + 1)
+            if len(dados) > limite:
+                raise HTTPException(status_code=413, detail="A referência excede 28 MiB. Use um trecho menor.")
+            audio, sr = carregar_audio_bytes(dados, arquivo.filename or "audio.wav")
+            del dados
+            if audio is None:
+                raise HTTPException(status_code=400, detail="Não foi possível ler a referência.")
+            audio, aviso = _limitar_duracao(audio, sr)
+        wav, resumo = producao_hf.gerar(
+            space, audio, sr, instrumento, estilo, instrucoes, marcacoes, bpm_manual, qualidade_pro,
+        )
+        return _zip_producao([(instrumento, wav)], resumo, len(audio) / sr, aviso, pedido, achou)
+    except producao_hf.FalhaHuggingFace as erro:
+        raise HTTPException(status_code=erro.status, detail=str(erro)) from erro
+    except ServidorOcupado as erro:
+        raise HTTPException(status_code=503, detail=str(erro)) from erro
+    finally:
+        producao_hf.PERMITE_GERACAO.release()
+
+
+def _zip_producao(arquivos, resumo, duracao, aviso, pedido, achou):
+    import io
+    import zipfile
+
+    estilo = resumo["estilo"]
+    saida = io.BytesIO()
+    with zipfile.ZipFile(saida, "w", zipfile.ZIP_STORED) as zip_saida:
+        for nome, wav in arquivos:
+            zip_saida.writestr(f"{nome}.wav", wav)
+            del wav
     cabecalhos = {
         "X-BPM": f"{resumo['bpm']:.1f}", "X-Tom": quote(resumo["tom_detectado"]), "X-Modo": quote(resumo["modo_detectado"] or ""),
         "X-Estilo": quote(estilo), "X-Acordes": quote(" – ".join(resumo["acordes"])), "X-Duracao": f"{duracao:.3f}",
