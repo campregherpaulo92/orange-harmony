@@ -529,7 +529,7 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 #dwMix .db { text-align: center; }
 
 /* Campos de formulário. Nomes editáveis na linha do tempo usam o estilo da faixa. */
-#dw :is(textarea, input:is([type="text"], [type="url"], [type="search"]), #dwProdEstilo) {
+#dw :is(textarea, input:is([type="text"], [type="url"], [type="search"]), #dwProdEstilo, #dwTransporEscopo, #dwSemitons) {
   color-scheme: light;
   background: #fff;
   color: #171717;
@@ -542,7 +542,7 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
   opacity: 1;
 }
 
-#dw :is(textarea, input:is([type="text"], [type="url"], [type="search"]), #dwProdEstilo):focus {
+#dw :is(textarea, input:is([type="text"], [type="url"], [type="search"]), #dwProdEstilo, #dwTransporEscopo, #dwSemitons):focus {
   outline: 2px solid var(--dw-laranja);
   outline-offset: 1px;
 }
@@ -563,7 +563,14 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
   resize: vertical;
 }
 
-#dwProdEstilo option { background: #fff; color: #171717; }
+#dw :is(#dwProdEstilo, #dwTransporEscopo) option { background: #fff; color: #171717; }
+#dwSemitons {
+  width: 5em;
+  padding: 4px 6px;
+  border: 1px solid var(--dw-borda-forte);
+  border-radius: 8px;
+  font: inherit;
+}
 .dw-prod-previa label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .dw-prod-previa input[type=range] { flex: 1 1 120px; min-width: 0; accent-color: var(--dw-laranja); }
 .dw-prod-previa output { min-width: 9ch; font-variant-numeric: tabular-nums; }
