@@ -7,8 +7,11 @@ import re
 import tempfile
 from pathlib import Path
 from threading import BoundedSemaphore
+from time import monotonic, sleep
+from urllib.parse import urlsplit
 
 import numpy as np
+import requests
 
 import converter_audio
 import harmonia
@@ -29,6 +32,9 @@ SECOES = {
     "refrao": "chorus", "ponte": "bridge", "solo": "solo", "final": "outro", "pausa": "break",
 }
 DURACAO_MINIMA = 10
+TEMPO_ATIVACAO = 150
+TEMPO_PEDIDO = 265
+API_INSTRUMENTO = "/gerar_instrumento"
 PERMITE_GERACAO = BoundedSemaphore(1)
 log = logging.getLogger(__name__)
 
@@ -68,25 +74,82 @@ def _caption(instrumento, estilo, instrucoes, grade, plano):
     return f"{brief} {direcao}"[:512]
 
 
+def _aguardar_space(space, token, prazo):
+    from huggingface_hub import HfApi
+
+    hub = HfApi()
+    info = hub.space_info(space, token=token or False, timeout=10)
+    url = (info.host or (f"https://{info.subdomain}.hf.space" if info.subdomain else "")).rstrip("/")
+    host = urlsplit(url)
+    if not (host.scheme == "https" and re.fullmatch(r"[a-z0-9-]+\.hf\.space", host.netloc)
+            and not (host.path or host.query or host.fragment)):
+        raise FalhaHuggingFace("O Hugging Face não informou um endereço válido para o aplicativo do Produtor.")
+
+    estado = info.runtime.stage if info.runtime else None
+    # Use o mesmo cabeçalho que o cliente Gradio usa no proxy de Spaces privados.
+    cabecalhos = {"x-hf-authorization": f"Bearer {token}"} if token else {}
+    with requests.Session() as sessao:
+        sessao.headers.update(cabecalhos)
+        while monotonic() < prazo:
+            if estado == "PAUSED":
+                raise FalhaHuggingFace("O Space foi pausado manualmente. Retome uma vez no Hugging Face e deixe o Sleep time controlar a GPU.", 503)
+            if estado in {"BUILD_ERROR", "RUNTIME_ERROR", "CONFIG_ERROR", "NO_APP_FILE", "DELETING"}:
+                raise FalhaHuggingFace(f"O Space do Produtor está com erro ({estado}). Consulte os logs do Space.", 503)
+
+            try:
+                if estado in {"SLEEPING", "STOPPED"}:
+                    # Reproduz o acesso ao aplicativo que desperta um Space adormecido.
+                    with sessao.get(url + "/", headers={"Accept": "text/html"}, timeout=8,
+                                    allow_redirects=False, stream=True) as visita:
+                        if visita.status_code in {401, 403, 429}:
+                            visita.raise_for_status()
+                resposta = sessao.get(url + "/config", timeout=8, allow_redirects=False)
+                if resposta.status_code in {401, 403, 429}:
+                    resposta.raise_for_status()
+                if resposta.ok and "application/json" in resposta.headers.get("Content-Type", ""):
+                    config = resposta.json()
+                    dependencias = config.get("dependencies") if isinstance(config, dict) else None
+                    if isinstance(dependencias, list):
+                        if not any(isinstance(d, dict) and d.get("api_name") == API_INSTRUMENTO[1:] for d in dependencias):
+                            raise FalhaHuggingFace("O aplicativo do Space não expõe a rota gerar_instrumento. Confira a versão do Space do Produtor.")
+                        return url
+            except (requests.ConnectionError, requests.Timeout):
+                # O proxy pode fechar a conexão enquanto a GPU e o modelo iniciam.
+                pass
+
+            sleep(max(0, min(5, prazo - monotonic())))
+            if monotonic() >= prazo:
+                break
+            info = hub.space_info(space, token=token or False, timeout=8)
+            estado = info.runtime.stage if info.runtime else None
+
+    raise FalhaHuggingFace("O ACE-Step ainda está iniciando no Hugging Face. Aguarde um pouco e clique em Gerar novamente.", 504)
+
+
 def _pedir_faixa(space, pasta, referencia, instrumento, caption, bpm, batidas):
     from gradio_client import Client, handle_file
 
     token = os.environ.get("HF_TOKEN", "").strip()
+    inicio = monotonic()
+    url = _aguardar_space(space, token, inicio + TEMPO_ATIVACAO)
     opcoes = {"download_files": str(pasta), "verbose": False}
     parametros = inspect.signature(Client.__init__).parameters
     if token:
         opcoes["token" if "token" in parametros else "hf_token"] = token
     if "httpx_kwargs" in parametros:
-        opcoes["httpx_kwargs"] = {"timeout": 45}
+        opcoes["httpx_kwargs"] = {"timeout": 20}
 
-    cliente = Client(space, **opcoes)
+    cliente = Client(url, **opcoes)
     try:
+        restante = min(220, inicio + TEMPO_PEDIDO - monotonic())
+        if restante <= 0:
+            raise TimeoutError()
         job = cliente.submit(
             handle_file(str(referencia)), INSTRUMENTOS[instrumento][0], caption, round(bpm) if 30 <= bpm <= 300 else 0, batidas,
-            api_name="/gerar_instrumento",
+            api_name=API_INSTRUMENTO,
         )
         try:
-            return job.result(timeout=220)
+            return job.result(timeout=restante)
         except TimeoutError:
             job.cancel()
             raise
@@ -140,6 +203,8 @@ def gerar(space, audio, sr, instrumento, estilo, instrucoes, secoes, bpm_manual,
 
         try:
             resultado = _pedir_faixa(space, pasta, referencia, instrumento, caption, bpm, grade.esp["batidas"])
+        except FalhaHuggingFace:
+            raise
         except TimeoutError as erro:
             raise FalhaHuggingFace("A geração no Hugging Face demorou demais. Tente uma referência mais curta.", 504) from erro
         except Exception as erro:
