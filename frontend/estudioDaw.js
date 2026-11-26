@@ -2593,7 +2593,7 @@
       const salvo = parseInt(localStorage.getItem("oh-dw-ed-h"), 10); if (salvo) ed.style.height = lim(salvo) + "px";
       alca.addEventListener("pointerdown", (e) => {
         if (ed.classList.contains("fechado") || ed.classList.contains("ampliado") || (e.button != null && e.button !== 0)) return;
-        e.preventDefault(); const y0 = e.clientY, h0 = ed.getBoundingClientRect().height; lista.setPointerCapture(e.pointerId); ed.classList.add("redimensionando"); document.body.style.userSelect = "none";
+        e.preventDefault(); const y0 = e.clientY, h0 = ed.getBoundingClientRect().height; alca.setPointerCapture(e.pointerId); ed.classList.add("redimensionando"); document.body.style.userSelect = "none";
         const mover = (ev) => { ed.style.height = lim(h0 + (y0 - ev.clientY)) + "px"; };
         const soltar = () => { alca.removeEventListener("pointermove", mover); alca.removeEventListener("pointerup", soltar); alca.removeEventListener("pointercancel", soltar); ed.classList.remove("redimensionando"); document.body.style.userSelect = ""; try { localStorage.setItem("oh-dw-ed-h", Math.round(ed.getBoundingClientRect().height)); } catch (err) { /* sem armazenamento */ } };
         alca.addEventListener("pointermove", mover); alca.addEventListener("pointerup", soltar); alca.addEventListener("pointercancel", soltar);
@@ -3275,8 +3275,30 @@
   // ══ PRODUTOR: gera instrumentos em cima da região selecionada; cada instrumento vira uma FAIXA nova, alinhada com ela ═══
   let prodMsg = "", prodOcupado = false, prodEstilosPedidos = false, prodForm = { estilo: "Pop", baixo: true, bateria: true, acordes: true, teclado: false, solo: false, pro: true, modoAcordes: "melodia", bpmModo: "detectar", bpmManual: "", ajustar: false, descricao: "", referencia: "regiao", secoes: "", complexidade: 44, liberdade: 65 };
   const PROD_CAMADAS = [["bateria", "Bateria"], ["baixo", "Baixo"], ["acordes", "Acordes"], ["teclado", "Teclado"], ["solo", "Solo"]];
-  let propostaProd = null, previaProd = null;
+  let propostaProd = null, previaProd = null, posPreviaProd = 0, quadroPreviaProd = 0;
+
+  function atualizarPosPreviaProd(pos, atualizarControle = true) {
+    const controle = $("#dwProdPos");
+    if (!controle) return;
+    if (atualizarControle) controle.value = pos;
+    const tempo = fmt((propostaProd?.inicio || 0) + pos);
+    $("#dwProdTempo").textContent = tempo;
+    controle.setAttribute("aria-valuetext", tempo);
+  }
+
+  function acompanharPreviaProd() {
+    const p = previaProd, controle = $("#dwProdPos");
+    if (!p) return;
+    if (controle && !controle.matches(":active")) {
+      atualizarPosPreviaProd(p.pos + Math.max(0, ctx.currentTime - p.quando));
+    }
+    quadroPreviaProd = requestAnimationFrame(acompanharPreviaProd);
+  }
+
   function pararPreviaProd() {
+    cancelAnimationFrame(quadroPreviaProd);
+    posPreviaProd = 0;
+    atualizarPosPreviaProd(0);
     if (!previaProd) return;
     const { fontes, instrumentos } = previaProd;
     previaProd = null;
@@ -3292,6 +3314,7 @@
     const proposta = propostaProd;
     if (proposta?.projeto !== S.id || S.gravando || !garantirAudio()) return;
     if (previaProd) {
+      previaProd.comArranjo = comArranjo;
       previaProd.instrumentos.gain.setTargetAtTime(comArranjo ? 0.8 : 0, ctx.currentTime, 0.015);
       return;
     }
@@ -3300,17 +3323,23 @@
     const instrumentos = ctx.createGain();
     instrumentos.gain.value = comArranjo ? 0.8 : 0;
     instrumentos.connect(mestre);
-    previaProd = { instrumentos, fontes: [] };
+    const pos = posPreviaProd;
+    previaProd = { instrumentos, fontes: [], comArranjo, pos, quando };
     const tocarBuffer = (buf, destino) => {
       const fonte = ctx.createBufferSource();
       fonte.buffer = buf;
       fonte.connect(destino);
-      fonte.start(quando, 0, Math.min(buf.duration, proposta.duracao));
+      const fim = Math.min(buf.duration, proposta.duracao);
+      if (pos >= fim) { fonte.disconnect(); return null; }
+      fonte.start(quando, pos, fim - pos);
       previaProd.fontes.push(fonte);
       return fonte;
     };
-    tocarBuffer(proposta.referencia, mestre).onended = pararPreviaProd;
+    const referencia = tocarBuffer(proposta.referencia, mestre);
+    if (!referencia) return pararPreviaProd();
+    referencia.onended = pararPreviaProd;
     for (const { buf } of proposta.camadas) tocarBuffer(buf, instrumentos);
+    acompanharPreviaProd();
   }
 
   function inserirPropostaProd() {
@@ -3339,6 +3368,7 @@
   function renderProd() {
     const el = $("#dwProd"); if (!el) return; const r = regiaoPorId(S.regiaoSel), F = prodForm, ok = (F.referencia === "trecho" ? !!trechoSel : F.referencia === "mix" ? fimProjeto() > 0 : r && !r.gravando) && !prodOcupado;
     if (!prodEstilosPedidos && typeof carregarEstilos === "function") { prodEstilosPedidos = true; carregarEstilos().then(() => { if (abaAtiva === "prod") renderProd(); }); }
+    const proposta = propostaProd?.projeto === S.id ? propostaProd : null;
     const caixa = (id, rot) => `<label class="bool"><input type="checkbox" data-pf="${id}" ${F[id] ? "checked" : ""}> ${rot}</label>`;
     el.innerHTML = `<div class="dw-fx-barra"><span class="dw-dica">${r ? `Gerar em cima de: <b>${esc(r.nome)}</b> (${fmt(r.dur)}). Cada instrumento vira uma faixa nova, no mesmo ponto da linha do tempo.` : "Selecione, na linha do tempo, a região (voz, violão…) sobre a qual gerar o acompanhamento."}</span></div>
       <div class="dw-vz-corpo">
@@ -3358,7 +3388,10 @@
           <div class="radios"><label><input type="radio" name="dwProdBpm" value="projeto" ${F.bpmModo === "projeto" ? "checked" : ""}> Usar o andamento do projeto (<b>${S.bpm}</b> BPM)</label><label><input type="radio" name="dwProdBpm" value="detectar" ${F.bpmModo === "detectar" ? "checked" : ""}> Detectar na região (estimativa)</label><label><input type="radio" name="dwProdBpm" value="manual" ${F.bpmModo === "manual" ? "checked" : ""}> Digitar: <input type="number" id="dwProdBpmManual" min="40" max="220" value="${esc(F.bpmManual)}" placeholder="BPM"></label></div>
           <label class="bool"><input type="checkbox" data-pf="ajustar" ${F.ajustar ? "checked" : ""}> Ajustar o andamento e o tom do projeto ao que for detectado</label>
           <div class="linha"><button class="dw-btn cheio" id="dwProdGerar" ${ok ? "" : "disabled"}>Gerar proposta</button></div>
-          ${propostaProd?.projeto === S.id ? '<div class="linha"><button class="dw-btn peq" id="dwProdOuvirBase" title="Ouvir a referência sozinha ou retirar o arranjo da prévia">Só referência</button><button class="dw-btn peq" id="dwProdOuvir" title="Ouvir a referência e o arranjo juntos">Referência + arranjo</button><button class="dw-btn peq" id="dwProdParar">Parar prévia</button><button class="dw-btn cheio" id="dwProdInserir">Inserir faixas</button></div>' : ""}</div>
+          ${proposta ? `<div class="dw-prod-previa">
+            <label>Posição da prévia <input id="dwProdPos" type="range" min="0" max="${Math.max(0, proposta.duracao - 0.01)}" step="0.01" value="${posPreviaProd}"><output id="dwProdTempo" for="dwProdPos">${fmt(proposta.inicio + posPreviaProd)}</output></label>
+            <div class="linha"><button class="dw-btn peq" id="dwProdOuvirBase" title="Ouvir a referência sozinha ou retirar o arranjo da prévia">Só referência</button><button class="dw-btn peq" id="dwProdOuvir" title="Ouvir a referência e o arranjo juntos">Referência + arranjo</button><button class="dw-btn peq" id="dwProdParar">Parar prévia</button><button class="dw-btn cheio" id="dwProdInserir">Inserir faixas</button></div>
+          </div>` : ""}</div>
       </div>
       <div class="dw-vz-msg" id="dwProdMsg">${prodOcupado ? "Gerando o acompanhamento… pode levar alguns segundos (até 1 minuto em regiões longas)." : esc(prodMsg)}</div>`;
     const sel = $("#dwProdEstilo"); if (typeof preencherSelectEstilos === "function") preencherSelectEstilos(sel);
@@ -3428,9 +3461,16 @@
   }
   function ligarEventosProd() {
     const el = $("#dwProd");
-    el.addEventListener("input", (e) => { if (e.target.id === "dwProdDesc") prodForm.descricao = e.target.value; else if (e.target.id === "dwProdSecoes") prodForm.secoes = e.target.value; else if (e.target.id === "dwProdBpmManual") { prodForm.bpmManual = e.target.value; prodForm.bpmModo = "manual"; const rd = el.querySelector('input[name="dwProdBpm"][value="manual"]'); if (rd) rd.checked = true; } });
+    el.addEventListener("input", (e) => { if (e.target.id === "dwProdPos") atualizarPosPreviaProd(e.target.valueAsNumber, false); else if (e.target.id === "dwProdDesc") prodForm.descricao = e.target.value; else if (e.target.id === "dwProdSecoes") prodForm.secoes = e.target.value; else if (e.target.id === "dwProdBpmManual") { prodForm.bpmManual = e.target.value; prodForm.bpmModo = "manual"; const rd = el.querySelector('input[name="dwProdBpm"][value="manual"]'); if (rd) rd.checked = true; } });
     el.addEventListener("change", (e) => { const t = e.target;
-      if (t.dataset.pf) prodForm[t.dataset.pf] = t.checked; else if (t.id === "dwProdEstilo") { prodForm.estilo = t.value; const dsc = $("#dwProdEstiloDesc"); if (dsc && typeof ESTILOS_MUSICAIS !== "undefined") dsc.textContent = ESTILOS_MUSICAIS[t.value] || ""; }
+      if (t.id === "dwProdPos") {
+        const pos = t.valueAsNumber, previa = previaProd;
+        pararPreviaProd();
+        posPreviaProd = pos;
+        atualizarPosPreviaProd(pos);
+        if (previa) ouvirPropostaProd(previa.comArranjo);
+      }
+      else if (t.dataset.pf) prodForm[t.dataset.pf] = t.checked; else if (t.id === "dwProdEstilo") { prodForm.estilo = t.value; const dsc = $("#dwProdEstiloDesc"); if (dsc && typeof ESTILOS_MUSICAIS !== "undefined") dsc.textContent = ESTILOS_MUSICAIS[t.value] || ""; }
       else if (t.id === "dwProdRef") { prodForm.referencia = t.value; renderProd(); }
       else if (t.id === "dwProdComplexidade" || t.id === "dwProdLiberdade") {
         const chave = t.id === "dwProdComplexidade" ? "complexidade" : "liberdade";

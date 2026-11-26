@@ -528,8 +528,8 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
 .dw-nivel-canal .vu.clip { box-shadow: 0 0 0 2px #ff5858; }
 #dwMix .db { text-align: center; }
 
-/* Campos de edição do Studio: fundo, texto e cursor usam a mesma paleta. */
-#dw :is(textarea, input:not([type]), input:is([type="text"], [type="number"], [type="url"], [type="search"])) {
+/* Campos de formulário. Nomes editáveis na linha do tempo usam o estilo da faixa. */
+#dw :is(textarea, input:is([type="text"], [type="url"], [type="search"]), #dwProdEstilo) {
   color-scheme: light;
   background: #fff;
   color: #171717;
@@ -537,17 +537,17 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
   border-color: var(--dw-borda-forte);
 }
 
-#dw :is(textarea, input:not([type]), input:is([type="text"], [type="number"], [type="url"], [type="search"]))::placeholder {
+#dw :is(textarea, input:is([type="text"], [type="url"], [type="search"]), #dwProdEstilo)::placeholder {
   color: #595959;
   opacity: 1;
 }
 
-#dw :is(textarea, input:not([type]), input:is([type="text"], [type="number"], [type="url"], [type="search"])):focus {
+#dw :is(textarea, input:is([type="text"], [type="url"], [type="search"]), #dwProdEstilo):focus {
   outline: 2px solid var(--dw-laranja);
   outline-offset: 1px;
 }
 
-#dw :is(textarea, input:not([type]), input:is([type="text"], [type="number"], [type="url"], [type="search"])):disabled {
+#dw :is(textarea, input:is([type="text"], [type="url"], [type="search"]), #dwProdEstilo):disabled {
   background: #e7e3df;
   color: #54504c;
   opacity: 1;
@@ -562,3 +562,8 @@ body.estudio-ativo .oh-content { max-width: none; padding: 0; overflow: hidden; 
   font: inherit;
   resize: vertical;
 }
+
+#dwProdEstilo option { background: #fff; color: #171717; }
+.dw-prod-previa label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dw-prod-previa input[type=range] { flex: 1 1 120px; min-width: 0; accent-color: var(--dw-laranja); }
+.dw-prod-previa output { min-width: 9ch; font-variant-numeric: tabular-nums; }
