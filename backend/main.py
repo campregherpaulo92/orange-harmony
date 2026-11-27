@@ -30,6 +30,7 @@ import laranjinha
 import estudio_agente
 import stems
 import estudio_fila
+import estudio_nuvem
 import acordes
 import escalas
 from urllib.parse import quote
@@ -75,6 +76,7 @@ def somente_uma_pesada(func):
 
 
 app = FastAPI(title="Orange Harmony API", version="0.1.0", lifespan=_ciclo_de_vida)
+app.include_router(estudio_nuvem.router)
 
 
 @app.exception_handler(Exception)
