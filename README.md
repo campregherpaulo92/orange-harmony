@@ -90,6 +90,31 @@ Aplicação completa de coaching vocal e composição: analisa sua voz, detecta 
 3. Variáveis de ambiente: `FIREBASE_STORAGE_BUCKET`, `GEMINI_API_KEY`, `HF_TOKEN` e `LIMITE_MEMORIA_MB=2048`. A credencial do Firebase é a própria conta do serviço no Cloud Run, sem JSON nas variáveis.
 4. Para o front-end, subir apenas os arquivos alterados em `frontend/`. Não é preciso reiniciar nada no back-end quando só o front muda.
 
+### Projetos do Studio na nuvem
+
+No Studio, use **Arquivo → Salvar na nuvem** e confirme **Salvar projeto na nuvem**. Para recuperar, use **Arquivo → Abrir da nuvem**. O envio é manual. O navegador continua salvando uma cópia local, e abrir da nuvem cria uma sessão local editável. Versões mais novas na nuvem são protegidas contra sobrescrita por uma sessão antiga.
+
+A primeira configuração é feita no mesmo projeto Firebase que o Orange Harmony já usa.
+
+1. No Firebase Console, em **Configurações do projeto → Geral → Seus apps**, registre ou selecione o app Web e copie a configuração pública do SDK.
+2. Em **Authentication → Método de login**, habilite o provedor **Google**. Em **Authentication → Configurações → Domínios autorizados**, adicione o hostname do app que você abre no navegador. Para o endereço padrão deste projeto, use `orange-harmony-36127841485.us-central1.run.app`.
+3. No serviço `orange-harmony` no Cloud Run, mantenha o bucket existente e adicione as variáveis abaixo.
+
+| Variável | Valor |
+|---|---|
+| `ESTUDIO_FIREBASE_WEB_CONFIG` | JSON da configuração Web com `apiKey`, `authDomain`, `projectId` e `appId`. Copie apenas o objeto JSON com chaves entre aspas. |
+| `ESTUDIO_NUVEM_EMAIL` | E-mail da conta Google autorizada a salvar e abrir os projetos. |
+
+Exemplo do formato da configuração Web, com valores ilustrativos.
+
+```json
+{"apiKey":"CHAVE_WEB","authDomain":"SEU_PROJETO.firebaseapp.com","projectId":"SEU_PROJETO","appId":"ID_DO_APP_WEB"}
+```
+
+Use o bucket privado já configurado no servidor. A identidade do Cloud Run precisa listar, criar, ler e substituir os objetos do prefixo `estudio-projetos/`. Confira se as regras do Firebase Storage e o IAM do bucket mantêm esse prefixo sem acesso público direto.
+
+O Studio usa o mesmo formato `.ohstudio` do menu **Salvar projeto em arquivo**, com limite de 256 MiB por projeto na nuvem. O arquivo contém faixas, cortes, efeitos, configurações e áudios usados na timeline. Tomadas da Sala que ainda não foram inseridas na timeline ficam no aparelho. O envio vai direto ao Storage, e a lista usa os metadados do próprio arquivo.
+
 ---
 
 ## 🚀 Publicar no Render
@@ -264,3 +289,8 @@ orange-harmony/
 ## 📄 Licença
 
 Projeto pessoal — uso e estudo próprio.
+
+
+### Produtor do Studio com Hugging Face
+
+O modo **Hugging Face · ACE-Step** gera uma faixa instrumental a partir da região, do trecho marcado ou das faixas audíveis. Consulte [a configuração do Space e o roteiro de teste](huggingface-produtor/README.md).
