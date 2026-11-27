@@ -63,7 +63,7 @@
   const CORES = ["#a855f7", "#ec4899", "#eab308", "#38bdf8", "#84cc16", "#fb7185"];
   const S = {
     loop: { on: false, ini: 0, fim: 0 }, id: "p" + Date.now().toString(36), nome: "Meu projeto", bpm: 100, compasso: "4/4", tom: "", pps: 40, snap: "off", ferr: "sel", tAtual: 0, tocando: false, seguir: true,
-    metro: "off", contagem: 1, latencia: 0, mestreVol: 0.9, masterPerfil: "", monitor: "caixa", faixas: [], regioes: [], faixaSel: null, regiaoSel: null, sujo: false, gravando: false, contando: false,
+    metro: "off", contagem: 1, latencia: 0, mestreVol: 0.9, masterPerfil: "", monitor: "caixa", faixas: [], regioes: [], faixaSel: null, regiaoSel: null, nuvem: null, sujo: false, gravando: false, contando: false,
   };
   let proxId = 1;
   const bufs = new Map();     // id do áudio -> AudioBuffer (o áudio em si; nunca é alterado)
@@ -479,6 +479,19 @@
           <div class="dw-dica">Os projetos ficam guardados no navegador deste aparelho (não vão para a nuvem). Exporte a mixagem para ter um arquivo seguro.</div>
         </div>
       </div>
+      <dialog class="dw-agente" id="dwNuvemPainel" aria-labelledby="dwNuvemTitulo">
+        <div class="dw-cal-conteudo">
+          <b id="dwNuvemTitulo">Projetos na nuvem</b>
+          <div class="dw-dica" id="dwNuvemStatus" role="status"></div>
+          <div id="dwNuvemLista" hidden></div>
+          <div class="dw-acoes">
+            <button type="button" class="dw-btn" id="dwNuvemFechar">Fechar</button>
+            <button type="button" class="dw-btn" id="dwNuvemSair" hidden>Sair da conta</button>
+            <button type="button" class="dw-btn cheio" id="dwNuvemEntrar" hidden>Entrar com Google</button>
+            <button type="button" class="dw-btn cheio" id="dwNuvemSalvar" hidden>Salvar projeto na nuvem</button>
+          </div>
+        </div>
+      </dialog>
       <dialog class="dw-agente" id="dwMasterPainel" aria-labelledby="dwMasterTitulo">
         <div class="dw-cal-conteudo">
           <b id="dwMasterTitulo">Auto Master</b>
@@ -592,10 +605,12 @@
     <div class="dw-menu" id="dwMenuArquivo" hidden>
       <button data-a="importar"><b>Importar áudio</b><small>traz um arquivo do aparelho para uma faixa nova</small></button>
       <button data-a="exportar"><b>Exportar…</b><small>mixagem ou cada faixa separada, em WAV ou MP3</small></button>
-      <button data-a="projsalvar"><b>Salvar projeto em arquivo…</b><small>um arquivo .ohstudio com tudo, para guardar ou levar a outro computador</small></button>
+      <button data-a="projsalvar"><b>Salvar projeto em arquivo…</b><small>um arquivo .ohstudio com o projeto editável para guardar ou levar a outro computador</small></button>
       <button data-a="projabrir"><b>Abrir projeto de um arquivo…</b><small>um arquivo .ohstudio salvo antes</small></button>
       <button data-a="salvar"><b>Salvar agora (Ctrl+S)</b><small>ele também salva sozinho enquanto você mexe</small></button>
       <button data-a="abrir"><b>Abrir projeto…</b><small>seus projetos salvos neste aparelho</small></button>
+      <button data-a="nuvem-salvar"><b>Salvar na nuvem…</b><small>envia uma cópia editável quando você confirmar</small></button>
+      <button data-a="nuvem-abrir"><b>Abrir da nuvem…</b><small>projetos salvos na sua conta Google</small></button>
       <button data-a="novo"><b>Novo projeto</b><small>o atual fica salvo; começa um em branco</small></button>
       <button data-a="sala"><b>Sala de Gravação</b><small>ouça uma referência e grave tomadas separadas</small></button>
     </div>
@@ -1546,28 +1561,204 @@
   function exportar() { abrirExportar(); }
 
   // ══ PROJETO EM ARQUIVO (.ohstudio): tudo num arquivo só, para guardar ou levar a outro computador ═══
+  function dadosProjeto(regioes) {
+    return {
+      id: S.id, nome: S.nome, atualizado: Date.now(),
+      faixas: JSON.parse(JSON.stringify(S.faixas)), regioes: JSON.parse(JSON.stringify(regioes)),
+      bpm: S.bpm, compasso: S.compasso, tom: S.tom, mestreVol: S.mestreVol,
+      masterPerfil: S.masterPerfil, ritmoGravacao: ritmoGravacao(S), proxId, nFaixas: S.faixas.length,
+    };
+  }
+
+  async function montarProjetoArquivo({ exigirAudios = false } = {}) {
+    const regioes = S.regioes.filter((r) => !r.gravando), proj = dadosProjeto(regioes);
+    const ids = [...new Set(regioes.flatMap((r) => r.alt ? [r.buf, r.alt.buf] : [r.buf]))];
+    const arqs = [], audios = [];
+    for (const id of ids) {
+      if (!bufs.has(id)) {
+        if (exigirAudios) throw new Error("Uma região está sem seu áudio original. Confira o projeto antes de salvar na nuvem.");
+        continue;
+      }
+      const blob = blobs.get(id) || audioBufferParaWavBlob(bufs.get(id));
+      arqs.push({ nome: "audios/" + id, dados: new Uint8Array(await blob.arrayBuffer()) });
+      audios.push({ id, tipo: blob.type || "" });
+    }
+    const manifesto = { app: "orange-estudio", versao: 1, criado: Date.now(), proj, audios };
+    arqs.unshift({ nome: "projeto.json", dados: new TextEncoder().encode(JSON.stringify(manifesto)) });
+    return { arquivo: criarZip(arqs), nome: proj.nome, qtdAudios: audios.length };
+  }
+
   async function exportarProjetoArquivo() {
-    const regs = S.regioes.filter((r) => !r.gravando); if (!S.faixas.length && !regs.length) return dica("Ainda não há nada neste projeto para salvar em arquivo.");
+    if (!S.faixas.length && !S.regioes.length) return dica("Ainda não há nada neste projeto para salvar em arquivo.");
     if (S.gravando || S.contando) return dica("Pare a gravação antes de salvar o projeto em arquivo.");
     dica("Montando o arquivo do projeto…");
     try {
-      const ids = [...new Set(regs.flatMap((r) => (r.alt ? [r.buf, r.alt.buf] : [r.buf])))].filter((b) => bufs.has(b)), proj = { id: S.id, nome: S.nome, atualizado: Date.now(), faixas: JSON.parse(JSON.stringify(S.faixas)), regioes: JSON.parse(JSON.stringify(regs)), bpm: S.bpm, compasso: S.compasso, tom: S.tom, mestreVol: S.mestreVol, masterPerfil: S.masterPerfil, ritmoGravacao: ritmoGravacao(S), proxId, nFaixas: S.faixas.length };
-      const arqs = [], info = []; for (const b of ids) { const blob = blobs.get(b) || audioBufferParaWavBlob(bufs.get(b)); arqs.push({ nome: "audios/" + b, dados: new Uint8Array(await blob.arrayBuffer()) }); info.push({ id: b, tipo: blob.type || "" }); }
-      arqs.unshift({ nome: "projeto.json", dados: new TextEncoder().encode(JSON.stringify({ app: "orange-estudio", versao: 1, criado: Date.now(), proj, audios: info })) });
-      const zip = criarZip(arqs); baixar(zip, `${nomeLimpo(S.nome, "projeto")}.ohstudio`); dica(`Projeto salvo em arquivo (${(zip.size / 1048576).toFixed(1)} MB, ${ids.length} áudio(s)). Guarde-o onde quiser: ele abre em qualquer computador.`);
+      const { arquivo, nome, qtdAudios } = await montarProjetoArquivo();
+      baixar(arquivo, `${nomeLimpo(nome, "projeto")}.ohstudio`);
+      dica(`Projeto salvo em arquivo (${(arquivo.size / 1048576).toFixed(1)} MB, ${qtdAudios} áudio(s)). Guarde-o onde quiser: ele abre em qualquer computador.`);
     } catch (e) { dica("Não consegui montar o arquivo: " + (e.message || "erro inesperado")); }
   }
+
+  async function importarProjetoArquivo(arq, origemNuvem = null) {
+    const mapa = await lerZip(await arq.arrayBuffer()), j = mapa.get("projeto.json");
+    if (!j) throw new Error("Este arquivo não parece um projeto do Orange Estúdio.");
+    const d = JSON.parse(new TextDecoder().decode(j));
+    if (d.app !== "orange-estudio" || !Array.isArray(d.proj?.regioes) || !Array.isArray(d.proj?.faixas)) {
+      throw new Error("Este arquivo não parece um projeto do Orange Estúdio.");
+    }
+    if (origemNuvem) {
+      const ids = new Set((d.audios || []).map((a) => a.id));
+      for (const r of d.proj.regioes) {
+        if ([r.buf, ...(r.alt ? [r.alt.buf] : [])].some((id) => !ids.has(id) || !mapa.has("audios/" + id))) {
+          throw new Error("O projeto na nuvem está incompleto. A sessão atual continua aberta.");
+        }
+      }
+      if (S.gravando || S.contando) throw new Error("Pare a gravação antes de abrir outro projeto.");
+    }
+    const salvo = await salvarProjeto();
+    if (origemNuvem && !salvo && (S.sujo || S.faixas.length || S.regioes.length)) {
+      throw new Error("O Studio não conseguiu salvar o projeto atual neste aparelho.");
+    }
+    const pid = "p" + Date.now().toString(36), proj = { ...d.proj, id: pid, atualizado: Date.now(), nuvem: origemNuvem };
+    const db = await abrirDB();
+    try {
+      await new Promise((ok, no) => {
+        const t = db.transaction(["projetos", "audios"], "readwrite");
+        t.oncomplete = ok; t.onabort = () => no(t.error);
+        for (const a of d.audios || []) {
+          const dados = mapa.get("audios/" + a.id);
+          if (dados) t.objectStore("audios").put(dados.slice().buffer, pid + ":" + a.id);
+        }
+        t.objectStore("projetos").put(proj);
+      });
+    } finally { db.close(); }
+    if (!await abrirProjeto(pid)) throw new Error("O Studio não conseguiu abrir o projeto.");
+    return proj.nome;
+  }
+
   async function abrirProjetoArquivo(arq) {
     dica("Abrindo o arquivo do projeto…");
     try {
-      const mapa = await lerZip(await arq.arrayBuffer()), j = mapa.get("projeto.json"); if (!j) throw new Error("Este arquivo não parece um projeto do Orange Estúdio.");
-      const d = JSON.parse(new TextDecoder().decode(j)); if (d.app !== "orange-estudio" || !d.proj || !Array.isArray(d.proj.regioes)) throw new Error("Este arquivo não parece um projeto do Orange Estúdio.");
-      await salvarProjeto();                                         // o projeto aberto agora fica guardado antes de trocar
-      const pid = "p" + Date.now().toString(36), proj = d.proj; proj.id = pid; proj.atualizado = Date.now();   // id novo: abrir o mesmo arquivo de novo cria uma CÓPIA, nunca sobrescreve
-      const db = await abrirDB();
-      await new Promise((ok, no) => { const t = db.transaction(["projetos", "audios"], "readwrite"); (d.audios || []).forEach((a) => { const dados = mapa.get("audios/" + a.id); if (dados) t.objectStore("audios").put(dados.slice().buffer, pid + ":" + a.id); }); t.objectStore("projetos").put(proj); t.oncomplete = ok; t.onerror = () => no(t.error); t.onabort = () => no(t.error); });
-      db.close(); const abriu = await abrirProjeto(pid); if (abriu) dica(`Projeto “${proj.nome}” aberto a partir do arquivo.`);
+      const nome = await importarProjetoArquivo(arq);
+      dica(`Projeto “${nome}” aberto a partir do arquivo.`);
     } catch (e) { dica("Não consegui abrir o arquivo: " + (e.message || "erro inesperado")); }
+  }
+
+  // ══ PROJETOS NA NUVEM: só o botão de confirmação envia o projeto ════════
+  let nuvem = null, acaoNuvem = "abrir", nuvemOcupada = false;
+
+  function estadoNuvem(ocupada, mensagem) {
+    nuvemOcupada = ocupada;
+    const email = nuvem?.email();
+    $("#dwNuvemStatus").textContent = mensagem;
+    $("#dwNuvemEntrar").hidden = !nuvem || !!email;
+    $("#dwNuvemSair").hidden = !email;
+    $("#dwNuvemSalvar").hidden = !email || acaoNuvem !== "salvar";
+    $("#dwNuvemLista").hidden = !email || acaoNuvem !== "abrir";
+    for (const b of $("#dwNuvemPainel").querySelectorAll("button")) b.disabled = ocupada;
+  }
+
+  async function carregarListaNuvem() {
+    const lista = $("#dwNuvemLista");
+    lista.replaceChildren();
+    if (!nuvem.email()) return "Entre com sua conta Google para acessar os projetos.";
+    if (acaoNuvem === "salvar") return `Pronto para salvar “${S.nome}” na conta ${nuvem.email()}.`;
+    const projetos = await nuvem.listar();
+    if (!projetos.length) return "Nenhum projeto salvo na nuvem.";
+    for (const p of projetos) {
+      const linha = document.createElement("div"), info = document.createElement("div");
+      const nome = document.createElement("b"), data = document.createElement("small");
+      const botao = document.createElement("button");
+      linha.className = "dw-proj-item";
+      info.className = "info";
+      nome.textContent = p.nome;
+      data.textContent = new Date(p.atualizado).toLocaleString("pt-BR");
+      info.append(nome, document.createElement("br"), data);
+      botao.className = "dw-btn peq";
+      botao.type = "button";
+      botao.textContent = "Abrir";
+      botao.setAttribute("aria-label", `Abrir ${p.nome}`);
+      botao.addEventListener("click", () => abrirProjetoNuvem(p.id));
+      linha.append(info, botao);
+      lista.append(linha);
+    }
+    return "O projeto selecionado abre como uma cópia local editável.";
+  }
+
+  async function abrirNuvem(acao) {
+    if (nuvemOcupada) return;
+    if (S.gravando || S.contando) return dica("Pare a gravação antes de acessar os projetos da nuvem.");
+    if (acao === "salvar" && !S.faixas.length && !S.regioes.length) return dica("Adicione uma faixa antes de salvar na nuvem.");
+    acaoNuvem = acao;
+    $("#dwNuvemTitulo").textContent = acao === "salvar" ? "Salvar na nuvem" : "Abrir da nuvem";
+    $("#dwNuvemLista").replaceChildren();
+    $("#dwNuvemPainel").showModal();
+    estadoNuvem(true, "Conectando ao Firebase…");
+    try {
+      if (!nuvem) {
+        const { prepararNuvem } = await import("./estudioNuvem.js?v=1");
+        nuvem = await prepararNuvem();
+      }
+      estadoNuvem(false, await carregarListaNuvem());
+    } catch (e) { estadoNuvem(false, e.message || "Não consegui conectar ao Firebase."); }
+  }
+
+  async function salvarProjetoNuvem() {
+    if (nuvemOcupada || !nuvem?.email()) return;
+    const projetoLocal = S.id, id = S.nuvem?.id ?? projetoLocal, geracao = S.nuvem?.geracao ?? "0";
+    estadoNuvem(true, "Montando o projeto e enviando ao Firebase…");
+    try {
+      const { arquivo, nome } = await montarProjetoArquivo({ exigirAudios: true });
+      const novaGeracao = await nuvem.salvar(id, nome, geracao, arquivo);
+      if (S.id === projetoLocal) {
+        S.nuvem = { id, geracao: novaGeracao };
+        await salvarProjeto();
+      }
+      const mensagem = `Projeto “${nome}” salvo na nuvem.`;
+      estadoNuvem(false, mensagem);
+      dica(mensagem);
+    } catch (e) { estadoNuvem(false, e.message || "Não consegui salvar na nuvem."); }
+  }
+
+  async function abrirProjetoNuvem(id) {
+    if (nuvemOcupada || !nuvem?.email()) return;
+    estadoNuvem(true, "Baixando e verificando o projeto…");
+    try {
+      const { arquivo, geracao } = await nuvem.baixar(id);
+      const nome = await importarProjetoArquivo(arquivo, { id, geracao });
+      estadoNuvem(false, "");
+      $("#dwNuvemPainel").close();
+      dica(`Projeto “${nome}” aberto da nuvem.`);
+    } catch (e) { estadoNuvem(false, e.message || "Não consegui abrir o projeto da nuvem."); }
+  }
+
+  function ligarNuvem() {
+    const painel = $("#dwNuvemPainel");
+    painel.addEventListener("cancel", (e) => { if (nuvemOcupada) e.preventDefault(); });
+    $("#dwNuvemFechar").addEventListener("click", () => painel.close());
+    $("#dwNuvemSalvar").addEventListener("click", salvarProjetoNuvem);
+    $("#dwNuvemEntrar").addEventListener("click", async () => {
+      estadoNuvem(true, "Aguardando login do Google…");
+      try {
+        await nuvem.entrar();
+        estadoNuvem(false, await carregarListaNuvem());
+      } catch (e) {
+        const mensagens = {
+          "auth/unauthorized-domain": "Este endereço do app ainda precisa ser autorizado no Firebase Authentication.",
+          "auth/operation-not-allowed": "Ative o login com Google no Firebase Authentication.",
+          "auth/popup-blocked": "Permita o pop-up do Google e clique em Entrar com Google de novo.",
+          "auth/popup-closed-by-user": "A janela do Google foi fechada. Clique em Entrar para tentar de novo.",
+        };
+        estadoNuvem(false, mensagens[e.code] || (e.code ? "Não consegui entrar com Google." : e.message));
+      }
+    });
+    $("#dwNuvemSair").addEventListener("click", async () => {
+      estadoNuvem(true, "Saindo da conta…");
+      try {
+        await nuvem.sair();
+        estadoNuvem(false, await carregarListaNuvem());
+      } catch (_) { estadoNuvem(false, "Não consegui sair da conta. Tente de novo."); }
+    });
   }
 
   // ══ LOOP: repete um trecho ao tocar (tecla L; Shift + arrastar na régua escolhe o trecho) ═══
@@ -2281,6 +2472,8 @@
   // ══ EVENTOS ═══════════════════════════════════════════════════════════
   function menu(id, ancora, alinharDireita) {
     const m = $(id), r = ancora.getBoundingClientRect(), outros = ["#dwMenuArquivo", "#dwMenuFaixa", "#dwMenuFx"].filter((x) => x !== id); outros.forEach((x) => { $(x).hidden = true; });
+    m.style.maxHeight = Math.max(48, innerHeight - r.bottom - 14) + "px";
+    m.style.overflowY = "auto";
     m.style.top = r.bottom + 6 + "px"; m.style.left = (alinharDireita ? Math.max(8, r.right - 290) : r.left) + "px"; m.hidden = !m.hidden;
   }
   function moverFaixa(id, destino) {
@@ -2498,6 +2691,7 @@
     $("#dwLoop").addEventListener("click", alternarLoop);
     $("#dwExpFechar").addEventListener("click", () => { $("#dwModalExp").hidden = true; }); $("#dwExpFechar2").addEventListener("click", () => { $("#dwModalExp").hidden = true; }); $("#dwExpIr").addEventListener("click", exportarAgora);
     ["dwExpO", "dwExpF", "dwExpT"].forEach((id) => $("#" + id).addEventListener("change", infoExportar));
+    ligarNuvem();
     $("#dwArqProj").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) abrirProjetoArquivo(f); });
     $("#dwTlScroll").addEventListener("wheel", (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); mudarZoom(S.pps * (e.deltaY < 0 ? 1.12 : 0.89)); } }, { passive: false });
     let sync = false;
@@ -2561,6 +2755,8 @@
       if (b.dataset.a === "importar") $("#dwArqAudio").click();
       else if (b.dataset.a === "exportar") exportar();
       else if (b.dataset.a === "projsalvar") exportarProjetoArquivo();
+      else if (b.dataset.a === "nuvem-salvar") abrirNuvem("salvar");
+      else if (b.dataset.a === "nuvem-abrir") abrirNuvem("abrir");
       else if (b.dataset.a === "projabrir") $("#dwArqProj").click();
       else if (b.dataset.a === "sala") abrirSala();
       else if (b.dataset.a === "novo") novoProjeto();
@@ -2625,7 +2821,7 @@
       const salto = e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && ["ArrowLeft", "ArrowRight"].includes(e.key);
       const atalhoNoRange = e.target.type === "range" && (e.ctrlKey || e.metaKey || salto || e.code === "Space");
       if ((/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !atalhoNoRange) || e.target.isContentEditable) return;
-      if ($("#dwTransporPainel").open || $("#dwMasterPainel").open || $("#dwEquilibrio").open || $("#dwSala").open || $("#dwAgentePainel").open || $("#dwBpmPainel").open || $("#dwBackingPainel").open || $("#dwEfeitoTrechoPainel").open || !$("#dwModalSep").hidden || !$("#dwModalProj").hidden || $("#dwModalCal").open || !$("#dwModalExp").hidden) return;
+      if ($("#dwNuvemPainel").open || $("#dwTransporPainel").open || $("#dwMasterPainel").open || $("#dwEquilibrio").open || $("#dwSala").open || $("#dwAgentePainel").open || $("#dwBpmPainel").open || $("#dwBackingPainel").open || $("#dwEfeitoTrechoPainel").open || !$("#dwModalSep").hidden || !$("#dwModalProj").hidden || $("#dwModalCal").open || !$("#dwModalExp").hidden) return;
       if (salto) {
         e.preventDefault();
         if (!S.gravando && !S.contando) {
@@ -2714,7 +2910,7 @@
     pararPreviaProd(); propostaProd = null;
     salvarProjeto();                                   // o projeto atual fica guardado (Arquivo → Abrir projeto)
     if (S.tocando) pausar(); pararFontes(); descartarNos();
-    trechoSel = null; resetarMudoGeral(); faixasMarcadas.clear(); S.id = "p" + Date.now().toString(36); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0; S.nome = "Meu projeto"; S.tom = ""; S.bpm = 100; S.masterPerfil = ""; S.compasso = "4/4"; S.sujo = false;
+    trechoSel = null; resetarMudoGeral(); faixasMarcadas.clear(); S.id = "p" + Date.now().toString(36); S.faixas = []; S.regioes = []; S.faixaSel = null; S.regiaoSel = null; S.tAtual = 0; S.nome = "Meu projeto"; S.nuvem = null; S.tom = ""; S.bpm = 100; S.masterPerfil = ""; S.compasso = "4/4"; S.sujo = false;
     Object.assign(S, ritmoPadrao); mostrarRitmoGravacao(); $("#dwComp").value = S.compasso;
     bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); pilha.length = 0; refaz.length = 0;
     try { localStorage.removeItem("oh-dw-ultimo"); } catch (e) { /* sem armazenamento */ }
@@ -2813,7 +3009,7 @@
     if (S.gravando || S.contando) { agendarSalvar(); return Promise.resolve(false); }
     // tira uma "foto" agora, de forma síncrona: mesmo que o projeto mude logo em seguida, salva o que estava na tela
     const regs = S.regioes.filter((r) => !r.gravando), pid = S.id;
-    const proj = { id: pid, nome: S.nome, atualizado: Date.now(), faixas: JSON.parse(JSON.stringify(S.faixas)), regioes: JSON.parse(JSON.stringify(regs)), bpm: S.bpm, compasso: S.compasso, tom: S.tom, mestreVol: S.mestreVol, masterPerfil: S.masterPerfil, ritmoGravacao: ritmoGravacao(S), proxId, nFaixas: S.faixas.length };
+    const proj = { ...dadosProjeto(regs), nuvem: S.nuvem };
     const fontes = [...new Set(regs.flatMap((r) => (r.alt ? [r.buf, r.alt.buf] : [r.buf])))].filter((b) => bufs.has(b)).map((b) => [b, blobs.get(b), bufs.get(b), noBanco.has(b)]);
     const trabalho = salvandoAgora.then(async () => {
       mostrarSalvo("Salvando…");
@@ -2858,7 +3054,7 @@
     if (S.tocando) pausar(); pararFontes(); descartarNos();
     bufs.clear(); picos.clear(); blobs.clear(); noBanco.clear(); novosBufs.forEach((v, k) => { bufs.set(k, v); picos.set(k, novosPicos.get(k)); blobs.set(k, novosBlobs.get(k)); noBanco.add(k); });
     const faltaram = proj.regioes.filter((r) => !bufs.has(r.buf)).length;
-    trechoSel = null; resetarMudoGeral(); faixasMarcadas.clear(); S.id = proj.id; S.nome = proj.nome; S.faixas = proj.faixas; S.regioes = proj.regioes.filter((r) => bufs.has(r.buf)); S.regioes.forEach((r) => { if (r.alt && !bufs.has(r.alt.buf)) { r.alt = null; } }); S.bpm = proj.bpm; S.compasso = proj.compasso; S.tom = proj.tom || ""; S.mestreVol = proj.mestreVol == null ? 0.9 : proj.mestreVol; S.masterPerfil = proj.masterPerfil || "";
+    trechoSel = null; resetarMudoGeral(); faixasMarcadas.clear(); S.id = proj.id; S.nome = proj.nome; S.nuvem = proj.nuvem || null; S.faixas = proj.faixas; S.regioes = proj.regioes.filter((r) => bufs.has(r.buf)); S.regioes.forEach((r) => { if (r.alt && !bufs.has(r.alt.buf)) { r.alt = null; } }); S.bpm = proj.bpm; S.compasso = proj.compasso; S.tom = proj.tom || ""; S.mestreVol = proj.mestreVol == null ? 0.9 : proj.mestreVol; S.masterPerfil = proj.masterPerfil || "";
     Object.assign(S, ritmoGravacao(proj.ritmoGravacao || {})); mostrarRitmoGravacao();
     proxId = Math.max(proxId, proj.proxId || 0) + 1; S.faixaSel = S.faixas[0] ? S.faixas[0].id : null; S.regiaoSel = null; S.tAtual = 0; S.sujo = false; pilha.length = 0; refaz.length = 0;
     $("#dwNome").value = S.nome; $("#dwBpm").value = S.bpm; $("#dwComp").value = S.compasso; $("#dwTom").textContent = S.tom || "—";
